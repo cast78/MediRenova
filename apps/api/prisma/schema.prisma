@@ -1,0 +1,457 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPERADMIN
+  ADMIN
+  DOCTOR
+  RECEPTIONIST
+}
+
+enum ProductType {
+  CARNET_CONDUCIR
+  LICENCIA_ARMAS
+  DNI
+  OTRO
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  RESCHEDULED
+  NO_SHOW
+}
+
+enum AppointmentSource {
+  BACKOFFICE
+  MAGIC_LINK
+  API
+  WALK_IN
+}
+
+enum RevisionOutcome {
+  PENDING
+  APTO
+  NO_APTO
+}
+
+enum WorkflowAction {
+  WHATSAPP
+}
+
+enum WorkflowExecutionStatus {
+  PENDING_SEND
+  SENT
+  FAILED
+  EXHAUSTED
+  COMPLETED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+// ─────────────────────────────────────────────────────────────
+// TENANT
+// ─────────────────────────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  config    TenantConfig?
+  apiKeys   ApiKey[]
+  users     User[]
+  centers   Center[]
+  products  Product[]
+  customers Customer[]
+
+  @@map("tenants")
+}
+
+model TenantConfig {
+  id                    String  @id @default(uuid())
+  tenantId              String  @unique @map("tenant_id")
+  logoUrl               String? @map("logo_url")
+  primaryColor          String  @default("#2563eb") @map("primary_color")
+  secondaryColor        String  @default("#64748b") @map("secondary_color")
+  timezone              String  @default("Europe/Madrid")
+  defaultSlotDuration   Int     @default(20) @map("default_slot_duration")
+  maxAppointmentsPerDay Int?    @map("max_appointments_per_day")
+  metaWaPhoneNumberId   String? @map("meta_wa_phone_number_id")
+  metaWaAccessToken     String? @map("meta_wa_access_token")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_configs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUTH
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  email        String
+  passwordHash String   @map("password_hash")
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  role         UserRole
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessions     UserSession[]
+  revisions    Revision[]
+  appointments Appointment[]
+  auditLogs    AuditLog[]
+  rooms        RoomDoctor[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+model UserSession {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  refreshToken String    @unique @map("refresh_token")
+  expiresAt    DateTime  @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  revokedAt    DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+model ApiKey {
+  id        String    @id @default(uuid())
+  tenantId  String    @map("tenant_id")
+  name      String
+  keyHash   String    @unique @map("key_hash")
+  prefix    String
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("api_keys")
+}
+
+// ─────────────────────────────────────────────────────────────
+// CENTERS & ROOMS
+// ─────────────────────────────────────────────────────────────
+
+model Center {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  name       String
+  address    String
+  city       String
+  province   String
+  postalCode String   @map("postal_code")
+  phone      String?
+  email      String?
+  lat        Decimal? @db.Decimal(9, 6)
+  lng        Decimal? @db.Decimal(9, 6)
+  active     Boolean  @default(true)
+  holidays   Json     @default("[]")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rooms  Room[]
+
+  @@index([tenantId])
+  @@map("centers")
+}
+
+model Room {
+  id                  String   @id @default(uuid())
+  centerId            String   @map("center_id")
+  name                String
+  active              Boolean  @default(true)
+  allowedProductTypes Json     @default("[]") @map("allowed_product_types")
+  schedule            Json     @default("[]")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  center       Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  doctors      RoomDoctor[]
+  appointments Appointment[]
+
+  @@index([centerId])
+  @@map("rooms")
+}
+
+model RoomDoctor {
+  roomId String @map("room_id")
+  userId String @map("user_id")
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, userId])
+  @@map("room_doctors")
+}
+
+// ─────────────────────────────────────────────────────────────
+// PRODUCTS & FORMS
+// ─────────────────────────────────────────────────────────────
+
+model Product {
+  id           String      @id @default(uuid())
+  tenantId     String      @map("tenant_id")
+  name         String
+  type         ProductType
+  slotDuration Int         @map("slot_duration")
+  renewalRules Json        @map("renewal_rules")
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  formTemplates FormTemplate[]
+  appointments  Appointment[]
+  workflowRules WorkflowRule[]
+
+  @@index([tenantId])
+  @@map("products")
+}
+
+model FormTemplate {
+  id          String   @id @default(uuid())
+  productId   String   @map("product_id")
+  version     Int
+  name        String
+  schema      Json
+  isActive    Boolean  @default(false) @map("is_active")
+  basedOnId   String?  @map("based_on_id")
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  revisions Revision[]
+
+  @@unique([productId, version])
+  @@index([productId])
+  @@map("form_templates")
+}
+
+// ─────────────────────────────────────────────────────────────
+// CUSTOMERS
+// ─────────────────────────────────────────────────────────────
+
+model Customer {
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id")
+  firstName     String?   @map("first_name")
+  lastName      String?   @map("last_name")
+  dniEncrypted  String?   @map("dni_encrypted")
+  dniHash       String?   @map("dni_hash")
+  birthDate     DateTime? @map("birth_date")
+  nationality   String?
+  municipality  String?
+  province      String?
+  phone         String?
+  email         String?
+  gdprConsentAt DateTime? @map("gdpr_consent_at")
+  gdprConsentIp String?   @map("gdpr_consent_ip")
+  deletedAt     DateTime? @map("deleted_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments       Appointment[]
+  revisions          Revision[]
+  workflowExecutions WorkflowExecution[]
+
+  @@unique([tenantId, dniHash])
+  @@index([tenantId])
+  @@index([tenantId, deletedAt])
+  @@map("customers")
+}
+
+// ─────────────────────────────────────────────────────────────
+// APPOINTMENTS
+// ─────────────────────────────────────────────────────────────
+
+model Appointment {
+  id              String            @id @default(uuid())
+  tenantId        String            @map("tenant_id")
+  customerId      String            @map("customer_id")
+  productId       String            @map("product_id")
+  roomId          String            @map("room_id")
+  doctorId        String?           @map("doctor_id")
+  scheduledAt     DateTime          @map("scheduled_at")
+  durationMinutes Int               @map("duration_minutes")
+  status          AppointmentStatus @default(PENDING)
+  source          AppointmentSource @default(BACKOFFICE)
+  notes           String?
+  icsUrl          String?           @map("ics_url")
+  createdById     String?           @map("created_by_id")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  customer Customer  @relation(fields: [customerId], references: [id])
+  product  Product   @relation(fields: [productId], references: [id])
+  room     Room      @relation(fields: [roomId], references: [id])
+  doctor   User?     @relation(fields: [doctorId], references: [id])
+  revision Revision?
+
+  @@index([tenantId])
+  @@index([tenantId, scheduledAt])
+  @@index([tenantId, status])
+  @@index([roomId, scheduledAt])
+  @@map("appointments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// REVISIONS
+// ─────────────────────────────────────────────────────────────
+
+model Revision {
+  id             String          @id @default(uuid())
+  tenantId       String          @map("tenant_id")
+  appointmentId  String          @unique @map("appointment_id")
+  customerId     String          @map("customer_id")
+  productId      String          @map("product_id")
+  roomId         String          @map("room_id")
+  doctorId       String          @map("doctor_id")
+  formTemplateId String          @map("form_template_id")
+  formData       Json            @default("{}") @map("form_data")
+  outcome        RevisionOutcome @default(PENDING)
+  expiryDate     DateTime?       @map("expiry_date")
+  pdfUrl         String?         @map("pdf_url")
+  startedAt      DateTime?       @map("started_at")
+  completedAt    DateTime?       @map("completed_at")
+  notes          String?
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  appointment        Appointment         @relation(fields: [appointmentId], references: [id])
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  doctor             User                @relation(fields: [doctorId], references: [id])
+  formTemplate       FormTemplate        @relation(fields: [formTemplateId], references: [id])
+  attachments        RevisionAttachment[]
+  workflowExecutions WorkflowExecution[]
+
+  @@index([tenantId])
+  @@index([tenantId, customerId])
+  @@index([tenantId, outcome, expiryDate])
+  @@map("revisions")
+}
+
+model RevisionAttachment {
+  id         String   @id @default(uuid())
+  revisionId String   @map("revision_id")
+  fieldId    String   @map("field_id")
+  fileName   String   @map("file_name")
+  mimeType   String   @map("mime_type")
+  sizeBytes  Int      @map("size_bytes")
+  r2Key      String   @map("r2_key")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  revision Revision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+
+  @@index([revisionId])
+  @@map("revision_attachments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// COMMERCIAL WORKFLOW
+// ─────────────────────────────────────────────────────────────
+
+model WorkflowRule {
+  id               String         @id @default(uuid())
+  tenantId         String         @map("tenant_id")
+  productId        String         @map("product_id")
+  daysBeforeExpiry Int            @map("days_before_expiry")
+  actionType       WorkflowAction @map("action_type")
+  templateName     String         @map("template_name")
+  retryEveryDays   Int            @default(15) @map("retry_every_days")
+  maxRetries       Int            @default(3) @map("max_retries")
+  active           Boolean        @default(true)
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  product    Product             @relation(fields: [productId], references: [id])
+  executions WorkflowExecution[]
+
+  @@index([tenantId])
+  @@map("workflow_rules")
+}
+
+model WorkflowExecution {
+  id             String                  @id @default(uuid())
+  ruleId         String                  @map("rule_id")
+  customerId     String                  @map("customer_id")
+  revisionId     String                  @map("revision_id")
+  status         WorkflowExecutionStatus @default(PENDING_SEND)
+  attemptCount   Int                     @default(0) @map("attempt_count")
+  lastAttemptAt  DateTime?               @map("last_attempt_at")
+  nextAttemptAt  DateTime?               @map("next_attempt_at")
+  magicLinkToken String?                 @map("magic_link_token")
+  result         Json?
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+
+  rule     WorkflowRule @relation(fields: [ruleId], references: [id])
+  customer Customer     @relation(fields: [customerId], references: [id])
+  revision Revision     @relation(fields: [revisionId], references: [id])
+
+  @@index([ruleId])
+  @@index([customerId])
+  @@index([status, nextAttemptAt])
+  @@map("workflow_executions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUDIT
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id           String      @id @default(uuid())
+  tenantId     String      @map("tenant_id")
+  userId       String?     @map("user_id")
+  action       AuditAction
+  resourceType String      @map("resource_type")
+  resourceId   String      @map("resource_id")
+  ipAddress    String?     @map("ip_address")
+  meta         Json?
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, resourceType, resourceId])
+  @@map("audit_logs")
+}
+

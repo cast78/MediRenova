@@ -1,0 +1,440 @@
+"use client";
+
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface AgeRule {
+  minAge: number;
+  maxAge: number;
+  validityDays: number; // 0 = no permitido
+}
+
+interface RenewalRules {
+  validityDays?: number;
+  requiresMedical?: boolean;
+  requiresPsych?: boolean;
+  requiresVision?: boolean;
+  ageRules?: AgeRule[];
+}
+
+interface Product {
+  id: string;
+  name: string;
+  type: string;
+  slotDuration: number;
+  renewalRules: RenewalRules;
+  active: boolean;
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const PRODUCT_TYPES = [
+  { value: "CARNET_CONDUCIR", label: "Carnet de Conducir" },
+  { value: "LICENCIA_ARMAS", label: "Licencia de Armas" },
+  { value: "DNI", label: "DNI/Pasaporte" },
+  { value: "OTRO", label: "Otro" },
+];
+const TYPE_MAP = Object.fromEntries(PRODUCT_TYPES.map((t) => [t.value, t.label]));
+
+// ── Product Modal ─────────────────────────────────────────────────────────────
+
+interface ProductFormData {
+  name: string;
+  type: string;
+  slotDuration: string;
+  useAgeRules: boolean;
+  validityDays: string;
+  ageRules: AgeRule[];
+  requiresMedical: boolean;
+  requiresPsych: boolean;
+  requiresVision: boolean;
+}
+
+const EMPTY_FORM: ProductFormData = {
+  name: "", type: "CARNET_CONDUCIR", slotDuration: "30",
+  useAgeRules: false, validityDays: "", ageRules: [],
+  requiresMedical: true, requiresPsych: true, requiresVision: true,
+};
+
+function fromProduct(p: Product): ProductFormData {
+  const hasAgeRules = (p.renewalRules.ageRules?.length ?? 0) > 0;
+  return {
+    name: p.name,
+    type: p.type,
+    slotDuration: String(p.slotDuration),
+    useAgeRules: hasAgeRules,
+    validityDays: p.renewalRules.validityDays ? String(p.renewalRules.validityDays) : "",
+    ageRules: (p.renewalRules.ageRules ?? []).map((r) => ({
+      minAge: r.minAge,
+      maxAge: r.maxAge,
+      validityDays: r.validityDays ?? 0,
+    })),
+    requiresMedical: p.renewalRules.requiresMedical ?? false,
+    requiresPsych: p.renewalRules.requiresPsych ?? false,
+    requiresVision: p.renewalRules.requiresVision ?? false,
+  };
+}
+
+// ── Age Rules Editor ──────────────────────────────────────────────────────────
+
+function AgeRulesEditor({ rules, onChange }: { rules: AgeRule[]; onChange: (r: AgeRule[]) => void }) {
+  function updateRule(i: number, field: keyof AgeRule, value: string) {
+    const next = rules.map((r, idx) =>
+      idx === i ? { ...r, [field]: parseInt(value) || 0 } : r
+    );
+    onChange(next);
+  }
+
+  function addRule() {
+    const last = rules.length > 0 ? rules[rules.length - 1] : undefined;
+    const lastMax = last ? last.maxAge : -1;
+    onChange([...rules, { minAge: lastMax + 1, maxAge: lastMax + 10, validityDays: 365 }]);
+  }
+
+  function removeRule(i: number) {
+    onChange(rules.filter((_, idx) => idx !== i));
+  }
+
+  // coverage validation feedback
+  let coverageError: string | null = null;
+  if (rules.length > 0) {
+    const sorted = [...rules].sort((a, b) => a.minAge - b.minAge);
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    if (!first || first.minAge !== 0) coverageError = "El primer tramo debe empezar en 0";
+    else {
+      for (let i = 1; i < sorted.length; i++) {
+        const cur = sorted[i];
+        const prev = sorted[i - 1];
+        if (!cur || !prev || cur.minAge !== prev.maxAge + 1) {
+          coverageError = `Hueco o solapamiento entre ${prev?.maxAge} y ${cur?.minAge}`;
+          break;
+        }
+      }
+      if (!coverageError && last && last.maxAge < 120) {
+        coverageError = `El último tramo debe llegar a 120 (actualmente ${last.maxAge})`;
+      }
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {rules.length === 0 && (
+        <p className="text-xs text-gray-400 text-center py-2">Sin tramos — añade el primero</p>
+      )}
+      <div className="grid grid-cols-[3rem_4rem_0.5rem_4rem_1rem_5rem_auto] items-center gap-x-1.5 gap-y-2">
+        {rules.length > 0 && (
+          <>
+            <span className="text-xs text-gray-400">Edad</span>
+            <span className="text-xs text-gray-400">Desde</span>
+            <span />
+            <span className="text-xs text-gray-400">Hasta</span>
+            <span />
+            <span className="text-xs text-gray-400">Vigencia (días)</span>
+            <span />
+          </>
+        )}
+        {rules.map((rule, i) => (
+          <>
+            <span key={`lbl-${i}`} className="text-xs text-gray-500">Edad</span>
+            <input key={`min-${i}`} type="number" min={0} max={120} value={rule.minAge}
+              onChange={(e) => updateRule(i, "minAge", e.target.value)}
+              className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span key={`sep-${i}`} className="text-xs text-gray-400 text-center">–</span>
+            <input key={`max-${i}`} type="number" min={0} max={120} value={rule.maxAge}
+              onChange={(e) => updateRule(i, "maxAge", e.target.value)}
+              className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span key={`arr-${i}`} className="text-xs text-gray-400 text-center">→</span>
+            <div key={`val-${i}`} className="relative">
+              <input type="number" min={0} value={rule.validityDays}
+                onChange={(e) => updateRule(i, "validityDays", e.target.value)}
+                className={`w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 ${
+                  rule.validityDays === 0 ? "border-red-200 bg-red-50 text-red-500" : "border-gray-300"
+                }`} />
+              {rule.validityDays === 0 && (
+                <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-red-400 pointer-events-none">✗</span>
+              )}
+            </div>
+            <button key={`rm-${i}`} type="button" onClick={() => removeRule(i)}
+              className="text-red-400 hover:text-red-600 text-sm leading-none justify-self-start">×</button>
+          </>
+        ))}
+      </div>
+      {rules.some((r) => r.validityDays === 0) && (
+        <p className="text-xs text-red-400">Los tramos con 0 días se consideran <strong>no permitidos</strong></p>
+      )}
+      {coverageError && <p className="text-xs text-red-500">{coverageError}</p>}
+      {!coverageError && rules.length > 0 && (
+        <p className="text-xs text-green-600">✓ Cobertura completa (0–120)</p>
+      )}
+      <button type="button" onClick={addRule}
+        className="text-xs px-3 py-1.5 rounded border border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 w-full mt-1">
+        + Añadir tramo
+      </button>
+    </div>
+  );
+}
+
+function ProductModal({ product, onClose }: { product?: Product; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<ProductFormData>(product ? fromProduct(product) : EMPTY_FORM);
+  const [error, setError] = useState<string | null>(null);
+  const isEdit = !!product;
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const body = {
+        name: form.name,
+        type: form.type,
+        slotDuration: parseInt(form.slotDuration),
+        renewalRules: {
+          requiresMedical: form.requiresMedical,
+          requiresPsych: form.requiresPsych,
+          requiresVision: form.requiresVision,
+          ...(form.useAgeRules
+            ? { ageRules: form.ageRules }
+            : form.validityDays ? { validityDays: parseInt(form.validityDays) } : {}),
+        },
+      };
+      return isEdit
+        ? apiFetch(`/products/${product!.id}`, { method: "PATCH", body: JSON.stringify(body) })
+        : apiFetch("/products", { method: "POST", body: JSON.stringify(body) });
+    },
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["products"] }); onClose(); },
+    onError: (err: unknown) => setError(err instanceof Error ? err.message : "Error al guardar"),
+  });
+
+  function toggle(key: "requiresMedical" | "requiresPsych" | "requiresVision") {
+    setForm((f) => ({ ...f, [key]: !f[key] }));
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl">×</button>
+        <h2 className="text-lg font-semibold text-gray-900 mb-5">{isEdit ? "Editar producto" : "Nuevo producto"}</h2>
+
+        <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-4">
+          {/* Nombre */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Nombre *</label>
+            <input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+
+          {/* Tipo + Duración */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Tipo *</label>
+              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {PRODUCT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Duración de cita (min) *</label>
+              <input type="number" required min={5} max={120} step={5} value={form.slotDuration}
+                onChange={(e) => setForm((f) => ({ ...f, slotDuration: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+
+          {/* Reglas de renovación */}
+          <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Reglas de renovación</p>
+
+            {/* Toggle: simple vs por edad */}
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+              <button type="button" onClick={() => setForm((f) => ({ ...f, useAgeRules: false }))}
+                className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${
+                  !form.useAgeRules ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+                }`}>
+                Validez fija
+              </button>
+              <button type="button" onClick={() => setForm((f) => ({ ...f, useAgeRules: true }))}
+                className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${
+                  form.useAgeRules ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+                }`}>
+                Por tramos de edad
+              </button>
+            </div>
+
+            {!form.useAgeRules ? (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Validez (días)</label>
+                <input type="number" min={1} value={form.validityDays} placeholder="Ej: 365"
+                  onChange={(e) => setForm((f) => ({ ...f, validityDays: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <p className="text-xs text-gray-400 mt-1">Días desde la revisión hasta la caducidad del documento</p>
+              </div>
+            ) : (
+              <AgeRulesEditor
+                rules={form.ageRules}
+                onChange={(r) => setForm((f) => ({ ...f, ageRules: r }))}
+              />
+            )}
+
+            <div className="space-y-2 pt-1">
+              {(
+                [
+                  { key: "requiresMedical", label: "Requiere examen médico" },
+                  { key: "requiresPsych", label: "Requiere examen psicotécnico" },
+                  { key: "requiresVision", label: "Requiere examen de visión" },
+                ] as { key: "requiresMedical" | "requiresPsych" | "requiresVision"; label: string }[]
+              ).map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input type="checkbox" checked={form[key]} onChange={() => toggle(key)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                  <span className="text-sm text-gray-700">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex justify-end gap-3 pt-1">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
+            <button type="submit" disabled={mutation.isPending} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+              {mutation.isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear producto"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Product Row ───────────────────────────────────────────────────────────────
+
+function ProductRow({ product }: { product: Product }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+
+  const toggleActive = useMutation({
+    mutationFn: () => apiFetch(`/products/${product.id}`, { method: "PATCH", body: JSON.stringify({ active: !product.active }) }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["products"] }),
+  });
+
+  const rules = product.renewalRules;
+  const checks = [
+    rules.requiresMedical && "Médico",
+    rules.requiresPsych && "Psicotécnico",
+    rules.requiresVision && "Visión",
+  ].filter(Boolean);
+  const hasAgeRules = (rules.ageRules?.length ?? 0) > 0;
+
+  return (
+    <>
+      {editing && <ProductModal product={product} onClose={() => setEditing(false)} />}
+      <tr className="hover:bg-gray-50 group align-top">
+        <td className="px-4 py-3 font-medium text-gray-900">{product.name}</td>
+        <td className="px-4 py-3 text-gray-600 text-sm">{TYPE_MAP[product.type] ?? product.type}</td>
+        <td className="px-4 py-3 text-gray-600 text-sm">{product.slotDuration} min</td>
+        <td className="px-4 py-3 text-sm">
+          <div className="flex flex-wrap gap-1">
+            {hasAgeRules ? (
+              <>
+                <span className="bg-purple-50 text-purple-700 text-xs px-2 py-0.5 rounded">
+                  {rules.ageRules!.filter((r) => r.validityDays > 0).length} tramos permitidos
+                </span>
+                {rules.ageRules!.some((r) => r.validityDays === 0) && (
+                  <span className="bg-red-50 text-red-500 text-xs px-2 py-0.5 rounded">
+                    {rules.ageRules!.filter((r) => r.validityDays === 0).length} no permitidos
+                  </span>
+                )}
+              </>
+            ) : rules.validityDays ? (
+              <span className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded">{rules.validityDays}d</span>
+            ) : null}
+            {checks.map((c) => (
+              <span key={c as string} className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded">{c}</span>
+            ))}
+            {checks.length === 0 && !rules.validityDays && !hasAgeRules && <span className="text-gray-400 text-xs">—</span>}
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${product.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+            {product.active ? "Activo" : "Inactivo"}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={() => setEditing(true)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Editar</button>
+            <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending}
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
+              {product.active ? "Desactivar" : "Activar"}
+            </button>
+          </div>
+        </td>
+      </tr>
+    </>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default function ProductsPage() {
+  const [showModal, setShowModal] = useState(false);
+  const [filter, setFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const { data: products, isLoading } = useQuery<Product[]>({
+    queryKey: ["products"],
+    queryFn: () => apiFetch<Product[]>("/products"),
+  });
+
+  const visible = (products ?? []).filter((p) =>
+    filter === "active" ? p.active : filter === "inactive" ? !p.active : true
+  );
+
+  return (
+    <div className="p-6">
+      {showModal && <ProductModal onClose={() => setShowModal(false)} />}
+
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-gray-900">Productos</h1>
+        <button onClick={() => setShowModal(true)} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+          + Nuevo producto
+        </button>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">
+        {(["all", "active", "inactive"] as const).map((f) => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${filter === f ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>
+            {f === "all" ? "Todos" : f === "active" ? "Activos" : "Inactivos"}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50">
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Nombre</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Tipo</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Duración</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Reglas renovación</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
+              <th className="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {isLoading && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Cargando...</td></tr>
+            )}
+            {!isLoading && visible.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                {filter === "all" ? "Sin productos registrados" : `Sin productos ${filter === "active" ? "activos" : "inactivos"}`}
+              </td></tr>
+            )}
+            {visible.map((p) => <ProductRow key={p.id} product={p} />)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
