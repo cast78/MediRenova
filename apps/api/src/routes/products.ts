@@ -22,13 +22,13 @@ const renewalRulesSchema = z.object({
 function validateAgeRuleCoverage(rules: { minAge: number; maxAge: number; validityDays: number }[]): string | null {
   if (rules.length === 0) return null;
   const sorted = [...rules].sort((a, b) => a.minAge - b.minAge);
-  if (sorted[0].minAge !== 0) return "Los tramos deben comenzar en edad 0";
+  if (sorted[0]!.minAge !== 0) return "Los tramos deben comenzar en edad 0";
   for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].minAge !== sorted[i - 1].maxAge + 1) {
-      return `Hay un hueco o solapamiento entre los tramos ${sorted[i - 1].maxAge} y ${sorted[i].minAge}`;
+    if (sorted[i]!.minAge !== sorted[i - 1]!.maxAge + 1) {
+      return `Hay un hueco o solapamiento entre los tramos ${sorted[i - 1]!.maxAge} y ${sorted[i]!.minAge}`;
     }
   }
-  if (sorted[sorted.length - 1].maxAge < 120) {
+  if (sorted[sorted.length - 1]!.maxAge < 120) {
     return "Los tramos deben cubrir hasta edad 120";
   }
   return null;
