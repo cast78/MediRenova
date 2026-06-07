@@ -31,3 +31,9 @@ Thumbs.db
 
 # Puppeteer cache
 .local-chromium/
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# TypeScript build cache
+*.tsbuildinfo

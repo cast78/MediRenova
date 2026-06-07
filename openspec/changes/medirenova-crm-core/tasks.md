@@ -79,9 +79,9 @@
 - [x] 8.3 Implementar endpoints CRUD de clientes con registro de consentimiento GDPR
 - [x] 8.4 Implementar búsqueda paginada de clientes (nombre, apellidos, teléfono, email; DNI exacto)
 - [x] 8.5 Implementar soft delete con anonimización de PII (`DELETE /customers/{id}`)
-- [ ] 8.6 Implementar `GET /customers/{id}/revisions` con historial de revisiones
-- [ ] 8.7 Implementar UI de búsqueda/listado de clientes con filtros
-- [ ] 8.8 Implementar UI de ficha de cliente con historial y datos personales
+- [x] 8.6 Implementar `GET /customers/{id}/revisions` con historial de revisiones
+- [x] 8.7 Implementar UI de búsqueda/listado de clientes con filtros
+- [x] 8.8 Implementar UI de ficha de cliente con historial y datos personales
 
 ## 9. Reservas y Disponibilidad
 
