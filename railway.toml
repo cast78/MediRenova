@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "pnpm install --frozen-lockfile && pnpm --filter api db:generate && pnpm --filter api build"
+buildCommand = "NODE_ENV=development pnpm install --frozen-lockfile && pnpm --filter api db:generate && pnpm --filter api build"
 
 [deploy]
 startCommand = "cd apps/api && npx prisma migrate deploy && npx prisma db seed; cd ../.. && node apps/api/dist/server.js"
