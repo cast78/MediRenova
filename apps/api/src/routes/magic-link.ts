@@ -97,6 +97,84 @@ export async function magicLinkRoutes(server: FastifyInstance) {
       }
     });
 
+  // GET /link/:token/slots — available slots (public, no auth required)
+  server.get<{ Params: { token: string }; Querystring: { roomId: string; date: string } }>("/link/:token/slots",
+    async (request, reply: FastifyReply) => {
+      try {
+        const payload = verifyMagicLinkToken(request.params.token);
+        const { roomId, date } = request.query as { roomId?: string; date?: string };
+
+        if (!roomId || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return reply.status(400).send({ errors: [{ code: "BAD_REQUEST", message: "roomId y date son requeridos" }] });
+        }
+
+        const room = await prisma.room.findFirst({
+          where: { id: roomId, center: { tenantId: payload.tid, active: true }, active: true },
+        });
+        if (!room) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+
+        type RoomSchedule = {
+          openTime?: string;
+          closeTime?: string;
+          activeDays?: number[];
+          slotDuration?: number;
+          slotBuffer?: number;
+        };
+        const roomSchedule = (room.schedule as RoomSchedule | null) ?? {};
+
+        const product = await prisma.product.findFirst({ where: { id: payload.pid, tenantId: payload.tid, active: true } });
+        let slotDuration = roomSchedule.slotDuration ?? product?.slotDuration;
+
+        const config = await prisma.tenantConfig.findUnique({ where: { tenantId: payload.tid } });
+        slotDuration = slotDuration ?? config?.defaultSlotDuration ?? 20;
+        const slotBuffer = roomSchedule.slotBuffer ?? 0;
+
+        const openTime = roomSchedule.openTime ?? "08:00";
+        const closeTime = roomSchedule.closeTime ?? "20:00";
+        const [openH = 8, openM = 0] = openTime.split(":").map(Number);
+        const [closeH = 20, closeM = 0] = closeTime.split(":").map(Number);
+
+        const dateObj = new Date(`${date}T00:00:00`);
+        const dayOfWeek = dateObj.getDay();
+        const activeDays = roomSchedule.activeDays;
+        if (activeDays && !activeDays.includes(dayOfWeek)) {
+          return reply.send({ data: [], errors: null });
+        }
+
+        const dayStart = new Date(`${date}T00:00:00.000Z`);
+        const dayEnd = new Date(`${date}T23:59:59.999Z`);
+
+        const existing = await prisma.appointment.findMany({
+          where: { roomId, scheduledAt: { gte: dayStart, lte: dayEnd }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
+          select: { scheduledAt: true, durationMinutes: true },
+        });
+
+        const bookedSlots = existing.map((a) => ({
+          start: a.scheduledAt.getTime(),
+          end: a.scheduledAt.getTime() + a.durationMinutes * 60_000,
+        }));
+
+        const slots: string[] = [];
+        const totalMinutes = closeH * 60 + closeM - (openH * 60 + openM);
+        const stepMinutes = slotDuration + slotBuffer;
+        const numSlots = Math.floor(totalMinutes / stepMinutes);
+
+        for (let i = 0; i < numSlots; i++) {
+          const slotMinutes = openH * 60 + openM + i * stepMinutes;
+          const slotH = Math.floor(slotMinutes / 60);
+          const slotM = slotMinutes % 60;
+          const slotTime = new Date(`${date}T${String(slotH).padStart(2, "0")}:${String(slotM).padStart(2, "0")}:00.000Z`);
+          const slotEnd = slotTime.getTime() + slotDuration * 60_000;
+          const isBooked = bookedSlots.some((b) => slotTime.getTime() < b.end && slotEnd > b.start);
+          if (!isBooked) slots.push(slotTime.toISOString());
+        }
+
+        return reply.send({ data: slots, errors: null });
+      } catch {
+        return reply.status(401).send({ errors: [{ code: "INVALID_TOKEN", message: "Enlace expirado o inválido" }] });
+      }
+    });
+
   // POST /link/:token/reschedule — cancel old + book new slot
   server.post<{ Params: { token: string } }>("/link/:token/reschedule",
     async (request, reply: FastifyReply) => {

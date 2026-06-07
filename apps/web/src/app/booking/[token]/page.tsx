@@ -100,14 +100,14 @@ export default function BookingPage() {
     retry: false,
   });
 
-  // Load slots for selected room + date
+  // Load slots for selected room + date (uses public magic-link endpoint)
   const { data: slots, isFetching: loadingSlots } = useQuery<string[]>({
-    queryKey: ["magic-slots", roomId, date, ctx?.product.id],
+    queryKey: ["magic-slots", roomId, date, token],
     queryFn: () =>
       linkFetch<string[]>(
-        `/appointments/slots?roomId=${roomId}&date=${date}&productId=${ctx?.product.id ?? ""}`,
+        `/link/${token}/slots?roomId=${roomId}&date=${date}`,
       ),
-    enabled: !!(roomId && date && ctx),
+    enabled: !!(roomId && date && token),
   });
 
   const mutation = useMutation({
