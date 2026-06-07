@@ -135,8 +135,8 @@
 - [x] 13.2 Implementar `GET /dashboard/expirations` — caducidades a 30/60/90 días con flag de reserva existente
 - [x] 13.3 Implementar `GET /dashboard/charts/appointments-by-month` — últimos 12 meses
 - [ ] 13.4 Implementar `GET /dashboard/charts/customers-by-province` — conteo por provincia
-- [ ] 13.5 Implementar UI del dashboard con componentes shadcn/ui y Recharts para gráficos
-- [ ] 13.6 Implementar panel de caducidades próximas con links directos a ficha de cliente
+- [x] 13.5 Implementar UI del dashboard con componentes shadcn/ui y Recharts para gráficos
+- [x] 13.6 Implementar panel de caducidades próximas con links directos a ficha de cliente
 
 ## 14. API Pública
 
