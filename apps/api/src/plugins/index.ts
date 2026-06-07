@@ -7,8 +7,17 @@ import authPlugin from "./auth.js";
 
 export async function registerPlugins(server: FastifyInstance) {
   await server.register(helmet);
+  const allowedOrigins = (process.env["CORS_ORIGIN"] ?? "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim());
   await server.register(cors, {
-    origin: process.env["CORS_ORIGIN"] ?? "http://localhost:3000",
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.some((o) => o === origin || origin.endsWith(".vercel.app"))) {
+        cb(null, true);
+      } else {
+        cb(new Error("Not allowed by CORS"), false);
+      }
+    },
     credentials: true,
   });
   await server.register(cookie, {
