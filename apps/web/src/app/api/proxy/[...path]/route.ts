@@ -1,6 +1,6 @@
 ﻿import { type NextRequest, NextResponse } from "next/server";
 
-const API_BASE = process.env["API_URL"] ?? "http://localhost:3001/api/v1";
+const API_BASE = process.env["API_URL"];
 
 export async function GET(request: NextRequest, { params }: { params: { path: string[] } }) {
   return proxyRequest(request, params.path, "GET");
@@ -19,6 +19,14 @@ export async function DELETE(request: NextRequest, { params }: { params: { path:
 }
 
 async function proxyRequest(request: NextRequest, path: string[], method: string) {
+  if (!API_BASE) {
+    console.error("[proxy] API_URL environment variable is not set");
+    return NextResponse.json(
+      { status: "error", code: 503, message: "API_URL not configured" },
+      { status: 503 },
+    );
+  }
+
   const url = `${API_BASE}/${path.join("/")}${request.nextUrl.search}`;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const auth = request.headers.get("authorization");
@@ -26,11 +34,19 @@ async function proxyRequest(request: NextRequest, path: string[], method: string
 
   const hasBody = method !== "GET" && method !== "DELETE";
   const body = hasBody ? await request.text() : null;
-  const response = await fetch(url, { method, headers, ...(body !== null ? { body } : {}) });
-  const data = await response.text();
 
-  return new NextResponse(data, {
-    status: response.status,
-    headers: { "Content-Type": "application/json" },
-  });
+  try {
+    const response = await fetch(url, { method, headers, ...(body !== null ? { body } : {}) });
+    const data = await response.text();
+    return new NextResponse(data, {
+      status: response.status,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    console.error(`[proxy] Failed to reach upstream ${url}:`, err);
+    return NextResponse.json(
+      { status: "error", code: 502, message: "Upstream API unreachable" },
+      { status: 502 },
+    );
+  }
 }
