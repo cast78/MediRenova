@@ -8,6 +8,7 @@ const server = Fastify({
   logger: {
     level: process.env["LOG_LEVEL"] ?? "info",
   },
+  maxParamLength: 600, // JWT tokens en path params pueden superar los 100 chars del default
 });
 
 async function start() {

@@ -90,9 +90,9 @@
 - [x] 9.3 Implementar endpoints de reservas: `POST /appointments`, `GET /appointments`, `GET /appointments/{id}`
 - [x] 9.4 Implementar transiciones de estado: cancelar, reprogramar, marcar no-show
 - [ ] 9.5 Implementar generación de archivo `.ics` al confirmar reserva (RFC 5545)
-- [ ] 9.6 Implementar UI de creación de reserva desde backoffice (selector de cliente, producto, centro, slot)
-- [ ] 9.7 Implementar UI de agenda/calendario de reservas del día (vista por sala)
-- [ ] 9.8 Implementar UI de listado de reservas con filtros (fecha, estado, centro, médico)
+- [x] 9.6 Implementar UI de creación de reserva desde backoffice (selector de cliente, producto, centro, slot)
+- [x] 9.7 Implementar UI de agenda/calendario de reservas del día (vista por sala)
+- [x] 9.8 Implementar UI de listado de reservas con filtros (fecha, estado, centro, médico)
 
 ## 10. Magic Link
 
@@ -101,8 +101,8 @@
 - [x] 10.3 Implementar `POST /magic/{token}/confirm` — crear reserva con source MAGIC_LINK
 - [x] 10.4 Implementar `POST /magic/{token}/reschedule` — cancelar reserva anterior, crear nueva
 - [ ] 10.5 Implementar lógica de expansión de búsqueda a 30 días si no hay slots en 7 días
-- [ ] 10.6 Implementar página pública de magic link en Next.js (sin layout de app, sin login requerido)
-- [ ] 10.7 Implementar UI de selección de centro, slot y confirmación en la página de magic link
+- [x] 10.6 Implementar página pública de magic link en Next.js (sin layout de app, sin login requerido)
+- [x] 10.7 Implementar UI de selección de centro, slot y confirmación en la página de magic link
 
 ## 11. Revisiones Médicas
 
