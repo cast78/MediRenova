@@ -1,7 +1,6 @@
 import jwt from "jsonwebtoken";
 
-const privateKey = (process.env["JWT_PRIVATE_KEY"] ?? "").replace(/\\n/g, "\n");
-const publicKey = (process.env["JWT_PUBLIC_KEY"] ?? "").replace(/\\n/g, "\n");
+const secret = process.env["JWT_SECRET"] ?? "dev-secret-change-in-production";
 
 export interface AccessTokenPayload {
   sub: string;      // user_id
@@ -21,32 +20,32 @@ export interface MagicLinkPayload {
 }
 
 export function signAccessToken(payload: Omit<AccessTokenPayload, "iat" | "exp">): string {
-  return jwt.sign(payload, privateKey, {
-    algorithm: "RS256",
+  return jwt.sign(payload, secret, {
+    algorithm: "HS256",
     expiresIn: "15m",
   });
 }
 
 export function signRefreshToken(userId: string): string {
-  return jwt.sign({ sub: userId, type: "refresh" }, privateKey, {
-    algorithm: "RS256",
+  return jwt.sign({ sub: userId, type: "refresh" }, secret, {
+    algorithm: "HS256",
     expiresIn: "7d",
   });
 }
 
 export function signMagicLinkToken(payload: Omit<MagicLinkPayload, "iat" | "exp">): string {
-  return jwt.sign(payload, privateKey, {
-    algorithm: "RS256",
+  return jwt.sign(payload, secret, {
+    algorithm: "HS256",
     expiresIn: "24h",
   });
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
-  return jwt.verify(token, publicKey, { algorithms: ["RS256"] }) as AccessTokenPayload;
+  return jwt.verify(token, secret, { algorithms: ["HS256"] }) as AccessTokenPayload;
 }
 
 export function verifyMagicLinkToken(token: string): MagicLinkPayload {
-  const payload = jwt.verify(token, publicKey, { algorithms: ["RS256"] }) as MagicLinkPayload;
+  const payload = jwt.verify(token, secret, { algorithms: ["HS256"] }) as MagicLinkPayload;
   if (payload.type !== "magic_link") throw new Error("Invalid token type");
   return payload;
 }
