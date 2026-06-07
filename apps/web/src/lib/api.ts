@@ -1,4 +1,7 @@
-const API_BASE = process.env["NEXT_PUBLIC_API_URL"] ?? "http://localhost:3001/api/v1";
+const API_BASE =
+  typeof window !== "undefined"
+    ? "/api/proxy"
+    : (process.env["API_URL"] ?? "http://localhost:3001/api/v1");
 
 export class ApiError extends Error {
   constructor(public status: number, public errors: unknown, public data?: unknown) {
