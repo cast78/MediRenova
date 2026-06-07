@@ -14,7 +14,7 @@ async function start() {
   await registerPlugins(server);
   await registerRoutes(server);
 
-  const port = Number(process.env["PORT"] ?? 3001);
+  const port = Number(process.env["PORT"] ?? 8080);
   const host = process.env["HOST"] ?? "0.0.0.0";
 
   await server.listen({ port, host });
