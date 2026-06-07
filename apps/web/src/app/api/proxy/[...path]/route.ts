@@ -24,8 +24,9 @@ async function proxyRequest(request: NextRequest, path: string[], method: string
   const auth = request.headers.get("authorization");
   if (auth) headers["Authorization"] = auth;
 
-  const body = method !== "GET" && method !== "DELETE" ? await request.text() : undefined;
-  const response = await fetch(url, { method, headers, body });
+  const hasBody = method !== "GET" && method !== "DELETE";
+  const body = hasBody ? await request.text() : null;
+  const response = await fetch(url, { method, headers, ...(body !== null ? { body } : {}) });
   const data = await response.text();
 
   return new NextResponse(data, {
