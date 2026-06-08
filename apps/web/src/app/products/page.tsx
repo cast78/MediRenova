@@ -168,7 +168,7 @@ function AgeRulesEditor({ rules, onChange }: { rules: AgeRule[]; onChange: (r: A
       )}
       {coverageError && <p className="text-xs text-red-500">{coverageError}</p>}
       {!coverageError && rules.length > 0 && (
-        <p className="text-xs text-green-600">✓ Cobertura completa (0–120)</p>
+        <p className="text-xs text-emerald-600 font-medium">Cobertura completa (0–120)</p>
       )}
       <button type="button" onClick={addRule}
         className="text-xs px-3 py-1.5 rounded border border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 w-full mt-1">
@@ -361,7 +361,7 @@ function ProductRow({ product }: { product: Product }) {
           </span>
         </td>
         <td className="px-4 py-3">
-          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-2">
             <button onClick={() => setEditing(true)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Editar</button>
             <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending}
               className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
@@ -389,15 +389,41 @@ export default function ProductsPage() {
     filter === "active" ? p.active : filter === "inactive" ? !p.active : true
   );
 
+  const active = (products ?? []).filter((p) => p.active).length;
+  const inactive = (products ?? []).length - active;
+  const avgDuration = products && products.length > 0
+    ? Math.round(products.reduce((s, p) => s + p.slotDuration, 0) / products.length)
+    : 0;
+
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-5xl">
       {showModal && <ProductModal onClose={() => setShowModal(false)} />}
 
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">Productos</h1>
-        <button onClick={() => setShowModal(true)} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-xl font-bold text-gray-900">Productos</h1>
+        <button onClick={() => setShowModal(true)} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">
           + Nuevo producto
         </button>
+      </div>
+
+      {/* KPI bar */}
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Total productos</p>
+          <p className="text-2xl font-bold text-gray-800">{(products ?? []).length}</p>
+        </div>
+        <div className="bg-emerald-50 rounded-xl border border-emerald-100 px-4 py-3">
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Activos</p>
+          <p className="text-2xl font-bold text-emerald-700">{active}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Inactivos</p>
+          <p className="text-2xl font-bold text-gray-400">{inactive}</p>
+        </div>
+        <div className="bg-blue-50 rounded-xl border border-blue-100 px-4 py-3">
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Dur. media cita</p>
+          <p className="text-2xl font-bold text-blue-700">{avgDuration}<span className="text-sm font-normal text-blue-400 ml-1">min</span></p>
+        </div>
       </div>
 
       {/* Filter tabs */}

@@ -297,9 +297,9 @@ function CenterCard({ center }: { center: Center }) {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900">{room.name}</p>
                     <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
-                      {room.schedule.openTime && <span className="text-xs text-gray-500">🕐 {room.schedule.openTime} – {room.schedule.closeTime}</span>}
-                      {room.schedule.slotDuration && <span className="text-xs text-gray-500">⏱ {room.schedule.slotDuration} min</span>}
-                      {room.schedule.activeDays && <span className="text-xs text-gray-500">📅 {dayLabels(room.schedule.activeDays)}</span>}
+                      {room.schedule.openTime && <span className="text-xs text-gray-500">{room.schedule.openTime} – {room.schedule.closeTime}</span>}
+                      {room.schedule.slotDuration && <span className="text-xs text-gray-500">{room.schedule.slotDuration} min/cita</span>}
+                      {room.schedule.activeDays && <span className="text-xs text-gray-500">{dayLabels(room.schedule.activeDays)}</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -331,15 +331,39 @@ export default function CentersPage() {
     filter === "active" ? c.active : filter === "inactive" ? !c.active : true
   );
 
+  const totalRooms = visible.reduce((s, c) => s + c.rooms.length, 0);
+  const activeCount = visible.filter((c) => c.active).length;
+  const inactiveCount = visible.length - activeCount;
+
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-5xl">
       {showModal && <CenterModal onClose={() => setShowModal(false)} />}
 
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">Centros</h1>
-        <button onClick={() => setShowModal(true)} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-xl font-bold text-gray-900">Centros</h1>
+        <button onClick={() => setShowModal(true)} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">
           + Nuevo centro
         </button>
+      </div>
+
+      {/* KPI bar */}
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Total centros</p>
+          <p className="text-2xl font-bold text-gray-800">{(centers ?? []).length}</p>
+        </div>
+        <div className="bg-emerald-50 rounded-xl border border-emerald-100 px-4 py-3">
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Activos</p>
+          <p className="text-2xl font-bold text-emerald-700">{(centers ?? []).filter((c) => c.active).length}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Inactivos</p>
+          <p className="text-2xl font-bold text-gray-400">{(centers ?? []).filter((c) => !c.active).length}</p>
+        </div>
+        <div className="bg-blue-50 rounded-xl border border-blue-100 px-4 py-3">
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Total salas</p>
+          <p className="text-2xl font-bold text-blue-700">{(centers ?? []).reduce((s, c) => s + c.rooms.length, 0)}</p>
+        </div>
       </div>
 
       <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">

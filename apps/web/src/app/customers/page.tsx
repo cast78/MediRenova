@@ -27,6 +27,24 @@ interface NewCustomerForm {
   gdprConsent: boolean;
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function getInitials(first: string | null, last: string | null) {
+  const a = (first ?? "")[0] ?? "";
+  const b = (last ?? "")[0] ?? "";
+  return (a + b).toUpperCase() || "?";
+}
+
+const AVATAR_COLORS = [
+  "bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500",
+  "bg-rose-500", "bg-cyan-500", "bg-fuchsia-500", "bg-teal-500",
+];
+function avatarColor(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]!;
+}
+
 const EMPTY_FORM: NewCustomerForm = {
   firstName: "", lastName: "", email: "", phone: "",
   dni: "", birthDate: "", nationality: "", municipality: "", province: "",
@@ -163,21 +181,41 @@ export default function CustomersPage() {
     queryFn: () => apiFetch(`/customers?${queryParams.toString()}`, { raw: true }),
   });
 
+  const total = data?.meta.total ?? 0;
+  const pageData = data?.data ?? [];
+  const withEmail = pageData.filter((c) => c.email).length;
+  const withPhone = pageData.filter((c) => c.phone).length;
+
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-5xl">
       {showModal && <NewCustomerModal onClose={() => setShowModal(false)} />}
 
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Clientes</h1>
-          {data && <p className="text-sm text-gray-500 mt-0.5">{data.meta.total} en total</p>}
-        </div>
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-xl font-bold text-gray-900">Clientes</h1>
         <button
           onClick={() => setShowModal(true)}
-          className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+          className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium"
         >
           + Nuevo cliente
         </button>
+      </div>
+
+      {/* KPI bar */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Total clientes</p>
+          <p className="text-2xl font-bold text-gray-800">{total}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Con email</p>
+          <p className="text-2xl font-bold text-blue-700">{withEmail}</p>
+          <p className="text-[10px] text-gray-400">de {pageData.length} en página</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Con teléfono</p>
+          <p className="text-2xl font-bold text-emerald-700">{withPhone}</p>
+          <p className="text-[10px] text-gray-400">de {pageData.length} en página</p>
+        </div>
       </div>
 
       <div className="flex gap-3 mb-4">
@@ -186,7 +224,7 @@ export default function CustomersPage() {
           placeholder="Buscar por nombre, apellidos, email o teléfono..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          className="flex-1 max-w-sm border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 max-w-sm border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
 
@@ -194,29 +232,53 @@ export default function CustomersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Nombre</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Teléfono</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Alta</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Cliente</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Email</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Teléfono</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Alta</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-gray-100">
             {isLoading && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">Cargando...</td></tr>
+              [1,2,3,4].map((i) => (
+                <tr key={i}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3 animate-pulse">
+                      <div className="w-8 h-8 rounded-full bg-gray-100 shrink-0" />
+                      <div className="h-3 bg-gray-100 rounded w-32" />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3"><div className="h-3 bg-gray-100 rounded w-40 animate-pulse" /></td>
+                  <td className="px-4 py-3"><div className="h-3 bg-gray-100 rounded w-24 animate-pulse" /></td>
+                  <td className="px-4 py-3"><div className="h-3 bg-gray-100 rounded w-20 animate-pulse" /></td>
+                </tr>
+              ))
             )}
             {!isLoading && (!data?.data || data.data.length === 0) && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">
-                {debouncedQ ? `Sin resultados para "${debouncedQ}"` : "Sin clientes"}
+              <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400 text-sm">
+                {debouncedQ ? `Sin resultados para "${debouncedQ}"` : "Sin clientes registrados"}
               </td></tr>
             )}
-            {data?.data.map((c) => (
-              <tr key={c.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/customers/${c.id}`)}>
-                <td className="px-4 py-3 font-medium text-gray-900">{c.firstName} {c.lastName}</td>
-                <td className="px-4 py-3 text-gray-600">{c.email ?? "—"}</td>
-                <td className="px-4 py-3 text-gray-600">{c.phone ?? "—"}</td>
-                <td className="px-4 py-3 text-gray-500">{new Date(c.createdAt).toLocaleDateString("es-ES")}</td>
-              </tr>
-            ))}
+            {data?.data.map((c) => {
+              const fullName = `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || "Sin nombre";
+              const color = avatarColor(fullName);
+              const initials = getInitials(c.firstName, c.lastName);
+              return (
+                <tr key={c.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => router.push(`/customers/${c.id}`)}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
+                        {initials}
+                      </div>
+                      <span className="font-medium text-gray-900 text-sm">{fullName}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{c.email ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{c.phone ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500">{new Date(c.createdAt).toLocaleDateString("es-ES")}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
