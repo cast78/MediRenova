@@ -45,12 +45,14 @@ function formatMonth(month: string): string {
   return MONTH_LABELS[m ?? ""] ?? month;
 }
 
-function KpiCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+function KpiCard({ label, value, sub, color = "text-gray-800", bg = "bg-white border-gray-200" }: {
+  label: string; value: string | number; sub?: string; color?: string; bg?: string;
+}) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <p className="text-sm text-gray-500 mb-1">{label}</p>
-      <p className="text-3xl font-bold text-gray-900">{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+    <div className={`rounded-xl border px-4 py-3 ${bg}`}>
+      <p className="text-xs text-gray-400 font-medium mb-0.5">{label}</p>
+      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+      {sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -77,20 +79,40 @@ export default function DashboardPage() {
   }));
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
+    <div className="p-6 max-w-5xl space-y-5">
+      <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Reservas hoy" value={summary?.appointmentsToday ?? "—"} />
-        <KpiCard label="Reservas esta semana" value={summary?.appointmentsWeek ?? "—"} />
-        <KpiCard label="Revisiones abiertas" value={summary?.openRevisions ?? "—"} />
-        <KpiCard label="Tasa conversión" value={summary ? `${summary.conversionRate}%` : "—"} sub="este mes" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard
+          label="Reservas hoy"
+          value={summary?.appointmentsToday ?? "—"}
+          color="text-gray-800"
+        />
+        <KpiCard
+          label="Reservas esta semana"
+          value={summary?.appointmentsWeek ?? "—"}
+          color="text-blue-700"
+          bg="bg-blue-50 border-blue-100"
+        />
+        <KpiCard
+          label="Revisiones abiertas"
+          value={summary?.openRevisions ?? "—"}
+          color="text-amber-700"
+          bg="bg-amber-50 border-amber-100"
+        />
+        <KpiCard
+          label="Tasa de conversión"
+          value={summary ? `${summary.conversionRate}%` : "—"}
+          sub="este mes"
+          color="text-emerald-700"
+          bg="bg-emerald-50 border-emerald-100"
+        />
       </div>
 
       {/* Chart: Reservas por mes */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-medium text-gray-900 mb-4">Reservas por mes (últimos 12 meses)</h2>
+        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Reservas por mes — últimos 12 meses</h2>
         {formattedChart.length === 0 ? (
           <p className="text-center text-gray-400 text-sm py-8">Sin datos</p>
         ) : (
@@ -113,44 +135,58 @@ export default function DashboardPage() {
       {/* Upcoming expirations */}
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-medium text-gray-900">Próximas caducidades (90 días)</h2>
-          <span className="text-xs text-gray-400">{expirations?.length ?? 0} clientes</span>
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Próximas caducidades — 90 días</h2>
+          <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">{expirations?.length ?? 0} clientes</span>
         </div>
-        <div className="divide-y divide-gray-50">
-          {!expirations || expirations.length === 0 ? (
-            <p className="px-5 py-8 text-center text-gray-400 text-sm">Sin caducidades próximas</p>
-          ) : (
-            expirations.slice(0, 20).map((exp) => (
-              <div key={exp.revisionId} className="px-5 py-3 flex items-center justify-between">
-                <div>
-                  <Link
-                    href={`/customers/${exp.customer.id}`}
-                    className="text-sm font-medium text-gray-900 hover:text-blue-600 hover:underline"
-                  >
-                    {exp.customer.firstName} {exp.customer.lastName}
-                  </Link>
-                  <p className="text-xs text-gray-500">{exp.product.name}</p>
+        <div className="divide-y divide-gray-100">
+          {!expirations ? (
+            [1,2,3,4].map((i) => (
+              <div key={i} className="px-5 py-3 flex items-center justify-between animate-pulse">
+                <div className="space-y-1.5">
+                  <div className="h-3 bg-gray-100 rounded w-32" />
+                  <div className="h-2.5 bg-gray-100 rounded w-20" />
                 </div>
-                <div className="text-right flex flex-col items-end gap-1">
-                  <p
-                    className={`text-sm font-medium ${
-                      exp.daysUntilExpiry <= 30
-                        ? "text-red-600"
-                        : exp.daysUntilExpiry <= 60
-                          ? "text-amber-600"
-                          : "text-gray-600"
-                    }`}
-                  >
-                    {exp.daysUntilExpiry} días
-                  </p>
-                  {exp.hasBooking ? (
-                    <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">Reservado</span>
-                  ) : (
-                    <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Sin reserva</span>
-                  )}
-                </div>
+                <div className="h-4 bg-gray-100 rounded w-16" />
               </div>
             ))
+          ) : expirations.length === 0 ? (
+            <p className="px-5 py-8 text-center text-gray-400 text-sm">Sin caducidades próximas</p>
+          ) : (
+            expirations.slice(0, 20).map((exp) => {
+              const urgency = exp.daysUntilExpiry <= 30
+                ? { text: "text-red-600", bg: "bg-red-50 border-red-100", label: "Urgente" }
+                : exp.daysUntilExpiry <= 60
+                  ? { text: "text-amber-600", bg: "bg-amber-50 border-amber-100", label: "Próximo" }
+                  : { text: "text-gray-600", bg: "bg-gray-50 border-gray-200", label: null };
+              return (
+                <div key={exp.revisionId} className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/customers/${exp.customer.id}`}
+                      className="text-sm font-medium text-gray-900 hover:text-blue-600 hover:underline truncate block"
+                    >
+                      {exp.customer.firstName} {exp.customer.lastName}
+                    </Link>
+                    <p className="text-xs text-gray-400 mt-0.5">{exp.product.name}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {urgency.label && (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${urgency.bg} ${urgency.text}`}>
+                        {urgency.label}
+                      </span>
+                    )}
+                    <span className={`text-sm font-semibold tabular-nums ${urgency.text}`}>
+                      {exp.daysUntilExpiry}d
+                    </span>
+                    {exp.hasBooking ? (
+                      <span className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded font-medium">Reservado</span>
+                    ) : (
+                      <span className="text-xs text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded font-medium">Sin reserva</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
