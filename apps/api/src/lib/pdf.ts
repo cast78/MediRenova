@@ -98,6 +98,18 @@ export async function generatePdf(revisionId: string): Promise<Buffer> {
     }
   }
 
+  // Firma del médico (guardada en su perfil) embebida en el certificado.
+  let doctorSignatureDataUrl: string | undefined;
+  if (revision.doctor.signatureKey) {
+    try {
+      const bytes = await storage.get(revision.doctor.signatureKey);
+      const mime = bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg" : bytes.subarray(0, 4).toString("latin1") === "RIFF" ? "image/webp" : "image/png";
+      doctorSignatureDataUrl = `data:${mime};base64,${bytes.toString("base64")}`;
+    } catch {
+      // firma del médico ausente → se omite
+    }
+  }
+
   const data: CertificateData = {
     tenantName: tenant?.name ?? "MediRenova",
     centerName: center.name,
@@ -117,6 +129,8 @@ export async function generatePdf(revisionId: string): Promise<Buffer> {
     fields: mapFormFields(revision.formTemplate.schema, revision.formData as Record<string, unknown>),
     generatedAt: fmtDateTime(new Date()),
     signatureDataUrl,
+    doctorLicense: revision.doctor.licenseNumber ?? "",
+    doctorSignatureDataUrl,
   };
 
   const pdf = await htmlToPdf(renderCertificateHtml(data));

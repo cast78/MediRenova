@@ -19,6 +19,7 @@ const baseData: CertificateData = {
   notes: "Sin observaciones",
   fields: [{ label: "Agudeza visual", value: "0.8" }],
   generatedAt: "27/06/2026 18:00",
+  doctorLicense: "28-12345",
 };
 
 describe("certificate: renderCertificateHtml (tarea 11.6)", () => {
@@ -53,6 +54,12 @@ describe("certificate: renderCertificateHtml (tarea 11.6)", () => {
   it("no incluye <img> de firma si no hay firma", () => {
     const html = renderCertificateHtml(baseData);
     expect(html).not.toContain('alt="firma"');
+  });
+
+  it("embebe la firma del médico y el nº de colegiado", () => {
+    const html = renderCertificateHtml({ ...baseData, doctorSignatureDataUrl: "data:image/png;base64,AAA" });
+    expect(html).toContain('src="data:image/png;base64,AAA"');
+    expect(html).toContain("Col. 28-12345");
   });
 });
 
