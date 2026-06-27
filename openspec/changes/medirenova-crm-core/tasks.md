@@ -115,7 +115,7 @@
 - [ ] 11.7 Subir PDF a Cloudflare R2 y devolver URL firmada en respuesta (Paso B; ahora storage local vía interfaz `Storage`)
 - [x] 11.8 Implementar `GET /revisions/{id}/pdf` — genera si falta y sirve el certificado (URL firmada R2 1h pendiente de Paso B)
 - [x] 11.9 Implementar UI de revisión médica: renderizado dinámico del formulario JSON Schema
-- [ ] 11.10 Implementar componente de firma digital en el formulario (canvas)
+- [x] 11.10 Implementar componente de firma digital en el formulario (canvas)
 - [x] 11.11 Implementar UI de adjunto de fotos con preview
 
 ## 12. Workflow Comercial

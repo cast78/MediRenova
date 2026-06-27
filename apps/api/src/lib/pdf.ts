@@ -83,6 +83,21 @@ export async function generatePdf(revisionId: string): Promise<Buffer> {
     }
   }
 
+  // Firma del paciente (adjunto con fieldId="signature"), embebida como data URL.
+  let signatureDataUrl: string | undefined;
+  const signature = await prisma.revisionAttachment.findFirst({
+    where: { revisionId, fieldId: "signature" },
+    orderBy: { createdAt: "desc" },
+  });
+  if (signature) {
+    try {
+      const bytes = await storage.get(signature.r2Key);
+      signatureDataUrl = `data:${signature.mimeType};base64,${bytes.toString("base64")}`;
+    } catch {
+      // firma ausente en storage → se omite
+    }
+  }
+
   const data: CertificateData = {
     tenantName: tenant?.name ?? "MediRenova",
     centerName: center.name,
@@ -101,6 +116,7 @@ export async function generatePdf(revisionId: string): Promise<Buffer> {
     notes: revision.notes ?? "",
     fields: mapFormFields(revision.formTemplate.schema, revision.formData as Record<string, unknown>),
     generatedAt: fmtDateTime(new Date()),
+    signatureDataUrl,
   };
 
   const pdf = await htmlToPdf(renderCertificateHtml(data));

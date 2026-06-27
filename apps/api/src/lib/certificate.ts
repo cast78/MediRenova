@@ -23,6 +23,7 @@ export interface CertificateData {
   notes: string;
   fields: CertificateField[];
   generatedAt: string;
+  signatureDataUrl?: string | undefined;
 }
 
 // Convierte un valor de formData a texto legible para el certificado.
@@ -102,7 +103,7 @@ const TEMPLATE = `<!doctype html>
 
   <div class="sign">
     <div class="box">Dr./Dra. {{doctorName}}<br>Facultativo</div>
-    <div class="box">Firma del paciente</div>
+    <div class="box">{{#if signatureDataUrl}}<img src="{{{signatureDataUrl}}}" style="max-height:50px;margin-bottom:4px" alt="firma"><br>{{/if}}Firma del paciente</div>
   </div>
 
   <div class="foot">Documento generado el {{generatedAt}} · {{tenantName}}</div>

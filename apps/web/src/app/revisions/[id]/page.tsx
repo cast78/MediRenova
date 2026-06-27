@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch, getAccessToken } from "@/lib/api";
@@ -22,6 +22,7 @@ interface FormSchema {
 
 interface Attachment {
   id: string;
+  fieldId: string;
   fileName: string;
   mimeType: string;
   sizeBytes: number;
@@ -205,6 +206,79 @@ function AttachmentThumb({
   );
 }
 
+// ── Signature pad (canvas) ──────────────────────────────────────────────────────
+
+function SignaturePad({ onSave, saving }: { onSave: (blob: Blob) => void; saving: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const [hasInk, setHasInk] = useState(false);
+
+  useEffect(() => {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (ctx) {
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "#111827";
+    }
+  }, []);
+
+  function coords(e: React.PointerEvent<HTMLCanvasElement>) {
+    const c = canvasRef.current!;
+    const r = c.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (c.width / r.width), y: (e.clientY - r.top) * (c.height / r.height) };
+  }
+  function start(e: React.PointerEvent<HTMLCanvasElement>) {
+    drawing.current = true;
+    const ctx = canvasRef.current!.getContext("2d")!;
+    const p = coords(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    canvasRef.current!.setPointerCapture(e.pointerId);
+  }
+  function move(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawing.current) return;
+    const ctx = canvasRef.current!.getContext("2d")!;
+    const p = coords(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    setHasInk(true);
+  }
+  function end() {
+    drawing.current = false;
+  }
+  function clear() {
+    const c = canvasRef.current!;
+    c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
+    setHasInk(false);
+  }
+  function save() {
+    canvasRef.current!.toBlob((b) => { if (b) onSave(b); }, "image/png");
+  }
+
+  return (
+    <div>
+      <canvas
+        ref={canvasRef}
+        width={500}
+        height={160}
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerLeave={end}
+        className="w-full border border-gray-300 rounded-lg bg-white touch-none cursor-crosshair"
+        style={{ aspectRatio: "500 / 160" }}
+      />
+      <div className="flex gap-2 mt-2">
+        <button type="button" onClick={clear} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Limpiar</button>
+        <button type="button" onClick={save} disabled={!hasInk || saving}
+          className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+          {saving ? "Guardando..." : "Guardar firma"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function RevisionPage() {
@@ -224,6 +298,7 @@ export default function RevisionPage() {
   const [error, setError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [savingSig, setSavingSig] = useState(false);
 
   const isCompleted = revision?.outcome !== "PENDING";
 
@@ -258,6 +333,32 @@ export default function RevisionPage() {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     await queryClient.invalidateQueries({ queryKey: ["revision", id] });
+  }
+
+  async function uploadSignature(blob: Blob) {
+    setSavingSig(true);
+    setError(null);
+    const token = getAccessToken();
+    const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+    try {
+      // Reemplaza la firma anterior, si existe
+      for (const a of (revision?.attachments ?? []).filter((x) => x.fieldId === "signature")) {
+        await fetch(`/api/proxy/revisions/${id}/attachments/${a.id}`, { method: "DELETE", headers: authHeader });
+      }
+      const fd = new FormData();
+      fd.append("file", new File([blob], "firma.png", { type: "image/png" }));
+      const res = await fetch(`/api/proxy/revisions/${id}/attachments?fieldId=signature`, {
+        method: "POST",
+        headers: authHeader,
+        body: fd,
+      });
+      if (!res.ok) throw new Error("No se pudo guardar la firma");
+      await queryClient.invalidateQueries({ queryKey: ["revision", id] });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al guardar la firma");
+    } finally {
+      setSavingSig(false);
+    }
   }
 
   async function viewCertificate() {
@@ -326,6 +427,9 @@ export default function RevisionPage() {
 
   const { appointment, formTemplate } = revision;
   const fields: FormField[] = formTemplate.schema?.fields ?? [];
+  const allAttachments = revision.attachments ?? [];
+  const signatureAtt = allAttachments.find((a) => a.fieldId === "signature");
+  const generalAttachments = allAttachments.filter((a) => a.fieldId !== "signature");
 
   return (
     <div className="p-6 max-w-2xl">
@@ -420,11 +524,11 @@ export default function RevisionPage() {
             </label>
           )}
         </div>
-        {(revision.attachments ?? []).length === 0 ? (
+        {generalAttachments.length === 0 ? (
           <p className="text-sm text-gray-400">Sin adjuntos.</p>
         ) : (
           <div className="flex flex-wrap gap-3">
-            {(revision.attachments ?? []).map((att) => (
+            {generalAttachments.map((att) => (
               <AttachmentThumb
                 key={att.id}
                 revisionId={id}
@@ -434,6 +538,26 @@ export default function RevisionPage() {
               />
             ))}
           </div>
+        )}
+      </div>
+
+      {/* Signature */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+        <h2 className="font-medium text-gray-900 mb-4">Firma del paciente</h2>
+        {signatureAtt ? (
+          <div className="flex items-start gap-4">
+            <AttachmentThumb
+              revisionId={id}
+              att={signatureAtt}
+              onDelete={(aid) => void deleteAttachment(aid)}
+              canDelete={!isCompleted}
+            />
+            {!isCompleted && <p className="text-xs text-gray-400 pt-1">Firma guardada. Bórrala para volver a firmar.</p>}
+          </div>
+        ) : isCompleted ? (
+          <p className="text-sm text-gray-400">Sin firma registrada.</p>
+        ) : (
+          <SignaturePad onSave={(blob) => void uploadSignature(blob)} saving={savingSig} />
         )}
       </div>
 

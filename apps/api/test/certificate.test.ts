@@ -43,6 +43,17 @@ describe("certificate: renderCertificateHtml (tarea 11.6)", () => {
     expect(noApto).toContain("NO APTO");
     expect(noApto).toContain("#991b1b");
   });
+
+  it("embebe la firma cuando se aporta signatureDataUrl (tarea 11.10)", () => {
+    const url = "data:image/png;base64,iVBORw0KGgo=";
+    const html = renderCertificateHtml({ ...baseData, signatureDataUrl: url });
+    expect(html).toContain(`src="${url}"`);
+  });
+
+  it("no incluye <img> de firma si no hay firma", () => {
+    const html = renderCertificateHtml(baseData);
+    expect(html).not.toContain('alt="firma"');
+  });
 });
 
 describe("certificate: mapFormFields", () => {
