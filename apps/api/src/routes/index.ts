@@ -10,6 +10,7 @@ import { magicLinkRoutes } from "./magic-link.js";
 import { revisionRoutes } from "./revisions.js";
 import { workflowRoutes } from "./workflow.js";
 import { dashboardRoutes } from "./dashboard.js";
+import { userRoutes } from "./users.js";
 
 export async function registerRoutes(server: FastifyInstance) {
   server.get("/health", async () => ({ status: "ok" }));
@@ -25,4 +26,5 @@ export async function registerRoutes(server: FastifyInstance) {
   await server.register(revisionRoutes, { prefix });
   await server.register(workflowRoutes, { prefix });
   await server.register(dashboardRoutes, { prefix });
+  await server.register(userRoutes, { prefix });
 }

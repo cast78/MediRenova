@@ -119,11 +119,13 @@ model User {
   firstName    String   @map("first_name")
   lastName     String   @map("last_name")
   role         UserRole
+  centerId     String?  @map("center_id")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  center       Center?       @relation(fields: [centerId], references: [id])
   sessions     UserSession[]
   revisions    Revision[]
   appointments Appointment[]
@@ -132,6 +134,7 @@ model User {
 
   @@unique([tenantId, email])
   @@index([tenantId])
+  @@index([centerId])
   @@map("users")
 }
 
@@ -189,6 +192,7 @@ model Center {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   rooms  Room[]
+  staff  User[]
 
   @@index([tenantId])
   @@map("centers")

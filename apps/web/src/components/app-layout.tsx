@@ -14,6 +14,7 @@ import {
   Zap,
   Settings,
   FileText,
+  UserCog,
   type LucideIcon,
 } from "lucide-react";
 
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
 ];
 
 const adminNavItems: NavItem[] = [
+  { href: "/users", label: "Equipo", icon: UserCog },
   { href: "/forms", label: "Formularios", icon: FileText },
   { href: "/settings", label: "Configuración", icon: Settings },
 ];
