@@ -15,6 +15,7 @@ import {
   Settings,
   FileText,
   UserCog,
+  Stethoscope,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
 
 const adminNavItems: NavItem[] = [
   { href: "/users", label: "Equipo", icon: UserCog },
+  { href: "/doctors", label: "Médicos", icon: Stethoscope },
   { href: "/forms", label: "Formularios", icon: FileText },
   { href: "/settings", label: "Configuración", icon: Settings },
 ];
