@@ -2,8 +2,12 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
+import { randomUUID } from "node:crypto";
 import { generatePdf, ensureRevisionPdf } from "../lib/pdf.js";
 import { calculateExpiryDate, type RenewalRules } from "../lib/expiry.js";
+import { storage, sanitizeFileName } from "../lib/storage.js";
+
+const ALLOWED_ATTACHMENT_MIME = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 
 export async function revisionRoutes(server: FastifyInstance) {
   // POST /revisions — create from appointment
@@ -142,7 +146,7 @@ export async function revisionRoutes(server: FastifyInstance) {
     });
 
   // GET /revisions/:id/pdf — genera (si falta) y sirve el certificado en PDF
-  server.get<{ Params: { id: string } }>("/revisions/:id/pdf", { preHandler: [requireRole("RECEPTIONIST")] },
+  server.get<{ Params: { id: string } }>("/revisions/:id/pdf", { preHandler: [requireRole("DOCTOR")] },
     async (request, reply: FastifyReply) => {
       try {
         const pdf = await ensureRevisionPdf(request.params.id, request.ctx.tenantId);
@@ -157,5 +161,74 @@ export async function revisionRoutes(server: FastifyInstance) {
         request.log.error(err, "[pdf] error serving revision pdf");
         return reply.status(500).send({ errors: [{ code: "PDF_GENERATION_FAILED" }] });
       }
+    });
+
+  // POST /revisions/:id/attachments — sube una foto/PDF a storage (task 11.3)
+  server.post<{ Params: { id: string }; Querystring: { fieldId?: string } }>(
+    "/revisions/:id/attachments", { preHandler: [requireRole("DOCTOR")] },
+    async (request, reply: FastifyReply) => {
+      const revision = await prisma.revision.findFirst({
+        where: { id: request.params.id, tenantId: request.ctx.tenantId },
+      });
+      if (!revision) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+
+      const file = await request.file();
+      if (!file) return reply.status(400).send({ errors: [{ code: "NO_FILE" }] });
+      if (!ALLOWED_ATTACHMENT_MIME.has(file.mimetype)) {
+        return reply.status(400).send({ errors: [{ code: "INVALID_FILE_TYPE", message: "Solo JPG, PNG, WEBP o PDF" }] });
+      }
+
+      const buffer = await file.toBuffer();
+      if (file.file.truncated) {
+        return reply.status(413).send({ errors: [{ code: "FILE_TOO_LARGE", message: "Máximo 10 MB" }] });
+      }
+
+      const fileName = sanitizeFileName(file.filename || "archivo");
+      const key = `tenants/${request.ctx.tenantId}/revisions/${request.params.id}/attachments/${randomUUID()}-${fileName}`;
+      await storage.put(key, buffer, file.mimetype);
+
+      const attachment = await prisma.revisionAttachment.create({
+        data: {
+          revisionId: request.params.id,
+          fieldId: request.query.fieldId ?? "general",
+          fileName,
+          mimeType: file.mimetype,
+          sizeBytes: buffer.length,
+          r2Key: key,
+        },
+      });
+      return reply.status(201).send({ data: attachment, errors: null });
+    });
+
+  // GET /revisions/:id/attachments/:attId — sirve el archivo adjunto
+  server.get<{ Params: { id: string; attId: string } }>(
+    "/revisions/:id/attachments/:attId", { preHandler: [requireRole("DOCTOR")] },
+    async (request, reply: FastifyReply) => {
+      const attachment = await prisma.revisionAttachment.findFirst({
+        where: { id: request.params.attId, revision: { id: request.params.id, tenantId: request.ctx.tenantId } },
+      });
+      if (!attachment) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      try {
+        const bytes = await storage.get(attachment.r2Key);
+        return reply
+          .header("Content-Type", attachment.mimeType)
+          .header("Content-Disposition", `inline; filename="${attachment.fileName}"`)
+          .send(bytes);
+      } catch (err) {
+        request.log.error(err, "[attachments] error serving file");
+        return reply.status(404).send({ errors: [{ code: "FILE_NOT_FOUND" }] });
+      }
+    });
+
+  // DELETE /revisions/:id/attachments/:attId
+  server.delete<{ Params: { id: string; attId: string } }>(
+    "/revisions/:id/attachments/:attId", { preHandler: [requireRole("DOCTOR")] },
+    async (request, reply: FastifyReply) => {
+      const attachment = await prisma.revisionAttachment.findFirst({
+        where: { id: request.params.attId, revision: { id: request.params.id, tenantId: request.ctx.tenantId } },
+      });
+      if (!attachment) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      await prisma.revisionAttachment.delete({ where: { id: attachment.id } });
+      return reply.status(204).send();
     });
 }

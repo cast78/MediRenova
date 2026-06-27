@@ -12,6 +12,13 @@ export interface Storage {
   getSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
 }
 
+// Sanea un nombre de archivo subido: quita ruta, limita caracteres y longitud.
+export function sanitizeFileName(name: string): string {
+  const base = name.replace(/^.*[\\/]/, "");
+  const clean = base.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_{2,}/g, "_").slice(0, 120);
+  return clean.replace(/^[._]+/, "") || "archivo";
+}
+
 // Evita path traversal: descarta segmentos vacíos y `..`.
 function safeKey(key: string): string {
   return key

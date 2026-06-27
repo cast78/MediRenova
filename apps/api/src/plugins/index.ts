@@ -3,6 +3,7 @@ import helmet from "@fastify/helmet";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
 import authPlugin from "./auth.js";
 
 export async function registerPlugins(server: FastifyInstance) {
@@ -26,6 +27,9 @@ export async function registerPlugins(server: FastifyInstance) {
   await server.register(rateLimit, {
     max: 300,
     timeWindow: "1 minute",
+  });
+  await server.register(multipart, {
+    limits: { fileSize: 10 * 1024 * 1024, files: 5 }, // 10 MB por archivo
   });
   await server.register(authPlugin);
 }

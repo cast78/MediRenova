@@ -20,6 +20,14 @@ interface FormSchema {
   fields: FormField[];
 }
 
+interface Attachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 interface Revision {
   id: string;
   outcome: string;
@@ -28,6 +36,7 @@ interface Revision {
   startedAt: string | null;
   completedAt: string | null;
   expiryDate: string | null;
+  attachments: Attachment[];
   formTemplate: {
     id: string;
     name: string;
@@ -119,6 +128,83 @@ function DynamicField({
   );
 }
 
+// ── Attachment thumbnail (carga binaria con token) ─────────────────────────────
+
+function AttachmentThumb({
+  revisionId,
+  att,
+  onDelete,
+  canDelete,
+}: {
+  revisionId: string;
+  att: Attachment;
+  onDelete: (id: string) => void;
+  canDelete: boolean;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const isImage = att.mimeType.startsWith("image/");
+
+  useEffect(() => {
+    if (!isImage) return;
+    let revoked = false;
+    let objectUrl: string | null = null;
+    void (async () => {
+      const token = getAccessToken();
+      const res = await fetch(`/api/proxy/revisions/${revisionId}/attachments/${att.id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok || revoked) return;
+      const blob = await res.blob();
+      if (revoked) return;
+      objectUrl = URL.createObjectURL(blob);
+      setUrl(objectUrl);
+    })();
+    return () => {
+      revoked = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [revisionId, att.id, isImage]);
+
+  async function open() {
+    const token = getAccessToken();
+    const res = await fetch(`/api/proxy/revisions/${revisionId}/attachments/${att.id}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const u = URL.createObjectURL(blob);
+    window.open(u, "_blank");
+    setTimeout(() => URL.revokeObjectURL(u), 60_000);
+  }
+
+  return (
+    <div className="relative group w-24">
+      <button
+        onClick={open}
+        className="w-24 h-24 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center hover:border-blue-400"
+        title={att.fileName}
+      >
+        {isImage && url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt={att.fileName} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-xs text-gray-400 px-1 text-center break-all">{isImage ? "…" : "PDF"}</span>
+        )}
+      </button>
+      {canDelete && (
+        <button
+          onClick={() => onDelete(att.id)}
+          className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          aria-label="Eliminar adjunto"
+        >
+          ×
+        </button>
+      )}
+      <p className="mt-1 text-[10px] text-gray-500 truncate" title={att.fileName}>{att.fileName}</p>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function RevisionPage() {
@@ -137,8 +223,42 @@ export default function RevisionPage() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const isCompleted = revision?.outcome !== "PENDING";
+
+  async function uploadFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setError(null);
+    const token = getAccessToken();
+    try {
+      for (const file of Array.from(files)) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch(`/api/proxy/revisions/${id}/attachments`, {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: fd,
+        });
+        if (!res.ok) throw new Error("No se pudo subir el archivo (revisa tipo/tamaño)");
+      }
+      await queryClient.invalidateQueries({ queryKey: ["revision", id] });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al subir adjunto");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function deleteAttachment(attId: string) {
+    const token = getAccessToken();
+    await fetch(`/api/proxy/revisions/${id}/attachments/${attId}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    await queryClient.invalidateQueries({ queryKey: ["revision", id] });
+  }
 
   async function viewCertificate() {
     setPdfLoading(true);
@@ -280,6 +400,41 @@ export default function RevisionPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Attachments */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-medium text-gray-900">Adjuntos</h2>
+          {!isCompleted && (
+            <label className={`text-xs px-3 py-1.5 rounded-lg cursor-pointer font-medium ${uploading ? "bg-gray-100 text-gray-400" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
+              {uploading ? "Subiendo..." : "+ Añadir foto/PDF"}
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                multiple
+                disabled={uploading}
+                className="hidden"
+                onChange={(e) => { void uploadFiles(e.target.files); e.target.value = ""; }}
+              />
+            </label>
+          )}
+        </div>
+        {(revision.attachments ?? []).length === 0 ? (
+          <p className="text-sm text-gray-400">Sin adjuntos.</p>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {(revision.attachments ?? []).map((att) => (
+              <AttachmentThumb
+                key={att.id}
+                revisionId={id}
+                att={att}
+                onDelete={(aid) => void deleteAttachment(aid)}
+                canDelete={!isCompleted}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Notes + outcome + complete */}

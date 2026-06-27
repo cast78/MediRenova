@@ -28,15 +28,18 @@ async function proxyRequest(request: NextRequest, path: string[], method: string
   }
 
   const url = `${API_BASE}/${path.join("/")}${request.nextUrl.search}`;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {};
+  // Reenvía el Content-Type original (preserva el boundary en multipart/form-data).
+  headers["Content-Type"] = request.headers.get("content-type") ?? "application/json";
   const auth = request.headers.get("authorization");
   if (auth) headers["Authorization"] = auth;
 
   const hasBody = method !== "GET" && method !== "DELETE";
-  const body = hasBody ? await request.text() : null;
+  const body = hasBody ? await request.arrayBuffer() : undefined;
+  const hasContent = body !== undefined && body.byteLength > 0;
 
   try {
-    const response = await fetch(url, { method, headers, ...(body !== null ? { body } : {}) });
+    const response = await fetch(url, { method, headers, ...(hasContent ? { body } : {}) });
     // Reenvía la respuesta tal cual (soporta JSON y binarios como PDF).
     const contentType = response.headers.get("content-type") ?? "application/json";
     const resHeaders: Record<string, string> = { "Content-Type": contentType };

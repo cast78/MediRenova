@@ -108,7 +108,7 @@
 
 - [x] 11.1 Implementar `POST /revisions` — crear revisión desde appointment, cargar form_template activo
 - [x] 11.2 Implementar `PATCH /revisions/{id}` — guardar draft de form_data parcial
-- [ ] 11.3 Implementar upload de fotos/PDFs a Cloudflare R2 (`POST /revisions/{id}/attachments`)
+- [x] 11.3 Implementar upload de fotos/PDFs (`POST /revisions/{id}/attachments`) vía interfaz `Storage` (local en dev, R2 en Paso B)
 - [x] 11.4 Implementar `POST /revisions/{id}/complete` — validar campos requeridos, determinar outcome, calcular expiry_date
 - [x] 11.5 Configurar Puppeteer en el backend (browser headless compartido y reutilizado)
 - [x] 11.6 Implementar renderizado de plantilla Handlebars + generación PDF con Puppeteer
@@ -116,7 +116,7 @@
 - [x] 11.8 Implementar `GET /revisions/{id}/pdf` — genera si falta y sirve el certificado (URL firmada R2 1h pendiente de Paso B)
 - [x] 11.9 Implementar UI de revisión médica: renderizado dinámico del formulario JSON Schema
 - [ ] 11.10 Implementar componente de firma digital en el formulario (canvas)
-- [ ] 11.11 Implementar UI de adjunto de fotos con preview
+- [x] 11.11 Implementar UI de adjunto de fotos con preview
 
 ## 12. Workflow Comercial
 
