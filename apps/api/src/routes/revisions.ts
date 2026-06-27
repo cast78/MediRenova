@@ -76,10 +76,13 @@ export async function revisionRoutes(server: FastifyInstance) {
 
       const where: Record<string, unknown> = { tenantId: request.ctx.tenantId };
       if (outcome) where["outcome"] = outcome;
+      const apptFilter: Record<string, unknown> = {};
       if (date) {
         const d = new Date(`${date}T00:00:00.000Z`);
-        where["appointment"] = { scheduledAt: { gte: d, lte: new Date(d.getTime() + 86_400_000) } };
+        apptFilter["scheduledAt"] = { gte: d, lte: new Date(d.getTime() + 86_400_000) };
       }
+      if (request.ctx.centerId) apptFilter["room"] = { centerId: request.ctx.centerId };
+      if (Object.keys(apptFilter).length) where["appointment"] = apptFilter;
 
       const [items, total] = await Promise.all([
         prisma.revision.findMany({
@@ -106,7 +109,7 @@ export async function revisionRoutes(server: FastifyInstance) {
   server.get<{ Params: { id: string } }>("/revisions/:id", { preHandler: [requireRole("DOCTOR")] },
     async (request, reply: FastifyReply) => {
       const revision = await prisma.revision.findFirst({
-        where: { id: request.params.id, tenantId: request.ctx.tenantId },
+        where: { id: request.params.id, tenantId: request.ctx.tenantId, ...(request.ctx.centerId ? { appointment: { room: { centerId: request.ctx.centerId } } } : {}) },
         include: {
           formTemplate: true,
           attachments: true,
@@ -191,6 +194,10 @@ export async function revisionRoutes(server: FastifyInstance) {
   server.get<{ Params: { id: string } }>("/revisions/:id/pdf", { preHandler: [requireRole("DOCTOR")] },
     async (request, reply: FastifyReply) => {
       try {
+        if (request.ctx.centerId) {
+          const ok = await prisma.revision.findFirst({ where: { id: request.params.id, tenantId: request.ctx.tenantId, appointment: { room: { centerId: request.ctx.centerId } } }, select: { id: true } });
+          if (!ok) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+        }
         const pdf = await ensureRevisionPdf(request.params.id, request.ctx.tenantId);
         return reply
           .header("Content-Type", "application/pdf")

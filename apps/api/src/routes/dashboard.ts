@@ -7,6 +7,9 @@ export async function dashboardRoutes(server: FastifyInstance) {
   server.get("/dashboard/summary", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const tid = request.ctx.tenantId;
+      const cen = request.ctx.centerId;
+      const apptScope = cen ? { room: { centerId: cen } } : {};
+      const revScope = cen ? { appointment: { room: { centerId: cen } } } : {};
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
       const weekEnd = new Date(todayEnd); weekEnd.setDate(weekEnd.getDate() + 7);
@@ -18,11 +21,11 @@ export async function dashboardRoutes(server: FastifyInstance) {
         completedThisMonth,
         totalThisMonth,
       ] = await Promise.all([
-        prisma.appointment.count({ where: { tenantId: tid, scheduledAt: { gte: todayStart, lte: todayEnd }, status: { notIn: ["CANCELLED", "NO_SHOW"] } } }),
-        prisma.appointment.count({ where: { tenantId: tid, scheduledAt: { gte: todayStart, lte: weekEnd }, status: { notIn: ["CANCELLED", "NO_SHOW"] } } }),
-        prisma.revision.count({ where: { tenantId: tid, outcome: "PENDING" } }),
-        prisma.revision.count({ where: { tenantId: tid, outcome: { in: ["APTO", "NO_APTO"] }, completedAt: { gte: new Date(todayStart.getFullYear(), todayStart.getMonth(), 1) } } }),
-        prisma.appointment.count({ where: { tenantId: tid, scheduledAt: { gte: new Date(todayStart.getFullYear(), todayStart.getMonth(), 1) }, status: { notIn: ["CANCELLED"] } } }),
+        prisma.appointment.count({ where: { tenantId: tid, ...apptScope, scheduledAt: { gte: todayStart, lte: todayEnd }, status: { notIn: ["CANCELLED", "NO_SHOW"] } } }),
+        prisma.appointment.count({ where: { tenantId: tid, ...apptScope, scheduledAt: { gte: todayStart, lte: weekEnd }, status: { notIn: ["CANCELLED", "NO_SHOW"] } } }),
+        prisma.revision.count({ where: { tenantId: tid, ...revScope, outcome: "PENDING" } }),
+        prisma.revision.count({ where: { tenantId: tid, ...revScope, outcome: { in: ["APTO", "NO_APTO"] }, completedAt: { gte: new Date(todayStart.getFullYear(), todayStart.getMonth(), 1) } } }),
+        prisma.appointment.count({ where: { tenantId: tid, ...apptScope, scheduledAt: { gte: new Date(todayStart.getFullYear(), todayStart.getMonth(), 1) }, status: { notIn: ["CANCELLED"] } } }),
       ]);
 
       const conversionRate = totalThisMonth > 0 ? Math.round((completedThisMonth / totalThisMonth) * 100) : 0;
@@ -37,11 +40,12 @@ export async function dashboardRoutes(server: FastifyInstance) {
   server.get("/dashboard/expirations", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const tid = request.ctx.tenantId;
+      const cen = request.ctx.centerId;
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const in90 = new Date(today); in90.setDate(in90.getDate() + 90);
 
       const expirations = await prisma.revision.findMany({
-        where: { tenantId: tid, expiryDate: { gte: today, lte: in90 }, outcome: "APTO" },
+        where: { tenantId: tid, ...(cen ? { appointment: { room: { centerId: cen } } } : {}), expiryDate: { gte: today, lte: in90 }, outcome: "APTO" },
         include: {
           appointment: {
             include: {
@@ -59,6 +63,7 @@ export async function dashboardRoutes(server: FastifyInstance) {
       const futureBookings = await prisma.appointment.findMany({
         where: {
           tenantId: tid,
+          ...(cen ? { room: { centerId: cen } } : {}),
           customerId: { in: customerIds },
           scheduledAt: { gt: new Date() },
           status: { in: ["CONFIRMED", "PENDING"] },
@@ -86,7 +91,7 @@ export async function dashboardRoutes(server: FastifyInstance) {
       const twelveMonthsAgo = new Date(); twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11); twelveMonthsAgo.setDate(1); twelveMonthsAgo.setHours(0, 0, 0, 0);
 
       const appointments = await prisma.appointment.findMany({
-        where: { tenantId: tid, scheduledAt: { gte: twelveMonthsAgo }, status: { notIn: ["CANCELLED"] } },
+        where: { tenantId: tid, ...(request.ctx.centerId ? { room: { centerId: request.ctx.centerId } } : {}), scheduledAt: { gte: twelveMonthsAgo }, status: { notIn: ["CANCELLED"] } },
         select: { scheduledAt: true },
       });
 

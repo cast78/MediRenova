@@ -57,7 +57,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
       const { roomId, date, productId } = query.data;
 
       const room = await prisma.room.findFirst({
-        where: { id: roomId, center: { tenantId: request.ctx.tenantId } },
+        where: { id: roomId, center: { tenantId: request.ctx.tenantId }, ...(request.ctx.centerId ? { centerId: request.ctx.centerId } : {}) },
         include: { center: { select: { holidays: true } } },
       });
       if (!room) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
@@ -107,6 +107,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
         },
       });
       if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      if (request.ctx.centerId && appt.room.centerId !== request.ctx.centerId) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
       const center = appt.room.center;
       const ics = buildIcs({
         uid: `appointment-${appt.id}@medirenova`,
@@ -129,6 +130,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
       const query = listQuerySchema.parse(request.query);
       const skip = (query.page - 1) * query.limit;
       const where: Record<string, unknown> = { tenantId: request.ctx.tenantId };
+      if (request.ctx.centerId) where["room"] = { centerId: request.ctx.centerId };
       if (query.status) where["status"] = query.status;
       if (query.customerId) where["customerId"] = query.customerId;
       if (query.roomId) where["roomId"] = query.roomId;
@@ -162,7 +164,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
       const [customer, product, room] = await Promise.all([
         prisma.customer.findFirst({ where: { id: body.data.customerId, tenantId: request.ctx.tenantId, deletedAt: null } }),
         prisma.product.findFirst({ where: { id: body.data.productId, tenantId: request.ctx.tenantId, active: true } }),
-        prisma.room.findFirst({ where: { id: body.data.roomId, center: { tenantId: request.ctx.tenantId } } }),
+        prisma.room.findFirst({ where: { id: body.data.roomId, center: { tenantId: request.ctx.tenantId }, ...(request.ctx.centerId ? { centerId: request.ctx.centerId } : {}) } }),
       ]);
       if (!customer) return reply.status(400).send({ errors: [{ code: "INVALID_CUSTOMER" }] });
       if (!product) return reply.status(400).send({ errors: [{ code: "INVALID_PRODUCT" }] });

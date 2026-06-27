@@ -40,6 +40,7 @@ export async function authRoutes(server: FastifyInstance) {
         sub: user.id,
         tid: user.tenantId,
         role: user.role,
+        cen: user.centerId,
       });
 
       const rawRefresh = generateRefreshToken();
@@ -107,6 +108,7 @@ export async function authRoutes(server: FastifyInstance) {
         sub: session.user.id,
         tid: session.user.tenantId,
         role: session.user.role,
+        cen: session.user.centerId,
       });
 
       return reply.status(200).send({

@@ -6,6 +6,7 @@ export interface AccessTokenPayload {
   sub: string;      // user_id
   tid: string;      // tenant_id
   role: string;
+  cen?: string | null; // center_id — si está, el usuario solo ve ese centro (BackOffice)
   iat?: number;
   exp?: number;
 }

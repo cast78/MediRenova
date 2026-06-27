@@ -11,6 +11,7 @@ declare module "fastify" {
       userId: string;
       tenantId: string;
       role: string;
+      centerId: string | null;
     };
   }
 }
@@ -33,7 +34,7 @@ async function authPlugin(server: FastifyInstance) {
       const token = authHeader.slice(7);
       try {
         const payload: AccessTokenPayload = verifyAccessToken(token);
-        request.ctx = { userId: payload.sub, tenantId: payload.tid, role: payload.role };
+        request.ctx = { userId: payload.sub, tenantId: payload.tid, role: payload.role, centerId: payload.cen ?? null };
         setTenantContext({ tenantId: payload.tid, role: payload.role });
         return;
       } catch {
@@ -52,7 +53,7 @@ async function authPlugin(server: FastifyInstance) {
         return reply.status(401).send({ errors: [{ code: "UNAUTHORIZED", message: "API Key inválida" }] });
       }
       // No lastUsedAt field in schema - skip update
-      request.ctx = { userId: apiKey.id, tenantId: apiKey.tenantId, role: "API_KEY" };
+      request.ctx = { userId: apiKey.id, tenantId: apiKey.tenantId, role: "API_KEY", centerId: null };
       setTenantContext({ tenantId: apiKey.tenantId, role: "API_KEY" });
       return;
     }

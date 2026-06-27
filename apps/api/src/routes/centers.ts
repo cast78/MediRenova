@@ -50,7 +50,7 @@ export async function centerRoutes(server: FastifyInstance) {
   server.get("/centers", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const centers = await prisma.center.findMany({
-        where: { tenantId: request.ctx.tenantId },
+        where: { tenantId: request.ctx.tenantId, ...(request.ctx.centerId ? { id: request.ctx.centerId } : {}) },
         include: { rooms: { include: { doctors: { include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } } } } } },
         orderBy: { name: "asc" },
       });
@@ -69,6 +69,7 @@ export async function centerRoutes(server: FastifyInstance) {
 
   server.get<{ Params: { id: string } }>("/centers/:id", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request, reply: FastifyReply) => {
+      if (request.ctx.centerId && request.params.id !== request.ctx.centerId) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
       const center = await prisma.center.findFirst({ where: { id: request.params.id, tenantId: request.ctx.tenantId }, include: { rooms: true } });
       if (!center) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
       return reply.send({ data: center, errors: null });
@@ -126,6 +127,7 @@ export async function centerRoutes(server: FastifyInstance) {
 
   server.get<{ Params: { centerId: string } }>("/centers/:centerId/rooms", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request, reply: FastifyReply) => {
+      if (request.ctx.centerId && request.params.centerId !== request.ctx.centerId) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
       const center = await prisma.center.findFirst({ where: { id: request.params.centerId, tenantId: request.ctx.tenantId } });
       if (!center) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
       const rooms = await prisma.room.findMany({
