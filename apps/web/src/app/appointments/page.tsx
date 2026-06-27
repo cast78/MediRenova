@@ -170,7 +170,7 @@ function NewAppointmentModal({ onClose }: { onClose: () => void }) {
   });
 
   const mutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (allowOverlap: boolean) =>
       apiFetch("/appointments", {
         method: "POST",
         body: JSON.stringify({
@@ -180,6 +180,7 @@ function NewAppointmentModal({ onClose }: { onClose: () => void }) {
           scheduledAt: slot,
           source: "BACKOFFICE",
           notes: notes || undefined,
+          allowOverlap,
         }),
       }),
     onSuccess: () => {
@@ -187,6 +188,14 @@ function NewAppointmentModal({ onClose }: { onClose: () => void }) {
       onClose();
     },
     onError: (err: unknown) => {
+      // Solape: el backoffice puede forzar la reserva tras confirmar.
+      const code = err instanceof ApiError && Array.isArray(err.errors) ? (err.errors as Array<{ code?: string }>)[0]?.code : null;
+      if (code === "OVERLAP_WARNING") {
+        if (window.confirm("La sala ya tiene una cita que solapa con esta franja. ¿Reservar igualmente?")) {
+          mutation.mutate(true);
+        }
+        return;
+      }
       setError(err instanceof Error ? err.message : "Error al crear la reserva");
     },
   });
@@ -352,7 +361,7 @@ function NewAppointmentModal({ onClose }: { onClose: () => void }) {
             <div className="flex justify-between pt-2">
               <button onClick={() => setStep(2)} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">← Atrás</button>
               <button
-                onClick={() => mutation.mutate()}
+                onClick={() => mutation.mutate(false)}
                 disabled={!slot || mutation.isPending}
                 className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40"
               >
@@ -443,7 +452,7 @@ function AppointmentCard({ appt, onOpenRevision, isPast }: {
           <button
             onClick={handleRevision}
             disabled={loading}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 font-medium"
+            className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-colors disabled:opacity-50 font-medium"
           >
             {loading ? "..." : "Revisión →"}
           </button>

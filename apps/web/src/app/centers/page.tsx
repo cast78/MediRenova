@@ -18,7 +18,7 @@ interface Room {
   id: string;
   name: string;
   schedule: RoomSchedule;
-  allowedProductTypes: string[];
+  allowedProductIds: string[];
 }
 
 interface Center {
@@ -167,16 +167,20 @@ function CenterModal({ center, onClose }: { center?: Center; onClose: () => void
 
 // ── Room Modal ────────────────────────────────────────────────────────────────
 
+interface RoomProduct { id: string; name: string; active: boolean }
+
 interface RoomFormData {
-  name: string; openTime: string; closeTime: string; slotDuration: string; slotBuffer: string; activeDays: number[];
+  name: string; openTime: string; closeTime: string; activeDays: number[]; allowedProductIds: string[];
 }
-const EMPTY_ROOM: RoomFormData = { name: "", openTime: "09:00", closeTime: "18:00", slotDuration: "30", slotBuffer: "5", activeDays: [1, 2, 3, 4, 5] };
+const EMPTY_ROOM: RoomFormData = { name: "", openTime: "09:00", closeTime: "18:00", activeDays: [1, 2, 3, 4, 5], allowedProductIds: [] };
 
 function RoomModal({ centerId, room, onClose }: { centerId: string; room?: Room; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const { data: products } = useQuery<RoomProduct[]>({ queryKey: ["products"], queryFn: () => apiFetch<RoomProduct[]>("/products") });
+  const activeProducts = (products ?? []).filter((p) => p.active);
   const [form, setForm] = useState<RoomFormData>(
     room ? { name: room.name, openTime: room.schedule.openTime ?? "09:00", closeTime: room.schedule.closeTime ?? "18:00",
-        slotDuration: String(room.schedule.slotDuration ?? 30), slotBuffer: String(room.schedule.slotBuffer ?? 5), activeDays: room.schedule.activeDays ?? [1, 2, 3, 4, 5] }
+        activeDays: room.schedule.activeDays ?? [1, 2, 3, 4, 5], allowedProductIds: room.allowedProductIds ?? [] }
       : EMPTY_ROOM
   );
   const [error, setError] = useState<string | null>(null);
@@ -185,10 +189,13 @@ function RoomModal({ centerId, room, onClose }: { centerId: string; room?: Room;
   function toggleDay(d: number) {
     setForm((f) => ({ ...f, activeDays: f.activeDays.includes(d) ? f.activeDays.filter((x) => x !== d) : [...f.activeDays, d].sort() }));
   }
+  function toggleProduct(id: string) {
+    setForm((f) => ({ ...f, allowedProductIds: f.allowedProductIds.includes(id) ? f.allowedProductIds.filter((x) => x !== id) : [...f.allowedProductIds, id] }));
+  }
 
   const mutation = useMutation({
     mutationFn: () => {
-      const body = { name: form.name, schedule: { openTime: form.openTime, closeTime: form.closeTime, slotDuration: parseInt(form.slotDuration), slotBuffer: parseInt(form.slotBuffer), activeDays: form.activeDays } };
+      const body = { name: form.name, schedule: { openTime: form.openTime, closeTime: form.closeTime, activeDays: form.activeDays }, allowedProductIds: form.allowedProductIds };
       return isEdit
         ? apiFetch(`/centers/${centerId}/rooms/${room!.id}`, { method: "PATCH", body: JSON.stringify(body) })
         : apiFetch(`/centers/${centerId}/rooms`, { method: "POST", body: JSON.stringify(body) });
@@ -220,18 +227,16 @@ function RoomModal({ centerId, room, onClose }: { centerId: string; room?: Room;
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Duración cita (min)</label>
-              <input type="number" min={5} max={120} step={5} value={form.slotDuration}
-                onChange={(e) => setForm((f) => ({ ...f, slotDuration: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Margen entre citas (min)</label>
-              <input type="number" min={0} max={60} step={5} value={form.slotBuffer}
-                onChange={(e) => setForm((f) => ({ ...f, slotBuffer: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Productos que ofrece <span className="text-gray-400 font-normal">(ninguno = todos)</span></label>
+            <div className="space-y-1.5 max-h-36 overflow-y-auto border border-gray-200 rounded-lg p-2">
+              {activeProducts.length === 0 && <p className="text-xs text-gray-400 px-1">No hay productos</p>}
+              {activeProducts.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 px-1 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                  <input type="checkbox" checked={form.allowedProductIds.includes(p.id)} onChange={() => toggleProduct(p.id)} className="w-4 h-4" />
+                  <span className="text-sm text-gray-800">{p.name}</span>
+                </label>
+              ))}
             </div>
           </div>
           <div>
@@ -564,7 +569,7 @@ function CenterCard({ center }: { center: Center }) {
                       <p className="text-sm font-medium text-gray-900">{room.name}</p>
                       <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
                         {room.schedule.openTime && <span className="text-xs text-gray-500">{room.schedule.openTime} – {room.schedule.closeTime}</span>}
-                        {room.schedule.slotDuration && <span className="text-xs text-gray-500">{room.schedule.slotDuration} min/cita</span>}
+                        <span className="text-xs text-gray-500">{(room.allowedProductIds?.length ?? 0) === 0 ? "Todos los productos" : `${room.allowedProductIds.length} producto(s)`}</span>
                         {room.schedule.activeDays && <span className="text-xs text-gray-500">{dayLabels(room.schedule.activeDays)}</span>}
                       </div>
                     </div>
