@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
 import { auditLog } from "../lib/audit.js";
+import { markWorkflowConverted } from "../lib/workflow-cron.js";
 
 const createAppointmentSchema = z.object({
   customerId: z.string().uuid(),
@@ -187,6 +188,11 @@ export async function appointmentRoutes(server: FastifyInstance) {
           appointment.id,
           { after: { id: appointment.id, scheduledAt: appointment.scheduledAt, status: appointment.status } },
         );
+
+        // 12.7: la reserva detiene los avisos de renovación pendientes del cliente
+        await markWorkflowConverted(request.ctx.tenantId, body.data.customerId, body.data.productId).catch((err) => {
+          request.log.error(err, "[workflow] markWorkflowConverted failed");
+        });
 
         return reply.status(201).send({ data: appointment, errors: null });
       } catch (err: unknown) {

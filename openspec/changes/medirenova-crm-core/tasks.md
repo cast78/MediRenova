@@ -124,10 +124,10 @@
 - [x] 12.2 Implementar job cron diario con `node-cron` que detecta caducidades en horizonte de reglas activas
 - [x] 12.3 Implementar lógica de exclusión: no enviar si cliente ya tiene reserva confirmada futura
 - [x] 12.4 Implementar generación de magic link en el cron y registro en `workflow_executions`
-- [ ] 12.5 Implementar envío de WhatsApp vía Meta Cloud API con plantilla aprobada
+- [x] 12.5 Implementar envío de WhatsApp vía Meta Cloud API con plantilla aprobada
 - [x] 12.6 Implementar lógica de reintentos basada en `next_attempt_at` y `attempt_count`
-- [ ] 12.7 Implementar detención automática de workflow al crear reserva confirmada
-- [ ] 12.8 Implementar UI de configuración de reglas de workflow para el admin
+- [x] 12.7 Implementar detención automática de workflow al crear reserva confirmada
+- [x] 12.8 Implementar UI de configuración de reglas de workflow para el admin
 
 ## 13. Dashboard
 

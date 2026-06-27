@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { signMagicLinkToken, verifyMagicLinkToken } from "../lib/jwt.js";
+import { markWorkflowConverted } from "../lib/workflow-cron.js";
 
 const confirmSchema = z.object({
   roomId: z.string().uuid(),
@@ -84,6 +85,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
               status: "CONFIRMED",
             },
           });
+          await markWorkflowConverted(payload.tid, payload.cid, payload.pid).catch(() => {});
           return reply.status(201).send({ data: { appointmentId: appointment.id, scheduledAt: appointment.scheduledAt }, errors: null });
         } catch (err: unknown) {
           if (err instanceof Error && err.message.includes("unique constraint")) {
@@ -208,6 +210,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
               status: "CONFIRMED",
             },
           });
+          await markWorkflowConverted(payload.tid, payload.cid, payload.pid).catch(() => {});
           return reply.status(201).send({ data: { appointmentId: appointment.id, scheduledAt: appointment.scheduledAt }, errors: null });
         } catch (err: unknown) {
           if (err instanceof Error && err.message.includes("unique constraint")) {

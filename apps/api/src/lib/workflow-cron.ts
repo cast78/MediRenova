@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { prisma } from "../lib/prisma.js";
 import { signMagicLinkToken } from "./jwt.js";
+import { whatsapp } from "./whatsapp.js";
 
 const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
 
@@ -108,8 +109,12 @@ async function sendWorkflowNotification(
     const magicUrl = `${PUBLIC_URL}/link/${token}`;
 
     if (rule.actionType === "WHATSAPP") {
-      // TODO (task 12.5): Implement Meta Cloud API WhatsApp send
-      console.log(`[workflow] Would send WhatsApp to ${revision.customer.phone ?? "?"} with template ${rule.templateName}, URL: ${magicUrl}`);
+      if (!revision.customer.phone) throw new Error("El cliente no tiene teléfono");
+      await whatsapp.sendTemplate({
+        to: revision.customer.phone,
+        templateName: rule.templateName,
+        bodyParams: [magicUrl],
+      });
     }
 
     const nextAttemptAt = new Date();
@@ -119,6 +124,7 @@ async function sendWorkflowNotification(
       where: { id: executionId },
       data: {
         status: "SENT",
+        magicLinkToken: token,
         lastAttemptAt: new Date(),
         nextAttemptAt,
         attemptCount: { increment: 1 },
@@ -131,4 +137,29 @@ async function sendWorkflowNotification(
     });
     console.error(`[workflow] Failed to send notification for execution ${executionId}:`, err);
   }
+}
+
+/**
+ * Detención automática del workflow (tarea 12.7): al crear una reserva para un
+ * cliente+producto, marca como COMPLETED las ejecuciones abiertas (deja de
+ * reintentar). Scoping por tenant vía las reglas del producto.
+ */
+export async function markWorkflowConverted(
+  tenantId: string,
+  customerId: string,
+  productId: string,
+): Promise<void> {
+  const rules = await prisma.workflowRule.findMany({
+    where: { tenantId, productId },
+    select: { id: true },
+  });
+  if (rules.length === 0) return;
+  await prisma.workflowExecution.updateMany({
+    where: {
+      customerId,
+      ruleId: { in: rules.map((r) => r.id) },
+      status: { in: ["PENDING_SEND", "SENT"] },
+    },
+    data: { status: "COMPLETED" },
+  });
 }
