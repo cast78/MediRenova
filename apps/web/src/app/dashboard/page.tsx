@@ -34,6 +34,11 @@ interface MonthlyData {
   count: number;
 }
 
+interface ProvinceData {
+  province: string;
+  count: number;
+}
+
 const MONTH_LABELS: Record<string, string> = {
   "01": "Ene", "02": "Feb", "03": "Mar", "04": "Abr",
   "05": "May", "06": "Jun", "07": "Jul", "08": "Ago",
@@ -73,10 +78,16 @@ export default function DashboardPage() {
     queryFn: () => apiFetch<MonthlyData[]>("/dashboard/charts/appointments-by-month"),
   });
 
+  const { data: provinceData } = useQuery<ProvinceData[]>({
+    queryKey: ["dashboard-chart-province"],
+    queryFn: () => apiFetch<ProvinceData[]>("/dashboard/charts/customers-by-province"),
+  });
+
   const formattedChart = (chartData ?? []).map((d) => ({
     ...d,
     label: formatMonth(d.month),
   }));
+  const topProvinces = (provinceData ?? []).slice(0, 8);
 
   return (
     <div className="p-6 max-w-5xl space-y-5">
@@ -127,6 +138,27 @@ export default function DashboardPage() {
                 labelFormatter={(l) => `Mes: ${l}`}
               />
               <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Chart: Clientes por provincia */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Clientes por provincia</h2>
+        {topProvinces.length === 0 ? (
+          <p className="text-center text-gray-400 text-sm py-8">Sin datos</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={Math.max(120, topProvinces.length * 34 + 16)}>
+            <BarChart data={topProvinces} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
+              <XAxis type="number" tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <YAxis type="category" dataKey="province" width={110} tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+              <Tooltip
+                contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }}
+                formatter={(v: number) => [v, "Clientes"]}
+              />
+              <Bar dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>
         )}

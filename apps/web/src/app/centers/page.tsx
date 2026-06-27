@@ -31,6 +31,7 @@ interface Center {
   postalCode: string;
   phones: string[];
   emails: string[];
+  holidays: string[];
   active: boolean;
   rooms: Room[];
 }
@@ -409,6 +410,65 @@ function RoomScheduleCalendar({ schedule }: { schedule: RoomSchedule | ScheduleS
   );
 }
 
+// ── Holidays Modal ──────────────────────────────────────────────────────────────
+
+function HolidaysModal({ center, onClose }: { center: Center; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [dates, setDates] = useState<string[]>(center.holidays ?? []);
+  const [newDate, setNewDate] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: () => apiFetch(`/centers/${center.id}/holidays`, { method: "PUT", body: JSON.stringify({ holidays: dates }) }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["centers"] }); onClose(); },
+    onError: (err: unknown) => setError(errorMessage(err)),
+  });
+
+  function add() {
+    if (newDate && !dates.includes(newDate)) setDates((d) => [...d, newDate].sort());
+    setNewDate("");
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl">×</button>
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">Festivos</h2>
+        <p className="text-sm text-gray-500 mb-4">{center.name} · días sin disponibilidad</p>
+
+        <div className="flex gap-2 mb-3">
+          <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)}
+            className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <button type="button" onClick={add} disabled={!newDate}
+            className="shrink-0 px-3 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-40">Añadir</button>
+        </div>
+
+        {dates.length === 0 ? (
+          <p className="text-sm text-gray-400 py-4 text-center">Sin festivos configurados</p>
+        ) : (
+          <div className="max-h-56 overflow-y-auto space-y-1.5 mb-3">
+            {dates.map((d) => (
+              <div key={d} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-1.5">
+                <span className="text-sm text-gray-700 tabular-nums">{new Date(`${d}T00:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "2-digit", month: "long", year: "numeric" })}</span>
+                <button onClick={() => setDates((arr) => arr.filter((x) => x !== d))} className="text-gray-400 hover:text-red-500 text-lg leading-none">×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
+          <button onClick={() => mutation.mutate()} disabled={mutation.isPending}
+            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+            {mutation.isPending ? "Guardando..." : "Guardar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Center Card ───────────────────────────────────────────────────────────────
 
 function CenterCard({ center }: { center: Center }) {
@@ -419,6 +479,7 @@ function CenterCard({ center }: { center: Center }) {
   const [newRoom, setNewRoom] = useState(false);
   const [editRoom, setEditRoom] = useState<Room | null>(null);
   const [deleteRoom, setDeleteRoom] = useState<Room | null>(null);
+  const [showHolidays, setShowHolidays] = useState(false);
 
   const toggleActive = useMutation({
     mutationFn: () => apiFetch(`/centers/${center.id}`, { method: "PATCH", body: JSON.stringify({ active: !center.active }) }),
@@ -442,6 +503,7 @@ function CenterCard({ center }: { center: Center }) {
       {newRoom && <RoomModal centerId={center.id} onClose={() => setNewRoom(false)} />}
       {editRoom && <RoomModal centerId={center.id} room={editRoom} onClose={() => setEditRoom(null)} />}
       {deleteRoom && <DeleteConfirm label={`la sala "${deleteRoom.name}"`} onConfirm={() => deleteRoomMutation.mutate(deleteRoom.id)} onCancel={() => setDeleteRoom(null)} loading={deleteRoomMutation.isPending} />}
+      {showHolidays && <HolidaysModal center={center} onClose={() => setShowHolidays(false)} />}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {/* Header */}
@@ -474,6 +536,9 @@ function CenterCard({ center }: { center: Center }) {
               {center.active ? "Desactivar" : "Activar"}
             </button>
             <button onClick={() => setEditCenter(true)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Editar</button>
+            <button onClick={() => setShowHolidays(true)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
+              Festivos{(center.holidays?.length ?? 0) > 0 ? ` (${center.holidays.length})` : ""}
+            </button>
             <button onClick={() => setDeleteCenter(true)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-100 hover:bg-red-50 text-red-500">Eliminar</button>
             <button onClick={() => setExpanded((v) => !v)} className="text-xs px-2.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium">
               {expanded ? "▲ Ocultar" : `▼ ${center.rooms.length} sala${center.rooms.length !== 1 ? "s" : ""}`}
