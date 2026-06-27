@@ -5,14 +5,23 @@ import { requireRole } from "../lib/authorization.js";
 import { auditLog } from "../lib/audit.js";
 import { stripUndefined } from "../lib/utils.js";
 
+// Acepta CIF, NIF o NIE españoles (sin verificar dígito de control). Se normaliza a mayúsculas.
+const cifRegex = /^([ABCDEFGHJNPQRSUVW]\d{7}[0-9A-J]|\d{8}[A-Za-z]|[XYZ]\d{7}[A-Za-z])$/i;
+
 const centerSchema = z.object({
   name: z.string().min(2).max(100),
+  cif: z
+    .string()
+    .trim()
+    .regex(cifRegex, "CIF/NIF inválido")
+    .transform((s) => s.toUpperCase())
+    .optional(),
   address: z.string().min(5),
   city: z.string().min(2),
   province: z.string().min(2),
   postalCode: z.string().min(4).max(10),
-  phone: z.string().optional(),
-  email: z.string().email().optional(),
+  phones: z.array(z.string().trim().min(5).max(30)).max(10).optional(),
+  emails: z.array(z.string().trim().email()).max(10).optional(),
 });
 
 // Room schedule stored as JSON: { openTime, closeTime, activeDays, slotDuration, slotBuffer }

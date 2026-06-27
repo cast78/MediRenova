@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, ApiError } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -24,12 +24,13 @@ interface Room {
 interface Center {
   id: string;
   name: string;
+  cif: string | null;
   address: string;
   city: string;
   province: string;
   postalCode: string;
-  phone: string | null;
-  email: string | null;
+  phones: string[];
+  emails: string[];
   active: boolean;
   rooms: Room[];
 }
@@ -43,17 +44,38 @@ function dayLabels(days?: number[]) {
   return days.map((d) => DAYS[d]).join(", ");
 }
 
+// Extrae un mensaje legible de un ApiError (errores de campo Zod o array de códigos)
+function errorMessage(err: unknown, fallback = "Error al guardar"): string {
+  if (err instanceof ApiError) {
+    const e = err.errors;
+    if (e && typeof e === "object" && !Array.isArray(e)) {
+      const msgs = Object.values(e as Record<string, string[]>).flat().filter(Boolean);
+      if (msgs.length) return msgs.join(" · ");
+    }
+    return `Error ${err.status}`;
+  }
+  return err instanceof Error ? err.message : fallback;
+}
+
 // ── Center Modal ──────────────────────────────────────────────────────────────
 
 interface CenterFormData {
-  name: string; address: string; city: string; province: string; postalCode: string; phone: string; email: string;
+  name: string; cif: string; address: string; city: string; province: string; postalCode: string;
+  phones: string[]; emails: string[];
 }
-const EMPTY_CENTER: CenterFormData = { name: "", address: "", city: "", province: "", postalCode: "", phone: "", email: "" };
+const EMPTY_CENTER: CenterFormData = { name: "", cif: "", address: "", city: "", province: "", postalCode: "", phones: [""], emails: [""] };
+
+// Garantiza al menos una fila vacía para poder escribir
+function withRow(list: string[]): string[] {
+  return list.length > 0 ? list : [""];
+}
 
 function CenterModal({ center, onClose }: { center?: Center; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<CenterFormData>(
-    center ? { name: center.name, address: center.address, city: center.city, province: center.province, postalCode: center.postalCode, phone: center.phone ?? "", email: center.email ?? "" }
+    center
+      ? { name: center.name, cif: center.cif ?? "", address: center.address, city: center.city, province: center.province,
+          postalCode: center.postalCode, phones: withRow(center.phones ?? []), emails: withRow(center.emails ?? []) }
       : EMPTY_CENTER
   );
   const [error, setError] = useState<string | null>(null);
@@ -61,39 +83,74 @@ function CenterModal({ center, onClose }: { center?: Center; onClose: () => void
 
   const mutation = useMutation({
     mutationFn: () => {
-      const body: Record<string, string> = { name: form.name, address: form.address, city: form.city, province: form.province, postalCode: form.postalCode };
-      if (form.phone) body["phone"] = form.phone;
-      if (form.email) body["email"] = form.email;
+      const body: Record<string, unknown> = {
+        name: form.name, address: form.address, city: form.city, province: form.province, postalCode: form.postalCode,
+        phones: form.phones.map((p) => p.trim()).filter(Boolean),
+        emails: form.emails.map((e) => e.trim()).filter(Boolean),
+      };
+      if (form.cif.trim()) body["cif"] = form.cif.trim();
       return isEdit
         ? apiFetch(`/centers/${center!.id}`, { method: "PATCH", body: JSON.stringify(body) })
         : apiFetch("/centers", { method: "POST", body: JSON.stringify(body) });
     },
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["centers"] }); onClose(); },
-    onError: (err: unknown) => setError(err instanceof Error ? err.message : "Error al guardar"),
+    onError: (err: unknown) => setError(errorMessage(err)),
   });
 
-  function field(label: string, key: keyof CenterFormData, required = false, type = "text") {
+  type TextKey = "name" | "cif" | "address" | "city" | "province" | "postalCode";
+  function field(label: string, key: TextKey, required = false, type = "text", placeholder = "") {
     return (
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">{label}{required && " *"}</label>
-        <input type={type} required={required} value={form[key]}
+        <input type={type} required={required} value={form[key]} placeholder={placeholder}
           onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
     );
   }
 
+  // Editor de lista (teléfonos / emails): filas con input + botón quitar, y un "+ Añadir"
+  function listField(label: string, key: "phones" | "emails", type: string, placeholder: string) {
+    const rows = form[key];
+    const setRow = (i: number, val: string) =>
+      setForm((f) => ({ ...f, [key]: f[key].map((v, idx) => (idx === i ? val : v)) }));
+    const removeRow = (i: number) =>
+      setForm((f) => ({ ...f, [key]: withRow(f[key].filter((_, idx) => idx !== i)) }));
+    const addRow = () => setForm((f) => ({ ...f, [key]: [...f[key], ""] }));
+    return (
+      <div className="min-w-0">
+        <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+        <div className="space-y-2">
+          {rows.map((val, i) => (
+            <div key={i} className="flex gap-1.5">
+              <input type={type} value={val} placeholder={placeholder}
+                onChange={(e) => setRow(i, e.target.value)}
+                className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <button type="button" onClick={() => removeRow(i)} aria-label={`Quitar ${label}`}
+                disabled={rows.length === 1 && !val}
+                className="shrink-0 w-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-red-500 disabled:opacity-40">×</button>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={addRow} className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium">+ Añadir {label.toLowerCase()}</button>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl">×</button>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">{isEdit ? "Editar centro" : "Nuevo centro"}</h2>
         <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-3">
-          {field("Nombre", "name", true)}
+          <div className="grid grid-cols-2 gap-3">{field("Nombre", "name", true)}{field("CIF / NIF", "cif", false, "text", "B12345674")}</div>
           {field("Dirección", "address", true)}
           <div className="grid grid-cols-2 gap-3">{field("Ciudad", "city", true)}{field("Provincia", "province", true)}</div>
-          <div className="grid grid-cols-2 gap-3">{field("Código postal", "postalCode", true)}{field("Teléfono", "phone")}</div>
-          {field("Email", "email", false, "email")}
+          {field("Código postal", "postalCode", true)}
+          <div className="grid grid-cols-2 gap-3">
+            {listField("Teléfonos", "phones", "tel", "+34 91 123 45 67")}
+            {listField("Emails", "emails", "email", "centro@ejemplo.es")}
+          </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
@@ -136,7 +193,7 @@ function RoomModal({ centerId, room, onClose }: { centerId: string; room?: Room;
         : apiFetch(`/centers/${centerId}/rooms`, { method: "POST", body: JSON.stringify(body) });
     },
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["centers"] }); onClose(); },
-    onError: (err: unknown) => setError(err instanceof Error ? err.message : "Error al guardar"),
+    onError: (err: unknown) => setError(errorMessage(err)),
   });
 
   return (
@@ -219,6 +276,139 @@ function DeleteConfirm({ label, onConfirm, onCancel, loading }: { label: string;
   );
 }
 
+// ── Weekly schedule calendar (visual) ──────────────────────────────────────────
+
+// Lunes → Domingo (los índices siguen la convención 0=Dom … 6=Sáb de la spec)
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const PX_PER_MIN = 0.5;
+
+function toMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+function fmtHour(h: number): string {
+  return `${String(h).padStart(2, "0")}:00`;
+}
+
+// Una franja horaria normalizada: día (0=Dom…6=Sáb), inicio y fin.
+interface ScheduleSlot {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
+
+// El `schedule` de una sala llega en dos formatos posibles:
+//   • array de franjas  [{ dayOfWeek, startTime, endTime }]  (formato del seed / multi-franja)
+//   • objeto único      { openTime, closeTime, activeDays, slotDuration, slotBuffer }  (formato del RoomModal)
+// Normalizamos ambos a una lista de franjas + el paso de slot (solo conocido en el formato objeto).
+function normalizeSchedule(schedule: RoomSchedule | ScheduleSlot[]): { slots: ScheduleSlot[]; step: number } {
+  if (Array.isArray(schedule)) {
+    const slots = schedule.filter((s) => s && s.startTime && s.endTime);
+    return { slots, step: 0 };
+  }
+  const { openTime, closeTime, activeDays, slotDuration, slotBuffer } = schedule;
+  if (!openTime || !closeTime) return { slots: [], step: 0 };
+  const slots = (activeDays ?? []).map((d) => ({ dayOfWeek: d, startTime: openTime, endTime: closeTime }));
+  return { slots, step: (slotDuration ?? 0) + (slotBuffer ?? 0) };
+}
+
+function RoomScheduleCalendar({ schedule }: { schedule: RoomSchedule | ScheduleSlot[] }) {
+  const { slots, step } = normalizeSchedule(schedule);
+
+  if (slots.length === 0) {
+    return (
+      <div className="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center">
+        <p className="text-xs text-gray-400">Sin horario configurado — edita la sala para añadirlo</p>
+      </div>
+    );
+  }
+
+  const activeDays = new Set(slots.map((s) => s.dayOfWeek));
+  const minStart = Math.min(...slots.map((s) => toMinutes(s.startTime)));
+  const maxEnd = Math.max(...slots.map((s) => toMinutes(s.endTime)));
+  const startHour = Math.floor(minStart / 60);
+  const endHour = Math.ceil(maxEnd / 60);
+  const hours: number[] = [];
+  for (let h = startHour; h <= endHour; h++) hours.push(h);
+  const gridHeight = (endHour - startHour) * 60 * PX_PER_MIN;
+
+  // Etiqueta de citas/día (solo cuando conocemos la duración del slot — formato objeto)
+  const firstSlot = slots[0];
+  const nSlots =
+    step > 0 && firstSlot ? Math.floor((toMinutes(firstSlot.endTime) - toMinutes(firstSlot.startTime)) / step) : 0;
+
+  function block(slot: ScheduleSlot, key: number) {
+    const top = (toMinutes(slot.startTime) - startHour * 60) * PX_PER_MIN;
+    const height = (toMinutes(slot.endTime) - toMinutes(slot.startTime)) * PX_PER_MIN;
+    const dividers: number[] = [];
+    for (let i = 1; i < nSlots; i++) dividers.push(i * step * PX_PER_MIN);
+    return (
+      <div key={key} className="absolute left-0 right-0 rounded-md bg-blue-500/15 border border-blue-500/30"
+        style={{ top, height }} title={`${slot.startTime} – ${slot.endTime}`}>
+        {dividers.map((off, i) => (
+          <div key={i} className="absolute left-0 right-0 border-t border-dashed border-blue-400/30" style={{ top: off }} />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-gray-200 bg-white overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100">
+        <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Horario semanal</span>
+        {nSlots > 0 && <span className="text-[11px] text-gray-400 tabular-nums">≈ {nSlots} citas/día</span>}
+      </div>
+
+      <div className="px-3 py-3">
+        {/* Day labels header */}
+        <div className="flex mb-1.5">
+          <div className="w-10 shrink-0" />
+          <div className="grid grid-cols-7 gap-1 flex-1">
+            {WEEK_ORDER.map((d) => (
+              <div key={d} className={`text-center text-[10px] font-semibold ${activeDays.has(d) ? "text-gray-600" : "text-gray-300"}`}>
+                {DAYS[d]}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Timed grid */}
+        <div className="flex">
+          {/* Hour gutter */}
+          <div className="relative w-10 shrink-0" style={{ height: gridHeight }}>
+            {hours.map((h) => (
+              <div key={h} className="absolute right-1.5 -translate-y-1/2 text-[10px] text-gray-400 tabular-nums"
+                style={{ top: (h - startHour) * 60 * PX_PER_MIN }}>
+                {fmtHour(h)}
+              </div>
+            ))}
+          </div>
+
+          {/* Day columns */}
+          <div className="relative flex-1">
+            {/* Hour gridlines */}
+            {hours.map((h) => (
+              <div key={h} className="absolute left-0 right-0 border-t border-gray-100"
+                style={{ top: (h - startHour) * 60 * PX_PER_MIN }} />
+            ))}
+            <div className="relative grid grid-cols-7 gap-1" style={{ height: gridHeight }}>
+              {WEEK_ORDER.map((d) => {
+                const daySlots = slots.filter((s) => s.dayOfWeek === d);
+                return (
+                  <div key={d} className={`relative rounded-md ${daySlots.length === 0 ? "bg-gray-50/60" : ""}`}>
+                    {daySlots.map((s, i) => block(s, i))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Center Card ───────────────────────────────────────────────────────────────
 
 function CenterCard({ center }: { center: Center }) {
@@ -257,15 +447,25 @@ function CenterCard({ center }: { center: Center }) {
         {/* Header */}
         <div className="px-5 py-4 flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
+            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <h2 className="font-semibold text-gray-900 truncate">{center.name}</h2>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${center.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                 {center.active ? "Activo" : "Inactivo"}
               </span>
+              {center.cif && (
+                <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 font-medium shrink-0 tabular-nums">CIF {center.cif}</span>
+              )}
             </div>
             <p className="text-sm text-gray-500">{center.address}, {center.city} ({center.province}) · {center.postalCode}</p>
-            {(center.phone || center.email) && (
-              <p className="text-xs text-gray-400 mt-0.5">{[center.phone, center.email].filter(Boolean).join(" · ")}</p>
+            {((center.phones?.length ?? 0) > 0 || (center.emails?.length ?? 0) > 0) && (
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {center.phones?.map((p) => (
+                  <span key={`p-${p}`} className="text-xs px-2 py-0.5 rounded-md bg-gray-50 border border-gray-100 text-gray-600">{p}</span>
+                ))}
+                {center.emails?.map((e) => (
+                  <span key={`e-${e}`} className="text-xs px-2 py-0.5 rounded-md bg-blue-50 border border-blue-100 text-blue-700">{e}</span>
+                ))}
+              </div>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -293,19 +493,22 @@ function CenterCard({ center }: { center: Center }) {
             )}
             <div className="divide-y divide-gray-50">
               {center.rooms.map((room) => (
-                <div key={room.id} className="px-5 py-3 flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{room.name}</p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
-                      {room.schedule.openTime && <span className="text-xs text-gray-500">{room.schedule.openTime} – {room.schedule.closeTime}</span>}
-                      {room.schedule.slotDuration && <span className="text-xs text-gray-500">{room.schedule.slotDuration} min/cita</span>}
-                      {room.schedule.activeDays && <span className="text-xs text-gray-500">{dayLabels(room.schedule.activeDays)}</span>}
+                <div key={room.id} className="px-5 py-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">{room.name}</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+                        {room.schedule.openTime && <span className="text-xs text-gray-500">{room.schedule.openTime} – {room.schedule.closeTime}</span>}
+                        {room.schedule.slotDuration && <span className="text-xs text-gray-500">{room.schedule.slotDuration} min/cita</span>}
+                        {room.schedule.activeDays && <span className="text-xs text-gray-500">{dayLabels(room.schedule.activeDays)}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button onClick={() => setEditRoom(room)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Editar</button>
+                      <button onClick={() => setDeleteRoom(room)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-100 hover:bg-red-50 text-red-500">Eliminar</button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => setEditRoom(room)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Editar</button>
-                    <button onClick={() => setDeleteRoom(room)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-100 hover:bg-red-50 text-red-500">Eliminar</button>
-                  </div>
+                  <RoomScheduleCalendar schedule={room.schedule} />
                 </div>
               ))}
             </div>

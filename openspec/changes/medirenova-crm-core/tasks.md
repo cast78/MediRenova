@@ -50,8 +50,8 @@
 - [x] 5.3 Implementar endpoints CRUD de salas (`/rooms`, `/centers/{id}/rooms`)
 - [ ] 5.4 Implementar endpoints de horarios semanales de sala (`PUT /rooms/{id}/schedule`)
 - [ ] 5.5 Implementar endpoints de festivos de centro (`PUT /centers/{id}/holidays`)
-- [ ] 5.6 Implementar UI de gestión de centros en Next.js (listado, creación, edición)
-- [ ] 5.7 Implementar UI de gestión de salas y horarios (calendario semanal visual)
+- [x] 5.6 Implementar UI de gestión de centros en Next.js (listado, creación, edición)
+- [x] 5.7 Implementar UI de gestión de salas y horarios (calendario semanal visual)
 
 ## 6. Productos y Reglas de Renovación
 
