@@ -110,10 +110,10 @@
 - [x] 11.2 Implementar `PATCH /revisions/{id}` — guardar draft de form_data parcial
 - [ ] 11.3 Implementar upload de fotos/PDFs a Cloudflare R2 (`POST /revisions/{id}/attachments`)
 - [x] 11.4 Implementar `POST /revisions/{id}/complete` — validar campos requeridos, determinar outcome, calcular expiry_date
-- [ ] 11.5 Configurar Puppeteer en el backend (pool de 2 instancias Chrome headless)
-- [ ] 11.6 Implementar renderizado de plantilla Handlebars + generación PDF con Puppeteer
-- [ ] 11.7 Subir PDF a Cloudflare R2 y devolver URL firmada en respuesta
-- [ ] 11.8 Implementar `GET /revisions/{id}/pdf` — URL firmada R2 con expiración 1 hora
+- [x] 11.5 Configurar Puppeteer en el backend (browser headless compartido y reutilizado)
+- [x] 11.6 Implementar renderizado de plantilla Handlebars + generación PDF con Puppeteer
+- [ ] 11.7 Subir PDF a Cloudflare R2 y devolver URL firmada en respuesta (Paso B; ahora storage local vía interfaz `Storage`)
+- [x] 11.8 Implementar `GET /revisions/{id}/pdf` — genera si falta y sirve el certificado (URL firmada R2 1h pendiente de Paso B)
 - [x] 11.9 Implementar UI de revisión médica: renderizado dinámico del formulario JSON Schema
 - [ ] 11.10 Implementar componente de firma digital en el formulario (canvas)
 - [ ] 11.11 Implementar UI de adjunto de fotos con preview
@@ -159,6 +159,7 @@
 - [ ] 15.6 Configurar Meta Cloud API: cuenta Business, plantillas de WhatsApp (requiere aprobación 48-72h)
 - [ ] 15.7 Configurar dominio y SSL para api y frontend
 - [ ] 15.8 Ejecutar smoke tests en staging antes de primera puesta en producción
+- [ ] 15.9 Configurar Chromium para Puppeteer en Railway (nixpacks/buildpack) para la generación de PDF
 
 ## 16. Testing (red de seguridad)
 

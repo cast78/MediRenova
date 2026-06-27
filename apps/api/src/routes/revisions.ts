@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
+import { generatePdf, ensureRevisionPdf } from "../lib/pdf.js";
 
 export async function revisionRoutes(server: FastifyInstance) {
   // POST /revisions — create from appointment
@@ -126,21 +127,30 @@ export async function revisionRoutes(server: FastifyInstance) {
       // Appointment stays CONFIRMED after revision completion
       // (no separate COMPLETED status in the enum)
 
-      // Trigger PDF generation asynchronously (don't block response)
-      generateRevisionPdf(request.params.id).catch((err) => {
-        console.error("[pdf] Failed to generate PDF for revision", request.params.id, err);
+      // Generación de PDF best-effort: no bloquea la respuesta ni rompe el flujo
+      // si Puppeteer/Chromium fallara (se puede regenerar al pedir el PDF).
+      generatePdf(request.params.id).catch((err) => {
+        request.log.error(err, "[pdf] background generation failed");
       });
 
       return reply.send({ data: updated, errors: null });
     });
-}
 
-// Async PDF generation (task 11.5-11.7) — placeholder until Puppeteer/R2 is configured
-async function generateRevisionPdf(revisionId: string): Promise<void> {
-  try {
-    const { generatePdf } = await import("../lib/pdf.js");
-    await generatePdf(revisionId);
-  } catch (err) {
-    console.error("[pdf] generateRevisionPdf error:", err);
-  }
+  // GET /revisions/:id/pdf — genera (si falta) y sirve el certificado en PDF
+  server.get<{ Params: { id: string } }>("/revisions/:id/pdf", { preHandler: [requireRole("RECEPTIONIST")] },
+    async (request, reply: FastifyReply) => {
+      try {
+        const pdf = await ensureRevisionPdf(request.params.id, request.ctx.tenantId);
+        return reply
+          .header("Content-Type", "application/pdf")
+          .header("Content-Disposition", `inline; filename="certificado-${request.params.id}.pdf"`)
+          .send(pdf);
+      } catch (err) {
+        if (err instanceof Error && err.message === "REVISION_NOT_FOUND") {
+          return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+        }
+        request.log.error(err, "[pdf] error serving revision pdf");
+        return reply.status(500).send({ errors: [{ code: "PDF_GENERATION_FAILED" }] });
+      }
+    });
 }

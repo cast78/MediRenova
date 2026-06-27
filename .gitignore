@@ -32,6 +32,10 @@ Thumbs.db
 # Puppeteer cache
 .local-chromium/
 
+# Local object storage (adaptador de dev de Storage)
+.storage/
+apps/api/.storage/
+
 # TypeScript build cache
 *.tsbuildinfo
 
