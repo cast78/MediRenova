@@ -22,6 +22,7 @@ const centerSchema = z.object({
   postalCode: z.string().min(4).max(10),
   phones: z.array(z.string().trim().min(5).max(30)).max(10).optional(),
   emails: z.array(z.string().trim().email()).max(10).optional(),
+  active: z.boolean().optional(),
 });
 
 // Room schedule stored as JSON: { openTime, closeTime, activeDays, slotDuration, slotBuffer }
@@ -69,10 +70,28 @@ export async function centerRoutes(server: FastifyInstance) {
       return reply.send({ data: center, errors: null });
     });
 
-  server.patch<{ Params: { id: string } }>("/centers/:id", { preHandler: [requireRole("ADMIN")] },
+  server.patch<{ Params: { id: string }; Querystring: { force?: string } }>("/centers/:id", { preHandler: [requireRole("ADMIN")] },
     async (request, reply: FastifyReply) => {
       const body = centerSchema.partial().safeParse(request.body);
       if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
+
+      // 5.2: desactivar un centro con reservas futuras requiere confirmación explícita
+      if (body.data.active === false && request.query.force !== "true") {
+        const futureCount = await prisma.appointment.count({
+          where: {
+            tenantId: request.ctx.tenantId,
+            room: { centerId: request.params.id },
+            scheduledAt: { gt: new Date() },
+            status: { in: ["CONFIRMED", "PENDING"] },
+          },
+        });
+        if (futureCount > 0) {
+          return reply.status(409).send({
+            errors: [{ code: "CONFLICT", message: `El centro tiene ${futureCount} reserva(s) futura(s). Reenvía con ?force=true para confirmar.`, count: futureCount }],
+          });
+        }
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await prisma.center.updateMany({ where: { id: request.params.id, tenantId: request.ctx.tenantId }, data: stripUndefined(body.data) as any });
       if (result.count === 0) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });

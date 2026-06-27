@@ -98,4 +98,18 @@ export async function dashboardRoutes(server: FastifyInstance) {
 
       return reply.send({ data: Object.entries(byMonth).map(([month, count]) => ({ month, count })).sort((a, b) => a.month.localeCompare(b.month)), errors: null });
     });
+
+  // GET /dashboard/charts/customers-by-province — conteo de clientes por provincia
+  server.get("/dashboard/charts/customers-by-province", { preHandler: [requireRole("RECEPTIONIST")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const grouped = await prisma.customer.groupBy({
+        by: ["province"],
+        where: { tenantId: request.ctx.tenantId, deletedAt: null },
+        _count: { _all: true },
+      });
+      const data = grouped
+        .map((g) => ({ province: g.province ?? "Sin provincia", count: g._count._all }))
+        .sort((a, b) => b.count - a.count);
+      return reply.send({ data, errors: null });
+    });
 }

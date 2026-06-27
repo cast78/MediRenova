@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
 import { auditLog } from "../lib/audit.js";
 import { markWorkflowConverted } from "../lib/workflow-cron.js";
+import { buildIcs } from "../lib/ics.js";
 
 const createAppointmentSchema = z.object({
   customerId: z.string().uuid(),
@@ -112,6 +113,34 @@ export async function appointmentRoutes(server: FastifyInstance) {
       }
 
       return reply.send({ data: slots, errors: null });
+    });
+
+  // GET /appointments/:id/ics — archivo iCalendar de la reserva (RFC 5545)
+  server.get<{ Params: { id: string } }>("/appointments/:id/ics", { preHandler: [requireRole("RECEPTIONIST")] },
+    async (request, reply: FastifyReply) => {
+      const appt = await prisma.appointment.findFirst({
+        where: { id: request.params.id, tenantId: request.ctx.tenantId },
+        include: {
+          product: { select: { name: true } },
+          customer: { select: { firstName: true, lastName: true } },
+          room: { include: { center: true } },
+        },
+      });
+      if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      const center = appt.room.center;
+      const ics = buildIcs({
+        uid: `appointment-${appt.id}@medirenova`,
+        start: appt.scheduledAt,
+        durationMinutes: appt.durationMinutes,
+        dtstamp: new Date(),
+        summary: `Cita: ${appt.product.name}`,
+        description: `Reconocimiento médico — ${[appt.customer.firstName, appt.customer.lastName].filter(Boolean).join(" ")}`,
+        location: `${center.name}, ${center.address}, ${center.city} (${center.province})`,
+      });
+      return reply
+        .header("Content-Type", "text/calendar; charset=utf-8")
+        .header("Content-Disposition", `attachment; filename="cita-${appt.id}.ics"`)
+        .send(ics);
     });
 
   // GET /appointments

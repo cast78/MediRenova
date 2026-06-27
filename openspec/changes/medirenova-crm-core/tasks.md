@@ -46,7 +46,7 @@
 ## 5. Centros y Salas
 
 - [x] 5.1 Implementar endpoints CRUD de centros (`/centers`) con validación de tenant_id
-- [ ] 5.2 Implementar validación de desactivación de centro con reservas futuras
+- [x] 5.2 Implementar validación de desactivación de centro con reservas futuras
 - [x] 5.3 Implementar endpoints CRUD de salas (`/rooms`, `/centers/{id}/rooms`)
 - [ ] 5.4 Implementar endpoints de horarios semanales de sala (`PUT /rooms/{id}/schedule`)
 - [ ] 5.5 Implementar endpoints de festivos de centro (`PUT /centers/{id}/holidays`)
@@ -89,7 +89,7 @@
 - [x] 9.2 Implementar protección contra double-booking con manejo de error `P2002` de Prisma
 - [x] 9.3 Implementar endpoints de reservas: `POST /appointments`, `GET /appointments`, `GET /appointments/{id}`
 - [x] 9.4 Implementar transiciones de estado: cancelar, reprogramar, marcar no-show
-- [ ] 9.5 Implementar generación de archivo `.ics` al confirmar reserva (RFC 5545)
+- [x] 9.5 Implementar generación de archivo `.ics` al confirmar reserva (RFC 5545)
 - [x] 9.6 Implementar UI de creación de reserva desde backoffice (selector de cliente, producto, centro, slot)
 - [x] 9.7 Implementar UI de agenda/calendario de reservas del día (vista por sala)
 - [x] 9.8 Implementar UI de listado de reservas con filtros (fecha, estado, centro, médico)
@@ -134,7 +134,7 @@
 - [x] 13.1 Implementar `GET /dashboard/summary` — KPIs: reservas hoy, semana, expedientes abiertos, tasa conversión
 - [x] 13.2 Implementar `GET /dashboard/expirations` — caducidades a 30/60/90 días con flag de reserva existente
 - [x] 13.3 Implementar `GET /dashboard/charts/appointments-by-month` — últimos 12 meses
-- [ ] 13.4 Implementar `GET /dashboard/charts/customers-by-province` — conteo por provincia
+- [x] 13.4 Implementar `GET /dashboard/charts/customers-by-province` — conteo por provincia
 - [x] 13.5 Implementar UI del dashboard con componentes shadcn/ui y Recharts para gráficos
 - [x] 13.6 Implementar panel de caducidades próximas con links directos a ficha de cliente
 
