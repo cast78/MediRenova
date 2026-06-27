@@ -9,6 +9,8 @@
     "start": "node dist/server.js",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
@@ -46,6 +48,7 @@
     "@types/node": "^20.16.0",
     "@types/node-cron": "^3.0.11",
     "prisma": "^5.19.0",
-    "tsx": "^4.17.0"
+    "tsx": "^4.17.0",
+    "vitest": "^4.1.9"
   }
 }

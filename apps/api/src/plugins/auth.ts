@@ -3,6 +3,7 @@ import fp from "fastify-plugin";
 import { verifyAccessToken, type AccessTokenPayload } from "../lib/jwt.js";
 import { prisma } from "../lib/prisma.js";
 import { hashApiKey } from "../lib/crypto.js";
+import { setTenantContext } from "../lib/tenant-context.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -33,6 +34,7 @@ async function authPlugin(server: FastifyInstance) {
       try {
         const payload: AccessTokenPayload = verifyAccessToken(token);
         request.ctx = { userId: payload.sub, tenantId: payload.tid, role: payload.role };
+        setTenantContext({ tenantId: payload.tid, role: payload.role });
         return;
       } catch {
         return reply.status(401).send({ errors: [{ code: "UNAUTHORIZED", message: "Token inválido o caducado" }] });
@@ -51,6 +53,7 @@ async function authPlugin(server: FastifyInstance) {
       }
       // No lastUsedAt field in schema - skip update
       request.ctx = { userId: apiKey.id, tenantId: apiKey.tenantId, role: "API_KEY" };
+      setTenantContext({ tenantId: apiKey.tenantId, role: "API_KEY" });
       return;
     }
 

@@ -28,7 +28,7 @@
 - [x] 3.3 Implementar endpoint `POST /auth/refresh` con rotación de refresh token
 - [x] 3.4 Implementar endpoint `POST /auth/logout` (invalidar refresh token en BD)
 - [x] 3.5 Crear plugin Fastify de autenticación: extrae `tenant_id` y `role` del JWT, inyecta en `request.ctx`
-- [ ] 3.6 Crear Prisma query extension que añade automáticamente `where: { tenant_id: ctx.tenantId }` en todas las queries
+- [x] 3.6 Crear Prisma query extension que añade automáticamente `where: { tenant_id: ctx.tenantId }` en todas las queries
 - [x] 3.7 Implementar decorador/middleware de autorización por rol para cada endpoint
 - [x] 3.8 Implementar hashing y verificación de API Keys (SHA-256, prefijo `sk_live_`)
 - [x] 3.9 Implementar registro de auditoría en `audit_logs` para operaciones sensibles
@@ -36,11 +36,11 @@
 
 ## 4. Multitenancy y Tenants
 
-- [ ] 4.1 Implementar endpoints CRUD de tenants (`/admin/tenants`) accesibles solo para superadmin
+- [x] 4.1 Implementar endpoints CRUD de tenants (`/admin/tenants`) accesibles solo para superadmin
 - [ ] 4.2 Implementar resolución de tenant por subdominio o slug en el middleware de Fastify
-- [ ] 4.3 Implementar endpoints de configuración de tenant (`PATCH /tenants/me/config`)
+- [x] 4.3 Implementar endpoints de configuración de tenant (`PATCH /tenants/me/config`)
 - [ ] 4.4 Implementar endpoints de branding (`PATCH /tenants/me/branding`)
-- [ ] 4.5 Implementar endpoints CRUD de API Keys (`/tenants/me/api-keys`)
+- [x] 4.5 Implementar endpoints CRUD de API Keys (`/tenants/me/api-keys`)
 - [ ] 4.6 Implementar carga dinámica de branding en el frontend (colores CSS variables + logo)
 
 ## 5. Centros y Salas
@@ -56,11 +56,11 @@
 ## 6. Productos y Reglas de Renovación
 
 - [x] 6.1 Implementar endpoints CRUD de productos (`/products`) con validación de reglas por edad
-- [ ] 6.2 Implementar validación de cobertura completa de rangos de edad en `renewal_rules`
+- [x] 6.2 Implementar validación de cobertura completa de rangos de edad en `renewal_rules`
 - [ ] 6.3 Implementar función de cálculo de `expiry_date` dado `birth_date` + `revision_date` + `renewal_rules`
 - [ ] 6.4 Implementar endpoint de upload de plantilla PDF por producto
-- [ ] 6.5 Implementar UI de gestión de productos con editor de reglas de renovación por edad
-- [ ] 6.6 Cargar reglas DGT por defecto como seed para productos de tipo `CARNET_CONDUCIR`
+- [x] 6.5 Implementar UI de gestión de productos con editor de reglas de renovación por edad
+- [x] 6.6 Cargar reglas DGT por defecto como seed para productos de tipo `CARNET_CONDUCIR`
 
 ## 7. Form Builder
 
@@ -74,8 +74,8 @@
 
 ## 8. Clientes
 
-- [ ] 8.1 Implementar encriptado AES-256-GCM del DNI a nivel de aplicación (antes de escribir en BD)
-- [ ] 8.2 Implementar validación de letra de control del DNI español
+- [x] 8.1 Implementar encriptado AES-256-GCM del DNI a nivel de aplicación (antes de escribir en BD)
+- [x] 8.2 Implementar validación de letra de control del DNI español
 - [x] 8.3 Implementar endpoints CRUD de clientes con registro de consentimiento GDPR
 - [x] 8.4 Implementar búsqueda paginada de clientes (nombre, apellidos, teléfono, email; DNI exacto)
 - [x] 8.5 Implementar soft delete con anonimización de PII (`DELETE /customers/{id}`)
@@ -114,7 +114,7 @@
 - [ ] 11.6 Implementar renderizado de plantilla Handlebars + generación PDF con Puppeteer
 - [ ] 11.7 Subir PDF a Cloudflare R2 y devolver URL firmada en respuesta
 - [ ] 11.8 Implementar `GET /revisions/{id}/pdf` — URL firmada R2 con expiración 1 hora
-- [ ] 11.9 Implementar UI de revisión médica: renderizado dinámico del formulario JSON Schema
+- [x] 11.9 Implementar UI de revisión médica: renderizado dinámico del formulario JSON Schema
 - [ ] 11.10 Implementar componente de firma digital en el formulario (canvas)
 - [ ] 11.11 Implementar UI de adjunto de fotos con preview
 
@@ -140,7 +140,7 @@
 
 ## 14. API Pública
 
-- [ ] 14.1 Implementar plugin Fastify de autenticación por API Key con lookup en BD
+- [x] 14.1 Implementar plugin Fastify de autenticación por API Key con lookup en BD
 - [ ] 14.2 Implementar rate limiting por API Key (1.000 req/hora) con Redis o in-memory para MVP
 - [ ] 14.3 Implementar `GET /public/v1/products` y `GET /public/v1/centers`
 - [ ] 14.4 Implementar `GET /public/v1/centers/{id}/availability`
@@ -151,11 +151,23 @@
 
 ## 15. Deploy y Producción
 
-- [ ] 15.1 Configurar pipeline CI/CD en GitHub Actions (lint + typecheck + build en cada PR)
-- [ ] 15.2 Configurar deploy automático del backend en Railway (branch main)
-- [ ] 15.3 Configurar deploy automático del frontend en Vercel (branch main)
+- [x] 15.1 Configurar pipeline CI/CD en GitHub Actions (lint + typecheck + build en cada PR)
+- [x] 15.2 Configurar deploy automático del backend en Railway (branch main)
+- [x] 15.3 Configurar deploy automático del frontend en Vercel (branch main)
 - [ ] 15.4 Configurar Cloudflare R2 bucket con política de acceso privado y URLs firmadas
 - [ ] 15.5 Activar RLS policies en PostgreSQL de producción
 - [ ] 15.6 Configurar Meta Cloud API: cuenta Business, plantillas de WhatsApp (requiere aprobación 48-72h)
 - [ ] 15.7 Configurar dominio y SSL para api y frontend
 - [ ] 15.8 Ejecutar smoke tests en staging antes de primera puesta en producción
+
+## 16. Testing (red de seguridad)
+
+- [x] 16.1 Configurar Vitest en `apps/api` (`pnpm --filter api test`)
+- [x] 16.2 Tests unitarios de aislamiento multitenant (`withTenantFilter`, tarea 3.6)
+- [x] 16.3 Tests unitarios de cifrado/GDPR (`crypto`: DNI AES-256-GCM, API keys)
+- [x] 16.4 Integrar `test` en el pipeline de CI (GitHub Actions)
+- [ ] 16.5 Tests de validación de letra de control del DNI español (extraer `validateSpanishDni` a util testeable)
+- [ ] 16.6 Tests del cálculo de `expiry_date` por reglas de edad (tarea 6.3)
+- [ ] 16.7 Tests de integración de protección double-booking (error `P2002`)
+- [ ] 16.8 Tests E2E del flujo magic-link → reserva
+- [ ] 16.9 Configurar testing en `apps/web` (Vitest + Testing Library / Playwright)
