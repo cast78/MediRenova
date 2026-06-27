@@ -65,10 +65,10 @@
 ## 7. Form Builder
 
 - [x] 7.1 Implementar endpoints de gestión de FormTemplates (`GET/POST /products/{id}/forms`, `POST /forms/{id}/activate`)
-- [ ] 7.2 Implementar validación del JSON Schema de formulario en el backend (tipos de campo, required, etc.)
+- [x] 7.2 Implementar validación del JSON Schema de formulario en el backend (tipos de campo, required, etc.)
 - [ ] 7.3 Implementar UI del form builder con `@dnd-kit/core` para drag & drop de campos
 - [ ] 7.4 Implementar panel de propiedades de campo (configurar label, required, opciones, validaciones)
-- [ ] 7.5 Implementar lógica de versionado: nueva versión en draft, activar desactiva anterior
+- [x] 7.5 Implementar lógica de versionado: nueva versión en draft, activar desactiva anterior
 - [ ] 7.6 Implementar preview del formulario en el builder
 - [ ] 7.7 Implementar plantillas base de formulario (reconocimiento conducir, licencia armas, DNI)
 
