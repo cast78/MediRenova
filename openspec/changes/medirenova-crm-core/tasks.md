@@ -49,7 +49,7 @@
 - [x] 5.2 Implementar validación de desactivación de centro con reservas futuras
 - [x] 5.3 Implementar endpoints CRUD de salas (`/rooms`, `/centers/{id}/rooms`)
 - [ ] 5.4 Implementar endpoints de horarios semanales de sala (`PUT /rooms/{id}/schedule`)
-- [ ] 5.5 Implementar endpoints de festivos de centro (`PUT /centers/{id}/holidays`)
+- [x] 5.5 Implementar endpoints de festivos de centro (`PUT /centers/{id}/holidays`)
 - [x] 5.6 Implementar UI de gestión de centros en Next.js (listado, creación, edición)
 - [x] 5.7 Implementar UI de gestión de salas y horarios (calendario semanal visual)
 
@@ -100,7 +100,7 @@
 - [x] 10.2 Implementar `GET /magic/{token}` — validar token, devolver contexto (producto, centros, slots 7d)
 - [x] 10.3 Implementar `POST /magic/{token}/confirm` — crear reserva con source MAGIC_LINK
 - [x] 10.4 Implementar `POST /magic/{token}/reschedule` — cancelar reserva anterior, crear nueva
-- [ ] 10.5 Implementar lógica de expansión de búsqueda a 30 días si no hay slots en 7 días
+- [x] 10.5 Implementar lógica de expansión de búsqueda a 30 días si no hay slots en 7 días
 - [x] 10.6 Implementar página pública de magic link en Next.js (sin layout de app, sin login requerido)
 - [x] 10.7 Implementar UI de selección de centro, slot y confirmación en la página de magic link
 

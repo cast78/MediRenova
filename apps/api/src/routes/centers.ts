@@ -25,6 +25,10 @@ const centerSchema = z.object({
   active: z.boolean().optional(),
 });
 
+const holidaysSchema = z.object({
+  holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD")).max(365),
+});
+
 // Room schedule stored as JSON: { openTime, closeTime, activeDays, slotDuration, slotBuffer }
 const roomScheduleSchema = z.object({
   openTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
@@ -102,6 +106,20 @@ export async function centerRoutes(server: FastifyInstance) {
     async (request, reply: FastifyReply) => {
       await prisma.center.deleteMany({ where: { id: request.params.id, tenantId: request.ctx.tenantId } });
       return reply.status(204).send();
+    });
+
+  // PUT /centers/:id/holidays — fija la lista de festivos del centro (5.5)
+  server.put<{ Params: { id: string } }>("/centers/:id/holidays", { preHandler: [requireRole("ADMIN")] },
+    async (request, reply: FastifyReply) => {
+      const body = holidaysSchema.safeParse(request.body);
+      if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
+      const unique = [...new Set(body.data.holidays)].sort();
+      const result = await prisma.center.updateMany({
+        where: { id: request.params.id, tenantId: request.ctx.tenantId },
+        data: { holidays: unique },
+      });
+      if (result.count === 0) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      return reply.send({ data: { holidays: unique }, errors: null });
     });
 
   // ── ROOMS ──────────────────────────────────────────────────────────────
