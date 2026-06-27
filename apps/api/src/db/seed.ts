@@ -128,7 +128,7 @@ async function main() {
       id: "00000000-0000-0000-0000-000000000002",
       centerId: demoCenter.id,
       name: "Sala 1",
-      allowedProductTypes: ["CARNET_CONDUCIR", "DNI"],
+      allowedProductIds: [],
       // Monday–Friday 09:00–14:00
       schedule: [
         { dayOfWeek: 1, startTime: "09:00", endTime: "14:00" },

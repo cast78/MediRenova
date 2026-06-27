@@ -11,10 +11,17 @@ export interface DaySlotParams {
   openTime: string; // "HH:MM"
   closeTime: string; // "HH:MM"
   activeDays?: number[] | undefined; // 0=Dom … 6=Sáb
-  slotDuration: number; // minutos
-  slotBuffer: number; // minutos entre citas
+  slotDuration: number; // duración de la cita (la marca el producto), para el solape
+  step: number; // granularidad entre huecos ofrecidos (config por empresa, 15/30)
   booked: BookedInterval[];
   isHoliday?: boolean;
+}
+
+// Un producto está permitido en una sala si la lista de permitidos está vacía
+// (= "Todos") o contiene su id. Pura y testeable.
+export function productAllowedInRoom(allowedProductIds: unknown, productId: string): boolean {
+  const ids = Array.isArray(allowedProductIds) ? (allowedProductIds as string[]) : [];
+  return ids.length === 0 || ids.includes(productId);
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -27,7 +34,7 @@ export function computeDaySlots(p: DaySlotParams): string[] {
 
   const [openH = 0, openM = 0] = p.openTime.split(":").map(Number);
   const [closeH = 0, closeM = 0] = p.closeTime.split(":").map(Number);
-  const step = p.slotDuration + p.slotBuffer;
+  const step = p.step;
   if (step <= 0) return [];
 
   const startMin = openH * 60 + openM;

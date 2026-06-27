@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { signMagicLinkToken, verifyMagicLinkToken } from "../lib/jwt.js";
 import { markWorkflowConverted } from "../lib/workflow-cron.js";
-import { computeDaySlots } from "../lib/availability.js";
+import { computeDaySlots, productAllowedInRoom } from "../lib/availability.js";
+import { roomHasOverlap } from "../lib/booking.js";
 
 const confirmSchema = z.object({
   roomId: z.string().uuid(),
@@ -80,6 +81,11 @@ export async function magicLinkRoutes(server: FastifyInstance) {
           where: { id: body.data.roomId, center: { tenantId: payload.tid, active: true } },
         });
         if (!room) return reply.status(400).send({ errors: [{ code: "INVALID_ROOM" }] });
+        if (!productAllowedInRoom(room.allowedProductIds, payload.pid)) return reply.status(400).send({ errors: [{ code: "PRODUCT_NOT_ALLOWED_IN_ROOM" }] });
+        // El flujo público (paciente) NO permite solapar.
+        if (await roomHasOverlap(body.data.roomId, new Date(body.data.scheduledAt), product.slotDuration)) {
+          return reply.status(409).send({ errors: [{ code: "SLOT_TAKEN", message: "Franja ya reservada, elige otra" }] });
+        }
 
         try {
           const appointment = await prisma.appointment.create({
@@ -128,7 +134,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
         const roomSchedule = (room.schedule as MagicRoomSchedule | null) ?? {};
         const product = await prisma.product.findFirst({ where: { id: payload.pid, tenantId: payload.tid, active: true } });
         const config = await prisma.tenantConfig.findUnique({ where: { tenantId: payload.tid } });
-        const slotDuration = roomSchedule.slotDuration ?? product?.slotDuration ?? config?.defaultSlotDuration ?? 20;
+        const slotDuration = product?.slotDuration ?? config?.defaultSlotDuration ?? 20;
 
         const dayStart = new Date(`${date}T00:00:00.000Z`);
         const dayEnd = new Date(`${date}T23:59:59.999Z`);
@@ -145,7 +151,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
           closeTime: roomSchedule.closeTime ?? "20:00",
           activeDays: roomSchedule.activeDays,
           slotDuration,
-          slotBuffer: roomSchedule.slotBuffer ?? 0,
+          step: config?.bookingGranularity ?? 15,
           booked,
           isHoliday: holidays.includes(date),
         });
@@ -174,7 +180,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
         const roomSchedule = (room.schedule as MagicRoomSchedule | null) ?? {};
         const product = await prisma.product.findFirst({ where: { id: payload.pid, tenantId: payload.tid, active: true } });
         const config = await prisma.tenantConfig.findUnique({ where: { tenantId: payload.tid } });
-        const slotDuration = roomSchedule.slotDuration ?? product?.slotDuration ?? config?.defaultSlotDuration ?? 20;
+        const slotDuration = product?.slotDuration ?? config?.defaultSlotDuration ?? 20;
 
         const today = new Date(); today.setUTCHours(0, 0, 0, 0);
         const rangeEnd = new Date(today); rangeEnd.setDate(rangeEnd.getDate() + 30);
@@ -196,7 +202,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
               closeTime: roomSchedule.closeTime ?? "20:00",
               activeDays: roomSchedule.activeDays,
               slotDuration,
-              slotBuffer: roomSchedule.slotBuffer ?? 0,
+              step: config?.bookingGranularity ?? 15,
               booked,
               isHoliday: holidays.includes(date),
             });
@@ -228,12 +234,18 @@ export async function magicLinkRoutes(server: FastifyInstance) {
 
         const room = await prisma.room.findFirst({ where: { id: body.data.roomId, center: { tenantId: payload.tid, active: true } } });
         if (!room) return reply.status(400).send({ errors: [{ code: "INVALID_ROOM" }] });
+        if (!productAllowedInRoom(room.allowedProductIds, payload.pid)) return reply.status(400).send({ errors: [{ code: "PRODUCT_NOT_ALLOWED_IN_ROOM" }] });
 
         // Cancel the old appointment (must belong to this customer + tenant)
         await prisma.appointment.updateMany({
           where: { id: body.data.appointmentId, customerId: payload.cid, tenantId: payload.tid, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
           data: { status: "CANCELLED" },
         });
+
+        // Tras cancelar la anterior, el público no puede solapar con otras.
+        if (await roomHasOverlap(body.data.roomId, new Date(body.data.scheduledAt), product.slotDuration)) {
+          return reply.status(409).send({ errors: [{ code: "SLOT_TAKEN", message: "Franja ya reservada, elige otra" }] });
+        }
 
         try {
           const appointment = await prisma.appointment.create({

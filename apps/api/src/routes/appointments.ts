@@ -5,7 +5,8 @@ import { requireRole } from "../lib/authorization.js";
 import { auditLog } from "../lib/audit.js";
 import { markWorkflowConverted } from "../lib/workflow-cron.js";
 import { buildIcs } from "../lib/ics.js";
-import { computeDaySlots } from "../lib/availability.js";
+import { computeDaySlots, productAllowedInRoom } from "../lib/availability.js";
+import { roomHasOverlap } from "../lib/booking.js";
 
 const createAppointmentSchema = z.object({
   customerId: z.string().uuid(),
@@ -15,6 +16,7 @@ const createAppointmentSchema = z.object({
   source: z.enum(["BACKOFFICE", "WALK_IN", "API"]).default("BACKOFFICE"),
   notes: z.string().optional(),
   doctorId: z.string().uuid().optional(),
+  allowOverlap: z.boolean().optional(), // backoffice puede forzar el solape tras el aviso
 });
 
 const updateAppointmentSchema = z.object({
@@ -63,14 +65,14 @@ export async function appointmentRoutes(server: FastifyInstance) {
       if (!room) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
 
       const roomSchedule = (room.schedule as RoomSchedule | null) ?? {};
-
-      let slotDuration = roomSchedule.slotDuration;
+      const config = await prisma.tenantConfig.findUnique({ where: { tenantId: request.ctx.tenantId } });
+      // La duración la marca el producto; la granularidad de huecos, la config.
+      let slotDuration = config?.defaultSlotDuration ?? 20;
       if (productId) {
         const product = await prisma.product.findFirst({ where: { id: productId, tenantId: request.ctx.tenantId } });
         if (product) slotDuration = product.slotDuration;
       }
-      const config = await prisma.tenantConfig.findUnique({ where: { tenantId: request.ctx.tenantId } });
-      slotDuration = slotDuration ?? config?.defaultSlotDuration ?? 20;
+      const step = config?.bookingGranularity ?? 15;
 
       const dayStart = new Date(`${date}T00:00:00.000Z`);
       const dayEnd = new Date(`${date}T23:59:59.999Z`);
@@ -87,7 +89,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
         closeTime: roomSchedule.closeTime ?? "20:00",
         activeDays: roomSchedule.activeDays,
         slotDuration,
-        slotBuffer: roomSchedule.slotBuffer ?? 0,
+        step,
         booked,
         isHoliday: holidays.includes(date),
       });
@@ -169,6 +171,14 @@ export async function appointmentRoutes(server: FastifyInstance) {
       if (!customer) return reply.status(400).send({ errors: [{ code: "INVALID_CUSTOMER" }] });
       if (!product) return reply.status(400).send({ errors: [{ code: "INVALID_PRODUCT" }] });
       if (!room) return reply.status(400).send({ errors: [{ code: "INVALID_ROOM" }] });
+
+      if (!productAllowedInRoom(room.allowedProductIds, body.data.productId)) {
+        return reply.status(400).send({ errors: [{ code: "PRODUCT_NOT_ALLOWED_IN_ROOM", message: "Este producto no se ofrece en la sala seleccionada" }] });
+      }
+      // Solape: admin/backoffice puede forzarlo tras el aviso (allowOverlap).
+      if (!body.data.allowOverlap && (await roomHasOverlap(body.data.roomId, new Date(body.data.scheduledAt), product.slotDuration))) {
+        return reply.status(409).send({ errors: [{ code: "OVERLAP_WARNING", message: "La sala ya tiene una cita que solapa con esta franja. Confirma para reservar igualmente." }] });
+      }
 
       try {
         const appointment = await prisma.appointment.create({

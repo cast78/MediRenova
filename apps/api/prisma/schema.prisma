@@ -98,6 +98,7 @@ model TenantConfig {
   secondaryColor        String  @default("#64748b") @map("secondary_color")
   timezone              String  @default("Europe/Madrid")
   defaultSlotDuration   Int     @default(20) @map("default_slot_duration")
+  bookingGranularity    Int     @default(15) @map("booking_granularity")
   maxAppointmentsPerDay Int?    @map("max_appointments_per_day")
   metaWaPhoneNumberId   String? @map("meta_wa_phone_number_id")
   metaWaAccessToken     String? @map("meta_wa_access_token")
@@ -219,10 +220,10 @@ model Center {
 model Room {
   id                  String   @id @default(uuid())
   centerId            String   @map("center_id")
-  name                String
-  active              Boolean  @default(true)
-  allowedProductTypes Json     @default("[]") @map("allowed_product_types")
-  schedule            Json     @default("[]")
+  name              String
+  active            Boolean  @default(true)
+  allowedProductIds Json     @default("[]") @map("allowed_product_ids")
+  schedule          Json     @default("[]")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 

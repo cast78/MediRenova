@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { computeDaySlots } from "../src/lib/availability";
+import { computeDaySlots, productAllowedInRoom } from "../src/lib/availability";
+
+describe("productAllowedInRoom", () => {
+  it("permite todos si la lista está vacía", () => {
+    expect(productAllowedInRoom([], "p1")).toBe(true);
+    expect(productAllowedInRoom(null, "p1")).toBe(true);
+  });
+  it("respeta la lista de permitidos", () => {
+    expect(productAllowedInRoom(["p1", "p2"], "p1")).toBe(true);
+    expect(productAllowedInRoom(["p2"], "p1")).toBe(false);
+  });
+});
 
 // 2026-07-01 es miércoles (getDay = 3) en cualquier zona a medianoche local.
 const base = {
@@ -7,7 +18,7 @@ const base = {
   openTime: "09:00",
   closeTime: "11:00",
   slotDuration: 30,
-  slotBuffer: 0,
+  step: 30,
   booked: [] as { start: number; end: number }[],
 };
 
@@ -33,8 +44,8 @@ describe("computeDaySlots (motor de disponibilidad)", () => {
     expect(slots.some((s) => s.includes("T09:00:00"))).toBe(false);
   });
 
-  it("respeta el buffer entre citas", () => {
-    const slots = computeDaySlots({ ...base, slotBuffer: 30 });
-    expect(slots).toHaveLength(2); // step 60 min: 09:00, 10:00
+  it("respeta la granularidad (step) entre huecos", () => {
+    const slots = computeDaySlots({ ...base, step: 60 });
+    expect(slots).toHaveLength(2); // cada 60 min: 09:00, 10:00
   });
 });

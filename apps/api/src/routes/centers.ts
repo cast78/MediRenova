@@ -30,18 +30,18 @@ const holidaysSchema = z.object({
 });
 
 // Room schedule stored as JSON: { openTime, closeTime, activeDays, slotDuration, slotBuffer }
+// La duración y el margen ya no son de la sala: la duración la marca el producto
+// y la granularidad de huecos se configura por empresa (TenantConfig).
 const roomScheduleSchema = z.object({
   openTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   closeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   activeDays: z.array(z.number().int().min(0).max(6)).optional(),
-  slotDuration: z.number().int().min(5).max(120).optional(),
-  slotBuffer: z.number().int().min(0).max(60).optional(),
 });
 
 const roomSchema = z.object({
   name: z.string().min(1).max(80),
   schedule: roomScheduleSchema.optional(),
-  allowedProductTypes: z.array(z.string()).optional(),
+  allowedProductIds: z.array(z.string().uuid()).max(100).optional(),
 });
 
 const assignDoctorSchema = z.object({ userId: z.string().uuid() });
@@ -145,7 +145,7 @@ export async function centerRoutes(server: FastifyInstance) {
       const body = roomSchema.safeParse(request.body);
       if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
       const room = await prisma.room.create({
-        data: { centerId: request.params.centerId, name: body.data.name, schedule: body.data.schedule ?? {}, allowedProductTypes: body.data.allowedProductTypes ?? [] },
+        data: { centerId: request.params.centerId, name: body.data.name, schedule: body.data.schedule ?? {}, allowedProductIds: body.data.allowedProductIds ?? [] },
       });
       return reply.status(201).send({ data: room, errors: null });
     });
@@ -159,7 +159,7 @@ export async function centerRoutes(server: FastifyInstance) {
       const updateData: Record<string, unknown> = {};
       if (body.data.name) updateData["name"] = body.data.name;
       if (body.data.schedule) updateData["schedule"] = body.data.schedule;
-      if (body.data.allowedProductTypes) updateData["allowedProductTypes"] = body.data.allowedProductTypes;
+      if (body.data.allowedProductIds) updateData["allowedProductIds"] = body.data.allowedProductIds;
       const room = await prisma.room.updateMany({ where: { id: request.params.roomId, centerId: request.params.centerId }, data: updateData });
       if (room.count === 0) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
       return reply.send({ data: { updated: true }, errors: null });
