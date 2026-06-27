@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 
@@ -311,6 +312,7 @@ function ProductModal({ product, onClose }: { product?: Product; onClose: () => 
 
 function ProductRow({ product }: { product: Product }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
 
   const toggleActive = useMutation({
@@ -362,6 +364,7 @@ function ProductRow({ product }: { product: Product }) {
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-2">
+            <button onClick={() => router.push(`/forms?product=${product.id}`)} className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-blue-600">Formulario</button>
             <button onClick={() => setEditing(true)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Editar</button>
             <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending}
               className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">

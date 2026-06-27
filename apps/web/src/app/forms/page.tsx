@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
 import {
@@ -305,6 +305,12 @@ export default function FormsPage() {
   const queryClient = useQueryClient();
   const [productId, setProductId] = useState("");
   const [builder, setBuilder] = useState<{ editing: FormTemplate | null } | null>(null);
+
+  // Preselecciona el producto al venir desde la pestaña Productos (?product=...)
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("product");
+    if (p) setProductId(p);
+  }, []);
 
   const { data: products } = useQuery<Product[]>({ queryKey: ["products"], queryFn: () => apiFetch<Product[]>("/products") });
   const activeProducts = (products ?? []).filter((p) => p.active);
