@@ -10,7 +10,7 @@ import { apiFetch, getAccessToken } from "@/lib/api";
 interface FormField {
   name: string;
   label: string;
-  type: "text" | "number" | "boolean" | "select" | "textarea";
+  type: "text" | "number" | "boolean" | "select" | "textarea" | "date";
   required?: boolean;
   options?: string[];
   unit?: string;
@@ -118,7 +118,7 @@ function DynamicField({
   return (
     <div className="flex items-center gap-2">
       <input
-        type={field.type === "number" ? "number" : "text"}
+        type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
         value={String(value ?? "")}
         onChange={(e) => onChange(field.type === "number" ? Number(e.target.value) : e.target.value)}
         disabled={disabled}

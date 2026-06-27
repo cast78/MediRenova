@@ -13,6 +13,7 @@ import {
   ClipboardList,
   Zap,
   Settings,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,6 +34,7 @@ const navItems: NavItem[] = [
 ];
 
 const adminNavItems: NavItem[] = [
+  { href: "/forms", label: "Formularios", icon: FileText },
   { href: "/settings", label: "Configuración", icon: Settings },
 ];
 
