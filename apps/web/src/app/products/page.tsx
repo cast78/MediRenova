@@ -1,9 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { Builder, type FormTemplate } from "@/components/form-builder";
+
+// Modal con el form builder del producto (abre el formulario activo o uno nuevo)
+function ProductFormModal({ productId, onClose }: { productId: string; onClose: () => void }) {
+  const { data: forms, isLoading } = useQuery<FormTemplate[]>({
+    queryKey: ["forms", productId],
+    queryFn: () => apiFetch<FormTemplate[]>(`/products/${productId}/forms`),
+  });
+  const editing = forms ? (forms.find((f) => f.isActive) ?? forms[0] ?? null) : null;
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto">
+      <div className="w-full max-w-4xl my-4">
+        {isLoading ? (
+          <div className="bg-white rounded-xl p-8 text-center text-gray-400">Cargando formulario...</div>
+        ) : (
+          <Builder productId={productId} editing={editing} onClose={onClose} />
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -312,8 +332,8 @@ function ProductModal({ product, onClose }: { product?: Product; onClose: () => 
 
 function ProductRow({ product }: { product: Product }) {
   const queryClient = useQueryClient();
-  const router = useRouter();
   const [editing, setEditing] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 
   const toggleActive = useMutation({
     mutationFn: () => apiFetch(`/products/${product.id}`, { method: "PATCH", body: JSON.stringify({ active: !product.active }) }),
@@ -331,6 +351,7 @@ function ProductRow({ product }: { product: Product }) {
   return (
     <>
       {editing && <ProductModal product={product} onClose={() => setEditing(false)} />}
+      {showForm && <ProductFormModal productId={product.id} onClose={() => setShowForm(false)} />}
       <tr className="hover:bg-gray-50 group align-top">
         <td className="px-4 py-3 font-medium text-gray-900">{product.name}</td>
         <td className="px-4 py-3 text-gray-600 text-sm">{TYPE_MAP[product.type] ?? product.type}</td>
@@ -364,7 +385,7 @@ function ProductRow({ product }: { product: Product }) {
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-2">
-            <button onClick={() => router.push(`/forms?product=${product.id}`)} className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-blue-600">Formulario</button>
+            <button onClick={() => setShowForm(true)} className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-blue-600">Formulario</button>
             <button onClick={() => setEditing(true)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Editar</button>
             <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending}
               className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
