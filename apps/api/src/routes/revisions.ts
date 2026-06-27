@@ -9,6 +9,13 @@ import { storage, sanitizeFileName } from "../lib/storage.js";
 
 const ALLOWED_ATTACHMENT_MIME = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 
+const revisionListQuery = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  outcome: z.enum(["PENDING", "APTO", "NO_APTO"]).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
 export async function revisionRoutes(server: FastifyInstance) {
   // POST /revisions — create from appointment
   server.post("/revisions", { preHandler: [requireRole("DOCTOR")] },
@@ -58,6 +65,41 @@ export async function revisionRoutes(server: FastifyInstance) {
       await prisma.appointment.update({ where: { id: body.data.appointmentId }, data: { status: "CONFIRMED" } });
 
       return reply.status(201).send({ data: revision, errors: null });
+    });
+
+  // GET /revisions — listado paginado con filtros (estado, fecha de la cita)
+  server.get("/revisions", { preHandler: [requireRole("DOCTOR")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const q = revisionListQuery.safeParse(request.query);
+      if (!q.success) return reply.status(400).send({ errors: q.error.flatten().fieldErrors });
+      const { page, limit, outcome, date } = q.data;
+
+      const where: Record<string, unknown> = { tenantId: request.ctx.tenantId };
+      if (outcome) where["outcome"] = outcome;
+      if (date) {
+        const d = new Date(`${date}T00:00:00.000Z`);
+        where["appointment"] = { scheduledAt: { gte: d, lte: new Date(d.getTime() + 86_400_000) } };
+      }
+
+      const [items, total] = await Promise.all([
+        prisma.revision.findMany({
+          where,
+          skip: (page - 1) * limit,
+          take: limit,
+          include: {
+            appointment: {
+              include: {
+                customer: { select: { id: true, firstName: true, lastName: true } },
+                product: { select: { id: true, name: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.revision.count({ where }),
+      ]);
+
+      return reply.send({ data: items, meta: { page, limit, total, pages: Math.ceil(total / limit) }, errors: null });
     });
 
   // GET /revisions/:id
