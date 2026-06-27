@@ -57,7 +57,7 @@
 
 - [x] 6.1 Implementar endpoints CRUD de productos (`/products`) con validación de reglas por edad
 - [x] 6.2 Implementar validación de cobertura completa de rangos de edad en `renewal_rules`
-- [ ] 6.3 Implementar función de cálculo de `expiry_date` dado `birth_date` + `revision_date` + `renewal_rules`
+- [x] 6.3 Implementar función de cálculo de `expiry_date` dado `birth_date` + `revision_date` + `renewal_rules`
 - [ ] 6.4 Implementar endpoint de upload de plantilla PDF por producto
 - [x] 6.5 Implementar UI de gestión de productos con editor de reglas de renovación por edad
 - [x] 6.6 Cargar reglas DGT por defecto como seed para productos de tipo `CARNET_CONDUCIR`
@@ -168,7 +168,7 @@
 - [x] 16.3 Tests unitarios de cifrado/GDPR (`crypto`: DNI AES-256-GCM, API keys)
 - [x] 16.4 Integrar `test` en el pipeline de CI (GitHub Actions)
 - [ ] 16.5 Tests de validación de letra de control del DNI español (extraer `validateSpanishDni` a util testeable)
-- [ ] 16.6 Tests del cálculo de `expiry_date` por reglas de edad (tarea 6.3)
+- [x] 16.6 Tests del cálculo de `expiry_date` por reglas de edad (tarea 6.3)
 - [ ] 16.7 Tests de integración de protección double-booking (error `P2002`)
 - [ ] 16.8 Tests E2E del flujo magic-link → reserva
 - [ ] 16.9 Configurar testing en `apps/web` (Vitest + Testing Library / Playwright)

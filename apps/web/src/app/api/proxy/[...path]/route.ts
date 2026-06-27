@@ -37,11 +37,13 @@ async function proxyRequest(request: NextRequest, path: string[], method: string
 
   try {
     const response = await fetch(url, { method, headers, ...(body !== null ? { body } : {}) });
-    const data = await response.text();
-    return new NextResponse(data, {
-      status: response.status,
-      headers: { "Content-Type": "application/json" },
-    });
+    // Reenvía la respuesta tal cual (soporta JSON y binarios como PDF).
+    const contentType = response.headers.get("content-type") ?? "application/json";
+    const resHeaders: Record<string, string> = { "Content-Type": contentType };
+    const disposition = response.headers.get("content-disposition");
+    if (disposition) resHeaders["Content-Disposition"] = disposition;
+    const buffer = await response.arrayBuffer();
+    return new NextResponse(buffer, { status: response.status, headers: resHeaders });
   } catch (err) {
     console.error(`[proxy] Failed to reach upstream ${url}:`, err);
     return NextResponse.json(

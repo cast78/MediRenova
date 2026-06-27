@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getAccessToken } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -136,8 +136,29 @@ export default function RevisionPage() {
   const [outcome, setOutcome] = useState<"APTO" | "NO_APTO">("APTO");
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const isCompleted = revision?.outcome !== "PENDING";
+
+  async function viewCertificate() {
+    setPdfLoading(true);
+    setError(null);
+    try {
+      const token = getAccessToken();
+      const res = await fetch(`/api/proxy/revisions/${id}/pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("No se pudo generar el certificado");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al abrir el certificado");
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   // Seed form data from saved draft when revision loads
   useEffect(() => {
@@ -327,6 +348,16 @@ export default function RevisionPage() {
               <span className="text-gray-500">Completada</span>
               <span className="text-gray-900">{revision.completedAt ? new Date(revision.completedAt).toLocaleString("es-ES") : "—"}</span>
             </div>
+
+            {error && <p className="text-sm text-red-600 pt-1">{error}</p>}
+
+            <button
+              onClick={viewCertificate}
+              disabled={pdfLoading}
+              className="w-full mt-2 py-3 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              {pdfLoading ? "Generando certificado..." : "Ver certificado (PDF)"}
+            </button>
           </div>
         )}
       </div>

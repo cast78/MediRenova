@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
 import { generatePdf, ensureRevisionPdf } from "../lib/pdf.js";
+import { calculateExpiryDate, type RenewalRules } from "../lib/expiry.js";
 
 export async function revisionRoutes(server: FastifyInstance) {
   // POST /revisions — create from appointment
@@ -105,13 +106,17 @@ export async function revisionRoutes(server: FastifyInstance) {
       });
       if (!existing) return reply.status(404).send({ errors: [{ code: "NOT_FOUND_OR_COMPLETED" }] });
 
-      // Calculate expiry date from product renewal rules
-      let expiryDate: Date | null = null;
-      const renewalRules = existing.appointment.product.renewalRules as { validityDays?: number } | null;
-      if (renewalRules?.validityDays) {
-        expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + renewalRules.validityDays);
-      }
+      // Caducidad según reglas de renovación del producto (tramos por edad o
+      // validez simple). Solo se fija si el dictamen es APTO.
+      const completedAt = new Date();
+      const expiryDate =
+        body.data.outcome === "APTO"
+          ? calculateExpiryDate(
+              existing.appointment.customer.birthDate,
+              completedAt,
+              existing.appointment.product.renewalRules as RenewalRules | null,
+            )
+          : null;
 
       const updated = await prisma.revision.update({
         where: { id: request.params.id },
@@ -119,7 +124,7 @@ export async function revisionRoutes(server: FastifyInstance) {
           formData: body.data.formData as any,
           outcome: body.data.outcome,
           notes: body.data.notes ?? null,
-          completedAt: new Date(),
+          completedAt,
           expiryDate,
         },
       });
