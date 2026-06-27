@@ -118,24 +118,41 @@ model User {
   passwordHash String   @map("password_hash")
   firstName    String   @map("first_name")
   lastName     String   @map("last_name")
-  role         UserRole
-  centerId     String?  @map("center_id")
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  role          UserRole
+  centerId      String?  @map("center_id")
+  dni           String?
+  licenseNumber String?  @map("license_number")
+  signatureKey  String?  @map("signature_key")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  center       Center?       @relation(fields: [centerId], references: [id])
-  sessions     UserSession[]
-  revisions    Revision[]
-  appointments Appointment[]
-  auditLogs    AuditLog[]
-  rooms        RoomDoctor[]
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  center          Center?       @relation(fields: [centerId], references: [id])
+  assignedCenters UserCenter[]
+  sessions        UserSession[]
+  revisions       Revision[]
+  appointments    Appointment[]
+  auditLogs       AuditLog[]
+  rooms           RoomDoctor[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
   @@index([centerId])
   @@map("users")
+}
+
+// Centros asignados a un usuario (médicos que trabajan en varios centros).
+model UserCenter {
+  userId   String @map("user_id")
+  centerId String @map("center_id")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@id([userId, centerId])
+  @@index([centerId])
+  @@map("user_centers")
 }
 
 model UserSession {
@@ -190,9 +207,10 @@ model Center {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  rooms  Room[]
-  staff  User[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rooms       Room[]
+  staff       User[]
+  memberships UserCenter[]
 
   @@index([tenantId])
   @@map("centers")
