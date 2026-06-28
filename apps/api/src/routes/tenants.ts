@@ -17,6 +17,7 @@ const updateTenantConfigSchema = z.object({
   logoUrl: z.string().url().optional(),
   timezone: z.string().optional(),
   defaultSlotDuration: z.number().int().min(5).max(120).optional(),
+  bookingGranularity: z.number().int().min(5).max(60).optional(),
   maxAppointmentsPerDay: z.number().int().min(1).optional(),
   metaWaPhoneNumberId: z.string().optional(),
   metaWaAccessToken: z.string().optional(),
