@@ -41,7 +41,7 @@
 - [x] 4.3 Implementar endpoints de configuración de tenant (`PATCH /tenants/me/config`)
 - [ ] 4.4 Implementar endpoints de branding (`PATCH /tenants/me/branding`)
 - [x] 4.5 Implementar endpoints CRUD de API Keys (`/tenants/me/api-keys`)
-- [ ] 4.6 Implementar carga dinámica de branding en el frontend (colores CSS variables + logo)
+- [x] 4.6 Implementar carga dinámica de branding en el frontend (colores CSS variables + logo)
 
 ## 5. Centros y Salas
 

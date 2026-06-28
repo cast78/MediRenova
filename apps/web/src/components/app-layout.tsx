@@ -3,7 +3,11 @@
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
+import { apiFetch } from "@/lib/api";
+
+interface Branding { name: string; logoUrl: string | null; primaryColor: string; secondaryColor: string }
 import {
   LayoutDashboard,
   CalendarCheck,
@@ -47,6 +51,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  const { data: branding } = useQuery<Branding>({
+    queryKey: ["branding"],
+    queryFn: () => apiFetch<Branding>("/tenants/me/branding"),
+    enabled: !!user,
+    staleTime: 5 * 60_000,
+  });
+  const primary = branding?.primaryColor ?? "#2563eb";
+
   useEffect(() => {
     if (!loading && !user) {
       router.push("/login");
@@ -70,7 +82,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <span className="font-bold text-blue-600 text-lg">MediRenova</span>
+          {branding?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={branding.logoUrl} alt={branding.name} className="h-7 max-w-[170px] object-contain" />
+          ) : (
+            <span className="font-bold text-lg" style={{ color: primary }}>{branding?.name ?? "MediRenova"}</span>
+          )}
         </div>
 
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
@@ -79,10 +96,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               key={item.href}
               href={item.href as string}
               className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                pathname.startsWith(item.href)
-                  ? "bg-blue-50 text-blue-700 font-medium"
-                  : "text-gray-600 hover:bg-gray-100"
+                pathname.startsWith(item.href) ? "font-medium" : "text-gray-600 hover:bg-gray-100"
               }`}
+              style={pathname.startsWith(item.href) ? { backgroundColor: `${primary}14`, color: primary } : undefined}
             >
               <item.icon size={16} strokeWidth={1.75} />
               {item.label}
@@ -114,7 +130,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         <div className="p-3 border-t border-gray-200">
           <div className="flex items-center gap-2 px-2 mb-2">
-            <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-600">
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: `${primary}1a`, color: primary }}>
               {(user.firstName?.[0] ?? user.email[0] ?? "U").toUpperCase()}
             </div>
             <div className="min-w-0">

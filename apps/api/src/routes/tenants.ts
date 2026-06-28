@@ -80,6 +80,28 @@ export async function tenantRoutes(server: FastifyInstance) {
     },
   );
 
+  // GET /tenants/me/branding — branding del tenant (accesible a cualquier rol)
+  server.get(
+    "/tenants/me/branding",
+    { preHandler: [requireRole("DOCTOR")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: request.ctx.tenantId },
+        include: { config: { select: { logoUrl: true, primaryColor: true, secondaryColor: true } } },
+      });
+      if (!tenant) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      return reply.send({
+        data: {
+          name: tenant.name,
+          logoUrl: tenant.config?.logoUrl ?? null,
+          primaryColor: tenant.config?.primaryColor ?? "#2563eb",
+          secondaryColor: tenant.config?.secondaryColor ?? "#64748b",
+        },
+        errors: null,
+      });
+    },
+  );
+
   // PATCH /tenants/me/config
   server.patch(
     "/tenants/me/config",
