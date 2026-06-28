@@ -27,6 +27,8 @@ async function authPlugin(server: FastifyInstance) {
     // Skip solo el magic-link público. La API pública (/public) exige API Key,
     // así que pasa por la autenticación de abajo.
     if (request.url.startsWith("/api/v1/link/")) return;
+    // Documentación OpenAPI/Swagger pública.
+    if (request.url.startsWith("/docs")) return;
 
     const authHeader = request.headers.authorization;
 

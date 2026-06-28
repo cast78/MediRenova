@@ -147,7 +147,7 @@
 - [x] 14.5 Implementar `POST /public/v1/customers` con las mismas validaciones del backoffice
 - [x] 14.6 Implementar `POST /public/v1/appointments` con protección double-booking
 - [x] 14.7 Implementar formato envelope en todas las respuestas de la API pública
-- [ ] 14.8 Generar documentación OpenAPI/Swagger para la API pública
+- [x] 14.8 Generar documentación OpenAPI/Swagger para la API pública
 
 ## 15. Deploy y Producción
 
