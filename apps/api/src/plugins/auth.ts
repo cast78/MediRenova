@@ -24,8 +24,9 @@ async function authPlugin(server: FastifyInstance) {
     const skipPaths = ["/health", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout"];
     if (skipPaths.includes(request.routerPath ?? request.url)) return;
 
-    // Also skip magic-link and public API routes
-    if (request.url.startsWith("/api/v1/public/") || request.url.startsWith("/api/v1/link/")) return;
+    // Skip solo el magic-link público. La API pública (/public) exige API Key,
+    // así que pasa por la autenticación de abajo.
+    if (request.url.startsWith("/api/v1/link/")) return;
 
     const authHeader = request.headers.authorization;
 

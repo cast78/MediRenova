@@ -141,12 +141,12 @@
 ## 14. API Pública
 
 - [x] 14.1 Implementar plugin Fastify de autenticación por API Key con lookup en BD
-- [ ] 14.2 Implementar rate limiting por API Key (1.000 req/hora) con Redis o in-memory para MVP
-- [ ] 14.3 Implementar `GET /public/v1/products` y `GET /public/v1/centers`
-- [ ] 14.4 Implementar `GET /public/v1/centers/{id}/availability`
-- [ ] 14.5 Implementar `POST /public/v1/customers` con las mismas validaciones del backoffice
-- [ ] 14.6 Implementar `POST /public/v1/appointments` con protección double-booking
-- [ ] 14.7 Implementar formato envelope en todas las respuestas de la API pública
+- [x] 14.2 Implementar rate limiting por API Key (1.000 req/hora) con Redis o in-memory para MVP
+- [x] 14.3 Implementar `GET /public/v1/products` y `GET /public/v1/centers`
+- [x] 14.4 Implementar `GET /public/v1/centers/{id}/availability`
+- [x] 14.5 Implementar `POST /public/v1/customers` con las mismas validaciones del backoffice
+- [x] 14.6 Implementar `POST /public/v1/appointments` con protección double-booking
+- [x] 14.7 Implementar formato envelope en todas las respuestas de la API pública
 - [ ] 14.8 Generar documentación OpenAPI/Swagger para la API pública
 
 ## 15. Deploy y Producción
@@ -167,7 +167,7 @@
 - [x] 16.2 Tests unitarios de aislamiento multitenant (`withTenantFilter`, tarea 3.6)
 - [x] 16.3 Tests unitarios de cifrado/GDPR (`crypto`: DNI AES-256-GCM, API keys)
 - [x] 16.4 Integrar `test` en el pipeline de CI (GitHub Actions)
-- [ ] 16.5 Tests de validación de letra de control del DNI español (extraer `validateSpanishDni` a util testeable)
+- [x] 16.5 Tests de validación de letra de control del DNI español (extraer `validateSpanishDni` a util testeable)
 - [x] 16.6 Tests del cálculo de `expiry_date` por reglas de edad (tarea 6.3)
 - [ ] 16.7 Tests de integración de protección double-booking (error `P2002`)
 - [ ] 16.8 Tests E2E del flujo magic-link → reserva

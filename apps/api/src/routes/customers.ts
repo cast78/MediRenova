@@ -1,26 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
-import { createHash } from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
 import { stripUndefined } from "../lib/utils.js";
 import { encryptDni } from "../lib/crypto.js";
-
-const DNI_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE";
-
-function validateSpanishDni(dni: string): boolean {
-  const clean = dni.toUpperCase().trim();
-  const nieMap: Record<string, string> = { X: "0", Y: "1", Z: "2" };
-  let normalized = clean;
-  if (normalized[0] && nieMap[normalized[0]]) {
-    normalized = nieMap[normalized[0]]! + normalized.slice(1);
-  }
-  const match = normalized.match(/^(\d{8})([A-Z])$/);
-  if (!match) return false;
-  const num = parseInt(match[1]!, 10);
-  const letter = match[2]!;
-  return DNI_LETTERS[num % 23] === letter;
-}
+import { validateSpanishDni, hashDni } from "../lib/dni.js";
 
 const customerSchema = z.object({
   firstName: z.string().min(1).max(80).optional(),
@@ -43,9 +27,6 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-function hashDni(dni: string): string {
-  return createHash("sha256").update(dni.toUpperCase().trim()).digest("hex");
-}
 
 export async function customerRoutes(server: FastifyInstance) {
   server.get("/customers", { preHandler: [requireRole("RECEPTIONIST")] },
