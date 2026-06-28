@@ -159,7 +159,7 @@
 - [ ] 15.6 Configurar Meta Cloud API: cuenta Business, plantillas de WhatsApp (requiere aprobación 48-72h)
 - [ ] 15.7 Configurar dominio y SSL para api y frontend
 - [ ] 15.8 Ejecutar smoke tests en staging antes de primera puesta en producción
-- [ ] 15.9 Configurar Chromium para Puppeteer en Railway (nixpacks/buildpack) para la generación de PDF
+- [x] 15.9 Configurar Chromium para Puppeteer en Railway (nixpacks/buildpack) para la generación de PDF
 
 ## 16. Testing (red de seguridad)
 

@@ -1,0 +1,9 @@
+# Chromium del sistema para Puppeteer (generación de PDF) en Railway (tarea 15.9).
+# El token "..." conserva los paquetes que Nixpacks autodetecta y añade chromium.
+
+[phases.setup]
+nixPkgs = ["...", "chromium"]
+
+[variables]
+# No descargar el Chromium de puppeteer en el build; usamos el del sistema.
+PUPPETEER_SKIP_DOWNLOAD = "true"

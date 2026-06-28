@@ -11,9 +11,13 @@ let browserPromise: Promise<Browser> | null = null;
 
 async function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
+    // En producción (Railway) se usa el Chromium del sistema vía
+    // PUPPETEER_EXECUTABLE_PATH; en local, el Chromium que trae puppeteer.
+    const executablePath = process.env["PUPPETEER_EXECUTABLE_PATH"] || undefined;
     browserPromise = puppeteer.launch({
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      ...(executablePath ? { executablePath } : {}),
     });
   }
   return browserPromise;
