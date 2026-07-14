@@ -33,11 +33,12 @@ async function main() {
   const customers: { id: string }[] = [];
   for (let i = 0; i < NAMES.length; i++) {
     const [firstName, lastName] = NAMES[i]!;
+    const birthDate = new Date(`${1962 + i * 5}-08-20`); // edades variadas (~44–64)
     const c = await prisma.customer.upsert({
       where: { tenantId_dniHash: { tenantId, dniHash: `nextwk-${i}` } },
-      update: { deletedAt: null },
+      update: { deletedAt: null, birthDate },
       create: {
-        tenantId, firstName: firstName ?? "", lastName: lastName ?? "", dniHash: `nextwk-${i}`,
+        tenantId, firstName: firstName ?? "", lastName: lastName ?? "", dniHash: `nextwk-${i}`, birthDate,
         email: `nextwk${i}@example.com`, phone: `+34611000${pad(i)}0`, acceptsEmail: true, acceptsWhatsapp: true,
         province: "Madrid", municipality: "Madrid",
       },

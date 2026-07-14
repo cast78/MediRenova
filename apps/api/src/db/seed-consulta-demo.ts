@@ -40,10 +40,11 @@ async function main() {
   for (let i = 0; i < NAMES.length; i++) {
     const dniHash = `democ-${i}`;
     const [firstName, lastName] = NAMES[i]!;
+    const birthDate = new Date(`${1955 + i * 3}-06-15`); // edades variadas (~53–71)
     const c = await prisma.customer.upsert({
       where: { tenantId_dniHash: { tenantId, dniHash } },
-      update: { deletedAt: null },
-      create: { tenantId, firstName: firstName ?? "", lastName: lastName ?? "", dniHash, email: `democ${i}@example.com`, phone: `+34600000${String(i).padStart(2, "0")}`, acceptsEmail: true, acceptsWhatsapp: true },
+      update: { deletedAt: null, birthDate },
+      create: { tenantId, firstName: firstName ?? "", lastName: lastName ?? "", dniHash, birthDate, email: `democ${i}@example.com`, phone: `+34600000${String(i).padStart(2, "0")}`, acceptsEmail: true, acceptsWhatsapp: true },
       select: { id: true },
     });
     customers.push(c);
