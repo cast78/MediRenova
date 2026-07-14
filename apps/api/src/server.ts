@@ -1,3 +1,4 @@
+// Deploy marker: demo 2026-07 (código completo — reservas/visitas/revisiones + Configuración).
 import "dotenv/config";
 import Fastify from "fastify";
 import { registerPlugins } from "./plugins/index.js";
