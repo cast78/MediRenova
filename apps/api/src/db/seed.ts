@@ -120,6 +120,22 @@ async function main() {
   });
   console.log("✓ Demo center:", demoCenter.name);
 
+  // ─── Demo BackOffice (recepción) — tras el centro (FK centerId) ──
+  const demoReception = await prisma.user.upsert({
+    where: { tenantId_email: { tenantId: demoTenant.id, email: "recepcion@clinica-demo.es" } },
+    update: { passwordHash },
+    create: {
+      tenantId: demoTenant.id,
+      email: "recepcion@clinica-demo.es",
+      passwordHash,
+      firstName: "Laura",
+      lastName: "Fernández",
+      role: UserRole.RECEPTIONIST,
+      centerId: demoCenter.id,
+    },
+  });
+  console.log("✓ Demo recepción:", demoReception.email);
+
   // ─── Demo Room ────────────────────────────────────────────────
   const demoRoom = await prisma.room.upsert({
     where: { id: "00000000-0000-0000-0000-000000000002" },
@@ -150,6 +166,28 @@ async function main() {
     create: { roomId: demoRoom.id, userId: demoDoctor.id },
   });
   console.log("✓ Doctor assigned to room");
+
+  // ─── Demo Room 2 (para gestión de salas + flujo multi-sala) ───
+  const demoRoom2 = await prisma.room.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000006" },
+    update: {},
+    create: {
+      id: "00000000-0000-0000-0000-000000000006",
+      centerId: demoCenter.id,
+      name: "Sala 2",
+      allowedProductIds: [],
+      schedule: {
+        slotsByDay: {
+          "1": ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"],
+          "2": ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"],
+          "3": ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"],
+          "4": ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"],
+          "5": ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"],
+        },
+      },
+    },
+  });
+  console.log("✓ Demo room 2:", demoRoom2.name);
 
   // ─── Demo Product: Carnet B ───────────────────────────────────
   // Carnet Grupo 1 (A/B/B+E): 10 años hasta los 65, 5 años a partir de 65 (DGT).
@@ -245,9 +283,10 @@ async function main() {
 
   console.log("\n🎉 Seed complete!");
   console.log("─────────────────────────────────────────");
-  console.log("Superadmin: admin@medirenova.es / Admin1234!");
-  console.log("Demo admin: admin@clinica-demo.es / Admin1234!");
-  console.log("Demo doctor: doctor@clinica-demo.es / Admin1234!");
+  console.log("Superadmin:   admin@medirenova.es / Admin1234!");
+  console.log("Demo admin:   admin@clinica-demo.es / Admin1234!");
+  console.log("Demo doctor:  doctor@clinica-demo.es / Admin1234!");
+  console.log("Demo recep.:  recepcion@clinica-demo.es / Admin1234!");
   console.log("─────────────────────────────────────────");
   console.log("✓ Passwords hashed with bcrypt (cost 12)");
 }
