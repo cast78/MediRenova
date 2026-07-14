@@ -24,6 +24,19 @@ function clearTokens(): void {
   localStorage.removeItem("refresh_token");
 }
 
+// Empresa que un SUPERADMIN está "viendo" (impersonación). Se manda como cabecera
+// `x-act-as-tenant`; el backend solo la respeta para el rol SUPERADMIN.
+const ACT_AS_KEY = "act_as_tenant";
+function getActAsTenant(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(ACT_AS_KEY);
+}
+function setActAsTenant(tenantId: string | null): void {
+  if (typeof window === "undefined") return;
+  if (tenantId) localStorage.setItem(ACT_AS_KEY, tenantId);
+  else localStorage.removeItem(ACT_AS_KEY);
+}
+
 async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = localStorage.getItem("refresh_token");
   if (!refreshToken) return null;
@@ -56,10 +69,14 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const { raw, ...fetchOptions } = options ?? {};
   const token = getAccessToken();
+  const actAs = getActAsTenant();
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    // Solo con cuerpo: Fastify responde 400 si llega Content-Type: application/json
+    // con cuerpo vacío (FST_ERR_CTP_EMPTY_JSON_BODY) en POST/DELETE sin body.
+    ...(fetchOptions.body != null ? { "Content-Type": "application/json" } : {}),
     ...(fetchOptions.headers as Record<string, string>),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(actAs ? { "x-act-as-tenant": actAs } : {}),
   };
 
   const res = await fetch(`${API_BASE}${path}`, { ...fetchOptions, headers });
@@ -83,4 +100,17 @@ export async function apiFetch<T>(
   return (raw ? json : json.data) as T;
 }
 
-export { setTokens, clearTokens, getAccessToken };
+// Cabeceras para fetch() directo (descargas binarias): token + impersonación de
+// empresa del superadmin. Los fetch crudos deben usar esto para respetar el
+// "actuar como" igual que apiFetch.
+function authHeaders(base?: Record<string, string>): Record<string, string> {
+  const token = getAccessToken();
+  const actAs = getActAsTenant();
+  return {
+    ...(base ?? {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(actAs ? { "x-act-as-tenant": actAs } : {}),
+  };
+}
+
+export { setTokens, clearTokens, getAccessToken, getActAsTenant, setActAsTenant, authHeaders };

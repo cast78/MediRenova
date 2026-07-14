@@ -2,8 +2,9 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { signMagicLinkToken, verifyMagicLinkToken } from "../lib/jwt.js";
+import { requireRole } from "../lib/authorization.js";
 import { markWorkflowConverted } from "../lib/workflow-cron.js";
-import { computeDaySlots, productAllowedInRoom } from "../lib/availability.js";
+import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/availability.js";
 import { roomHasOverlap } from "../lib/booking.js";
 
 const confirmSchema = z.object({
@@ -18,11 +19,7 @@ const rescheduleSchema = z.object({
 });
 
 type MagicRoomSchedule = {
-  openTime?: string;
-  closeTime?: string;
-  activeDays?: number[];
-  slotDuration?: number;
-  slotBuffer?: number;
+  slotsByDay?: Record<string, string[]>;
 };
 
 export async function magicLinkRoutes(server: FastifyInstance) {
@@ -65,6 +62,59 @@ export async function magicLinkRoutes(server: FastifyInstance) {
         return reply.status(401).send({ errors: [{ code: "INVALID_TOKEN", message: "Enlace expirado o inválido" }] });
       }
     });
+
+  // ── Confirmación de cita por enlace (cliente, sin login) ─────────────────────
+  const apptDetailSelect = {
+    id: true, scheduledAt: true, durationMinutes: true, status: true,
+    product: { select: { name: true } },
+    room: { select: { name: true, center: { select: { name: true, address: true, city: true, lat: true, lng: true } } } },
+    customer: { select: { firstName: true, lastName: true } },
+  } as const;
+
+  // GET /link/:token/appointment — datos de la cita para la página de confirmación
+  server.get<{ Params: { token: string } }>("/link/:token/appointment",
+    async (request, reply: FastifyReply) => {
+      try {
+        const payload = verifyMagicLinkToken(request.params.token);
+        if (!payload.aid) return reply.status(400).send({ errors: [{ code: "NOT_CONFIRMATION_LINK", message: "Enlace no válido para confirmar" }] });
+        const appt = await prisma.appointment.findFirst({ where: { id: payload.aid, tenantId: payload.tid }, select: apptDetailSelect });
+        if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND", message: "Cita no encontrada" }] });
+        return reply.send({ data: appt, errors: null });
+      } catch {
+        return reply.status(401).send({ errors: [{ code: "INVALID_TOKEN", message: "Enlace expirado o inválido" }] });
+      }
+    });
+
+  // Confirmar o cancelar ("No podré ir") una cita PENDIENTE/CONFIRMADA por token.
+  async function actOnAppointment(token: string, action: "CONFIRMED" | "CANCELLED", reply: FastifyReply) {
+    try {
+      const payload = verifyMagicLinkToken(token);
+      if (!payload.aid) return reply.status(400).send({ errors: [{ code: "NOT_CONFIRMATION_LINK" }] });
+      const appt = await prisma.appointment.findFirst({ where: { id: payload.aid, tenantId: payload.tid }, select: { id: true, status: true } });
+      if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      if (appt.status !== "PENDING" && appt.status !== "CONFIRMED") {
+        // Ya cerrada por otra vía (recepción, atendida…). Se informa el estado actual.
+        return reply.status(409).send({ errors: [{ code: "NOT_ACTIONABLE", message: "Esta cita ya no admite cambios." }], data: { status: appt.status } });
+      }
+      await prisma.appointment.update({
+        where: { id: appt.id },
+        data: action === "CANCELLED" ? { status: "CANCELLED", cancelReason: "CLIENTE" } : { status: "CONFIRMED" },
+      });
+      // Registra la acción DEL CLIENTE en su historial (por enlace, sin login).
+      await prisma.customerEvent.create({ data: { tenantId: payload.tid, customerId: payload.cid, appointmentId: appt.id, type: action === "CANCELLED" ? "cliente_cancelo" : "cliente_confirmo", actor: "cliente" } }).catch(() => {});
+      return reply.send({ data: { status: action }, errors: null });
+    } catch {
+      return reply.status(401).send({ errors: [{ code: "INVALID_TOKEN", message: "Enlace expirado o inválido" }] });
+    }
+  }
+
+  // POST /link/:token/appointment/confirm
+  server.post<{ Params: { token: string } }>("/link/:token/appointment/confirm",
+    async (request, reply: FastifyReply) => actOnAppointment(request.params.token, "CONFIRMED", reply));
+
+  // POST /link/:token/appointment/cancel — "No podré ir" (auto-cancelación del cliente)
+  server.post<{ Params: { token: string } }>("/link/:token/appointment/cancel",
+    async (request, reply: FastifyReply) => actOnAppointment(request.params.token, "CANCELLED", reply));
 
   // POST /link/:token/confirm — book slot
   server.post<{ Params: { token: string } }>("/link/:token/confirm",
@@ -130,6 +180,10 @@ export async function magicLinkRoutes(server: FastifyInstance) {
           include: { center: { select: { holidays: true } } },
         });
         if (!room) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+        // Sin disponibilidad si la sala no ofrece el producto del enlace.
+        if (!productAllowedInRoom(room.allowedProductIds, payload.pid)) {
+          return reply.send({ data: [], errors: null });
+        }
 
         const roomSchedule = (room.schedule as MagicRoomSchedule | null) ?? {};
         const product = await prisma.product.findFirst({ where: { id: payload.pid, tenantId: payload.tid, active: true } });
@@ -147,13 +201,12 @@ export async function magicLinkRoutes(server: FastifyInstance) {
         const holidays = (room.center.holidays as string[] | null) ?? [];
         const slots = computeDaySlots({
           date,
-          openTime: roomSchedule.openTime ?? "08:00",
-          closeTime: roomSchedule.closeTime ?? "20:00",
-          activeDays: roomSchedule.activeDays,
+          slotsByDay: roomSchedule.slotsByDay,
           slotDuration,
-          step: config?.bookingGranularity ?? 15,
           booked,
           isHoliday: holidays.includes(date),
+          now: nowInTimezone(config?.timezone || "Europe/Madrid"),
+          leadMinutes: (config?.minBookingLeadHours ?? 0) * 60,
         });
 
         return reply.send({ data: slots, errors: null });
@@ -176,6 +229,10 @@ export async function magicLinkRoutes(server: FastifyInstance) {
           include: { center: { select: { holidays: true } } },
         });
         if (!room) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+        // Sin disponibilidad si la sala no ofrece el producto del enlace.
+        if (!productAllowedInRoom(room.allowedProductIds, payload.pid)) {
+          return reply.send({ data: { window: 7, days: [] }, errors: null });
+        }
 
         const roomSchedule = (room.schedule as MagicRoomSchedule | null) ?? {};
         const product = await prisma.product.findFirst({ where: { id: payload.pid, tenantId: payload.tid, active: true } });
@@ -191,6 +248,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
         const booked = existing.map((a) => ({ start: a.scheduledAt.getTime(), end: a.scheduledAt.getTime() + a.durationMinutes * 60_000 }));
         const holidays = (room.center.holidays as string[] | null) ?? [];
 
+        const now = nowInTimezone(config?.timezone || "Europe/Madrid");
         const collect = (maxDays: number) => {
           const out: { date: string; slots: string[] }[] = [];
           for (let i = 0; i < maxDays; i++) {
@@ -198,13 +256,12 @@ export async function magicLinkRoutes(server: FastifyInstance) {
             const date = d.toISOString().slice(0, 10);
             const slots = computeDaySlots({
               date,
-              openTime: roomSchedule.openTime ?? "08:00",
-              closeTime: roomSchedule.closeTime ?? "20:00",
-              activeDays: roomSchedule.activeDays,
+              slotsByDay: roomSchedule.slotsByDay,
               slotDuration,
-              step: config?.bookingGranularity ?? 15,
               booked,
               isHoliday: holidays.includes(date),
+              now,
+              leadMinutes: (config?.minBookingLeadHours ?? 0) * 60,
             });
             if (slots.length) out.push({ date, slots });
           }
@@ -274,14 +331,20 @@ export async function magicLinkRoutes(server: FastifyInstance) {
       }
     });
 
-  // POST /link/generate — generate a magic link token (internal/admin use)
-  server.post("/link/generate",
+  // POST /link/generate — genera un magic link de auto-reserva (uso interno de staff).
+  // Requiere autenticación; el tenant se toma del contexto (no del body) para no poder
+  // generar enlaces cross-tenant.
+  server.post("/link/generate", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const body = z.object({ customerId: z.string().uuid(), productId: z.string().uuid(), tenantId: z.string().uuid() }).safeParse(request.body);
+      const body = z.object({ customerId: z.string().uuid(), productId: z.string().uuid() }).safeParse(request.body);
       if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
 
-      const token = signMagicLinkToken({ cid: body.data.customerId, pid: body.data.productId, tid: body.data.tenantId, type: "magic_link" });
-      const url = `${process.env["PUBLIC_URL"] ?? "http://localhost:3000"}/link/${token}`;
+      const customer = await prisma.customer.findFirst({ where: { id: body.data.customerId, tenantId: request.ctx.tenantId, deletedAt: null }, select: { id: true } });
+      if (!customer) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+
+      const token = signMagicLinkToken({ cid: body.data.customerId, pid: body.data.productId, tid: request.ctx.tenantId, type: "magic_link" });
+      // Página pública de auto-reserva: /booking/:token (consume la API /link/:token).
+      const url = `${process.env["PUBLIC_URL"] ?? "http://localhost:3000"}/booking/${token}`;
       return reply.send({ data: { token, url }, errors: null });
     });
 }

@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { renderCertificateHtml, mapFormFields, formatValue, type CertificateData } from "../src/lib/certificate";
+import {
+  renderCertificateHtml,
+  renderWithTemplate,
+  sampleCertificateData,
+  DEFAULT_CERTIFICATE_TEMPLATE,
+  mapFormFields,
+  formatValue,
+  type CertificateData,
+} from "../src/lib/certificate";
 
 const baseData: CertificateData = {
   tenantName: "Clínica Demo",
@@ -56,10 +64,51 @@ describe("certificate: renderCertificateHtml (tarea 11.6)", () => {
     expect(html).not.toContain('alt="firma"');
   });
 
+  it("embebe la imagen de un campo de tipo imagen (en vez de texto)", () => {
+    const url = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+    const html = renderCertificateHtml({
+      ...baseData,
+      fields: [{ label: "Foto del DNI", value: "", imageDataUrl: url }],
+    });
+    expect(html).toContain("Foto del DNI");
+    expect(html).toContain(`<img src="${url}"`);
+  });
+
   it("embebe la firma del médico y el nº de colegiado", () => {
     const html = renderCertificateHtml({ ...baseData, doctorSignatureDataUrl: "data:image/png;base64,AAA" });
     expect(html).toContain('src="data:image/png;base64,AAA"');
     expect(html).toContain("Col. 28-12345");
+  });
+});
+
+describe("certificate: renderWithTemplate (plantilla por producto, tarea 6.4)", () => {
+  it("renderiza variables y bloques de una plantilla personalizada", () => {
+    const tpl = "<h1>{{patientName}} · {{productName}}</h1>{{#if apto}}<span>OK</span>{{else}}<span>NO</span>{{/if}}";
+    const html = renderWithTemplate(tpl, baseData);
+    expect(html).toContain("Juan Pérez · Carnet B");
+    expect(html).toContain("<span>OK</span>");
+    expect(html).not.toContain("<span>NO</span>");
+  });
+
+  it("itera los campos del formulario con {{#each fields}}", () => {
+    const tpl = "{{#each fields}}[{{this.label}}={{this.value}}]{{/each}}";
+    expect(renderWithTemplate(tpl, baseData)).toContain("[Agudeza visual=0.8]");
+  });
+
+  it("escapa el HTML del input también en plantillas personalizadas", () => {
+    const html = renderWithTemplate("<p>{{patientName}}</p>", { ...baseData, patientName: "<b>x</b>" });
+    expect(html).not.toContain("<b>x</b>");
+    expect(html).toContain("&lt;b&gt;");
+  });
+
+  it("lanza si la plantilla no compila", () => {
+    expect(() => renderWithTemplate("{{#if apto}}roto", baseData)).toThrow();
+  });
+
+  it("sampleCertificateData rinde tanto la plantilla por defecto como una personalizada", () => {
+    const sample = sampleCertificateData();
+    expect(() => renderCertificateHtml(sample)).not.toThrow();
+    expect(renderWithTemplate(DEFAULT_CERTIFICATE_TEMPLATE, sample)).toContain(sample.patientName);
   });
 });
 

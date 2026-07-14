@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 // Tipos de campo soportados por el renderer dinámico (apps/web revisión).
-export const FIELD_TYPES = ["text", "number", "boolean", "select", "textarea", "date"] as const;
+// "image" captura una foto (cámara) o adjunta una imagen, guardada como adjunto
+// de la revisión con fieldId = nombre del campo.
+export const FIELD_TYPES = ["text", "number", "boolean", "select", "textarea", "date", "image"] as const;
 
 export const formFieldSchema = z.object({
   name: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, "name debe ser un identificador válido"),

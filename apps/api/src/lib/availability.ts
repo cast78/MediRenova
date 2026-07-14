@@ -1,20 +1,37 @@
 // Cálculo de slots disponibles de una sala en un día (motor de disponibilidad).
-// Pura y testeable. Considera horario, día activo, festivos y reservas existentes.
+// Modelo de huecos explícitos por día de la semana: cada sala define qué horas
+// concretas ofrece cada día (no un rango lineal apertura-cierre). Pura y testeable.
 
 export interface BookedInterval {
   start: number; // epoch ms
   end: number; // epoch ms
 }
 
+// schedule.slotsByDay: { "0": ["07:00", ...], "1": [...], ... }  (0=Dom … 6=Sáb)
+export type SlotsByDay = Record<string, string[]>;
+
 export interface DaySlotParams {
   date: string; // YYYY-MM-DD
-  openTime: string; // "HH:MM"
-  closeTime: string; // "HH:MM"
-  activeDays?: number[] | undefined; // 0=Dom … 6=Sáb
+  slotsByDay: SlotsByDay | undefined;
   slotDuration: number; // duración de la cita (la marca el producto), para el solape
-  step: number; // granularidad entre huecos ofrecidos (config por empresa, 15/30)
   booked: BookedInterval[];
   isHoliday?: boolean;
+  // "Ahora" en la zona horaria del centro. Si la fecha coincide con now.date, se
+  // ocultan los huecos cuya hora sea <= now.minutes (ya pasados hoy).
+  now?: { date: string; minutes: number };
+  // Antelación mínima de reserva (min). Oculta hoy los huecos a menos de X min de ahora.
+  leadMinutes?: number;
+}
+
+// Devuelve la fecha (YYYY-MM-DD) y los minutos del día actuales en una zona horaria.
+export function nowInTimezone(tz: string): { date: string; minutes: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+  // en-CA da la hora "24" a medianoche; normalizamos a "00".
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return { date: `${get("year")}-${get("month")}-${get("day")}`, minutes: Number(hour) * 60 + Number(get("minute")) };
 }
 
 // Un producto está permitido en una sala si la lista de permitidos está vacía
@@ -24,32 +41,32 @@ export function productAllowedInRoom(allowedProductIds: unknown, productId: stri
   return ids.length === 0 || ids.includes(productId);
 }
 
-const pad = (n: number) => String(n).padStart(2, "0");
-
 export function computeDaySlots(p: DaySlotParams): string[] {
   if (p.isHoliday) return [];
 
   const dayOfWeek = new Date(`${p.date}T00:00:00`).getDay();
-  if (p.activeDays && !p.activeDays.includes(dayOfWeek)) return [];
+  const times = p.slotsByDay?.[String(dayOfWeek)] ?? [];
 
-  const [openH = 0, openM = 0] = p.openTime.split(":").map(Number);
-  const [closeH = 0, closeM = 0] = p.closeTime.split(":").map(Number);
-  const step = p.step;
-  if (step <= 0) return [];
-
-  const startMin = openH * 60 + openM;
-  const totalMinutes = closeH * 60 + closeM - startMin;
-  const numSlots = Math.floor(totalMinutes / step);
+  // Minutos desde la medianoche de "hoy" hasta la medianoche de este día (0 hoy,
+  // 1440 mañana, …). Permite aplicar "pasados" + antelación mínima a través de días.
+  const dayOffsetMin = p.now
+    ? Math.round((new Date(`${p.date}T00:00:00Z`).getTime() - new Date(`${p.now.date}T00:00:00Z`).getTime()) / 60_000)
+    : 0;
 
   const slots: string[] = [];
-  for (let i = 0; i < numSlots; i++) {
-    const slotMinutes = startMin + i * step;
-    const slotH = Math.floor(slotMinutes / 60);
-    const slotM = slotMinutes % 60;
-    const slotTime = new Date(`${p.date}T${pad(slotH)}:${pad(slotM)}:00.000Z`);
-    const slotEnd = slotTime.getTime() + p.slotDuration * 60_000;
-    const overlaps = p.booked.some((b) => slotTime.getTime() < b.end && slotEnd > b.start);
+  for (const t of times) {
+    if (!/^\d{2}:\d{2}$/.test(t)) continue;
+    // Oculta huecos ya pasados y los que no cumplen la antelación mínima (zona del centro).
+    if (p.now) {
+      const [hh, mm] = t.split(":").map(Number);
+      const slotFromTodayMidnight = dayOffsetMin + (hh ?? 0) * 60 + (mm ?? 0);
+      if (slotFromTodayMidnight <= p.now.minutes + (p.leadMinutes ?? 0)) continue;
+    }
+    const slotTime = new Date(`${p.date}T${t}:00.000Z`);
+    const start = slotTime.getTime();
+    const end = start + p.slotDuration * 60_000;
+    const overlaps = p.booked.some((b) => start < b.end && end > b.start);
     if (!overlaps) slots.push(slotTime.toISOString());
   }
-  return slots;
+  return slots.sort();
 }

@@ -7,7 +7,10 @@ export async function dashboardRoutes(server: FastifyInstance) {
   server.get("/dashboard/summary", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const tid = request.ctx.tenantId;
-      const cen = request.ctx.centerId;
+      // Centro efectivo: si el usuario está fijado a un centro (token) manda ese; si no
+      // (admin/superadmin), el que venga del selector (?centerId). Vacío = todos.
+      const qCenter = (request.query as { centerId?: string }).centerId;
+      const cen = request.ctx.centerId ?? (qCenter || null);
       const apptScope = cen ? { room: { centerId: cen } } : {};
       const revScope = cen ? { appointment: { room: { centerId: cen } } } : {};
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
@@ -36,11 +39,29 @@ export async function dashboardRoutes(server: FastifyInstance) {
       });
     });
 
+  // GET /dashboard/communications — avisos/notificaciones a clientes este mes. Tenant-wide
+  // (los eventos de comunicación no están ligados a un centro concreto).
+  server.get("/dashboard/communications", { preHandler: [requireRole("RECEPTIONIST")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const tid = request.ctx.tenantId;
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const [manualSent, autoSent, responses] = await Promise.all([
+        prisma.customerEvent.count({ where: { tenantId: tid, type: { in: ["recordatorio_renovacion", "confirmacion_solicitada"] }, createdAt: { gte: monthStart } } }),
+        prisma.workflowExecution.count({ where: { rule: { tenantId: tid }, status: "SENT", lastAttemptAt: { gte: monthStart } } }),
+        prisma.customerEvent.count({ where: { tenantId: tid, type: { in: ["cliente_confirmo", "cliente_cancelo"] }, createdAt: { gte: monthStart } } }),
+      ]);
+      const sent = manualSent + autoSent;
+      const responseRate = sent > 0 ? Math.round((responses / sent) * 100) : null;
+      return reply.send({ data: { sent, responses, responseRate }, errors: null });
+    });
+
   // GET /dashboard/expirations — upcoming expirations
   server.get("/dashboard/expirations", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const tid = request.ctx.tenantId;
-      const cen = request.ctx.centerId;
+      const qCenter = (request.query as { centerId?: string }).centerId;
+      const cen = request.ctx.centerId ?? (qCenter || null);
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const in90 = new Date(today); in90.setDate(in90.getDate() + 90);
 
@@ -84,14 +105,53 @@ export async function dashboardRoutes(server: FastifyInstance) {
       return reply.send({ data, errors: null });
     });
 
+  // GET /dashboard/expirations/summary — conteos por tramo para los KPIs de caducidades.
+  // Devuelve los buckets (≤30 / 31–60 / 61–90) + total y cuántas caducan sin reserva
+  // futura (el hueco accionable). No trae las filas, solo cuenta.
+  server.get("/dashboard/expirations/summary", { preHandler: [requireRole("RECEPTIONIST")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const tid = request.ctx.tenantId;
+      const qCenter = (request.query as { centerId?: string }).centerId;
+      const cen = request.ctx.centerId ?? (qCenter || null);
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const in90 = new Date(today); in90.setDate(in90.getDate() + 90);
+
+      const rows = await prisma.revision.findMany({
+        where: { tenantId: tid, ...(cen ? { appointment: { room: { centerId: cen } } } : {}), expiryDate: { gte: today, lte: in90 }, outcome: "APTO" },
+        select: { customerId: true, expiryDate: true },
+      });
+
+      const customerIds = [...new Set(rows.map((r) => r.customerId))];
+      const futureBookings = customerIds.length
+        ? await prisma.appointment.findMany({
+            where: { tenantId: tid, ...(cen ? { room: { centerId: cen } } : {}), customerId: { in: customerIds }, scheduledAt: { gt: new Date() }, status: { in: ["CONFIRMED", "PENDING"] } },
+            select: { customerId: true },
+          })
+        : [];
+      const booked = new Set(futureBookings.map((b) => b.customerId));
+
+      let le30 = 0, d31_60 = 0, d61_90 = 0, noBooking = 0;
+      for (const r of rows) {
+        const days = Math.ceil(((r.expiryDate?.getTime() ?? 0) - today.getTime()) / 86_400_000);
+        if (days <= 30) le30++;
+        else if (days <= 60) d31_60++;
+        else d61_90++;
+        if (!booked.has(r.customerId)) noBooking++;
+      }
+
+      return reply.send({ data: { le30, d31_60, d61_90, total: rows.length, noBooking }, errors: null });
+    });
+
   // GET /dashboard/charts/appointments-by-month
   server.get("/dashboard/charts/appointments-by-month", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const tid = request.ctx.tenantId;
+      const qCenter = (request.query as { centerId?: string }).centerId;
+      const cen = request.ctx.centerId ?? (qCenter || null);
       const twelveMonthsAgo = new Date(); twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11); twelveMonthsAgo.setDate(1); twelveMonthsAgo.setHours(0, 0, 0, 0);
 
       const appointments = await prisma.appointment.findMany({
-        where: { tenantId: tid, ...(request.ctx.centerId ? { room: { centerId: request.ctx.centerId } } : {}), scheduledAt: { gte: twelveMonthsAgo }, status: { notIn: ["CANCELLED"] } },
+        where: { tenantId: tid, ...(cen ? { room: { centerId: cen } } : {}), scheduledAt: { gte: twelveMonthsAgo }, status: { notIn: ["CANCELLED"] } },
         select: { scheduledAt: true },
       });
 

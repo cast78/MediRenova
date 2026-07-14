@@ -28,12 +28,17 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   "ApiKey",
   "Appointment",
   "AuditLog",
+  "Campaign",
   "Center",
   "Customer",
+  "CustomerEvent",
+  "MessageTemplate",
   "Product",
   "Revision",
+  "Segment",
   "TenantConfig",
   "User",
+  "Visit",
   "WorkflowRule",
 ]);
 

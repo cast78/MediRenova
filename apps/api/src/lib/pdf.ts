@@ -2,7 +2,8 @@ import puppeteer, { type Browser } from "puppeteer";
 import { prisma } from "./prisma.js";
 import { storage } from "./storage.js";
 import { decryptDni } from "./crypto.js";
-import { renderCertificateHtml, mapFormFields, type CertificateData } from "./certificate.js";
+import { mapFormFields, type CertificateData } from "./certificate.js";
+import { resolveCertificateHtml } from "./certificate-config.js";
 
 // ── Puppeteer: navegador compartido y reutilizado (task 11.5) ────────────────
 // Un único Chrome headless con páginas efímeras por render. Suficiente para el
@@ -10,20 +11,30 @@ import { renderCertificateHtml, mapFormFields, type CertificateData } from "./ce
 let browserPromise: Promise<Browser> | null = null;
 
 async function getBrowser(): Promise<Browser> {
-  if (!browserPromise) {
-    // En producción (Railway) se usa el Chromium del sistema vía
-    // PUPPETEER_EXECUTABLE_PATH; en local, el Chromium que trae puppeteer.
-    const executablePath = process.env["PUPPETEER_EXECUTABLE_PATH"] || undefined;
-    browserPromise = puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-      ...(executablePath ? { executablePath } : {}),
-    });
+  // Reutiliza la instancia solo si sigue conectada; si murió (p.ej. inactividad,
+  // crash), la descarta y relanza una nueva. Evita el "Protocol error: Connection
+  // closed." que dejaba el singleton inservible hasta reiniciar el proceso.
+  if (browserPromise) {
+    try {
+      const b = await browserPromise;
+      if (b.connected) return b;
+    } catch {
+      // el lanzamiento previo falló; relanzamos abajo
+    }
+    browserPromise = null;
   }
+  // En producción (Railway) se usa el Chromium del sistema vía
+  // PUPPETEER_EXECUTABLE_PATH; en local, el Chromium que trae puppeteer.
+  const executablePath = process.env["PUPPETEER_EXECUTABLE_PATH"] || undefined;
+  browserPromise = puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    ...(executablePath ? { executablePath } : {}),
+  });
   return browserPromise;
 }
 
-export async function htmlToPdf(html: string): Promise<Buffer> {
+async function renderOnce(html: string): Promise<Buffer> {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
@@ -35,7 +46,21 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
     });
     return Buffer.from(pdf);
   } finally {
-    await page.close();
+    await page.close().catch(() => {});
+  }
+}
+
+export async function htmlToPdf(html: string): Promise<Buffer> {
+  try {
+    return await renderOnce(html);
+  } catch (err) {
+    // Si el navegador compartido se cerró/desconectó entre renders, lo reseteamos
+    // y reintentamos una vez con una instancia fresca.
+    if (err instanceof Error && /Connection closed|Protocol error|Target closed|disconnected|Session closed/i.test(err.message)) {
+      browserPromise = null;
+      return await renderOnce(html);
+    }
+    throw err;
   }
 }
 
@@ -114,6 +139,37 @@ export async function generatePdf(revisionId: string): Promise<Buffer> {
     }
   }
 
+  // Campos del certificado. Para los de tipo "image" embebemos el adjunto del
+  // campo (fieldId = nombre del campo) como data URL en lugar de texto.
+  const schemaFields = (((revision.formTemplate.schema as { fields?: unknown[] })?.fields) ?? []) as { name?: string; type?: string }[];
+  const certFields = mapFormFields(revision.formTemplate.schema, revision.formData as Record<string, unknown>);
+  const imageFieldNames = schemaFields.filter((f) => f?.type === "image" && f?.name).map((f) => f.name as string);
+  if (imageFieldNames.length > 0) {
+    const atts = await prisma.revisionAttachment.findMany({
+      where: { revisionId, fieldId: { in: imageFieldNames } },
+      orderBy: { createdAt: "desc" },
+    });
+    const latestByField = new Map<string, (typeof atts)[number]>();
+    for (const a of atts) if (!latestByField.has(a.fieldId)) latestByField.set(a.fieldId, a);
+    for (let i = 0; i < schemaFields.length; i++) {
+      const f = schemaFields[i];
+      const cf = certFields[i];
+      if (!cf || f?.type !== "image" || !f?.name) continue;
+      const att = latestByField.get(f.name);
+      if (att) {
+        try {
+          const bytes = await storage.get(att.r2Key);
+          cf.imageDataUrl = `data:${att.mimeType};base64,${bytes.toString("base64")}`;
+          cf.value = "";
+        } catch {
+          cf.value = "—";
+        }
+      } else {
+        cf.value = "—";
+      }
+    }
+  }
+
   const data: CertificateData = {
     tenantName: tenant?.name ?? "MediRenova",
     centerName: center.name,
@@ -130,14 +186,18 @@ export async function generatePdf(revisionId: string): Promise<Buffer> {
     completedAt: fmtDate(revision.completedAt),
     expiryDate: fmtDate(revision.expiryDate),
     notes: revision.notes ?? "",
-    fields: mapFormFields(revision.formTemplate.schema, revision.formData as Record<string, unknown>),
+    fields: certFields,
     generatedAt: fmtDateTime(new Date()),
     signatureDataUrl,
     doctorLicense: revision.doctor.licenseNumber ?? "",
     doctorSignatureDataUrl,
   };
 
-  const pdf = await htmlToPdf(renderCertificateHtml(data));
+  // Prioridad: config del editor visual > plantilla HTML del producto > por defecto.
+  // Nunca lanza: si algo falla, cae a la por defecto para no bloquear la emisión.
+  const html = resolveCertificateHtml(revision.appointment.product, data);
+
+  const pdf = await htmlToPdf(html);
   const key = `tenants/${revision.tenantId}/revisions/${revision.id}.pdf`;
   await storage.put(key, pdf, "application/pdf");
   await prisma.revision.update({ where: { id: revisionId }, data: { pdfUrl: key } });

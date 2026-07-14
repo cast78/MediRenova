@@ -3,6 +3,8 @@ import Handlebars from "handlebars";
 export interface CertificateField {
   label: string;
   value: string;
+  // Si el campo es de tipo imagen, data URL de la imagen para embeber en el PDF.
+  imageDataUrl?: string | undefined;
 }
 
 export interface CertificateData {
@@ -51,7 +53,9 @@ export function mapFormFields(schema: unknown, formData: Record<string, unknown>
   });
 }
 
-const TEMPLATE = `<!doctype html>
+// Plantilla por defecto del certificado. Se exporta para que la UI la muestre
+// como punto de partida al personalizar la plantilla de un producto (tarea 6.4).
+export const DEFAULT_CERTIFICATE_TEMPLATE = `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><style>
   * { box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; color: #1f2937; font-size: 12px; margin: 0; padding: 32px 40px; }
@@ -97,7 +101,7 @@ const TEMPLATE = `<!doctype html>
   {{#if fields.length}}
   <div class="section">Datos del reconocimiento</div>
   <table>
-    {{#each fields}}<tr><th>{{this.label}}</th><td>{{this.value}}</td></tr>{{/each}}
+    {{#each fields}}<tr><th>{{this.label}}</th><td>{{#if this.imageDataUrl}}<img src="{{{this.imageDataUrl}}}" style="max-height:140px;max-width:100%;border-radius:4px">{{else}}{{this.value}}{{/if}}</td></tr>{{/each}}
   </table>
   {{/if}}
 
@@ -111,9 +115,44 @@ const TEMPLATE = `<!doctype html>
   <div class="foot">Documento generado el {{generatedAt}} · {{tenantName}}</div>
 </body></html>`;
 
-const compiled = Handlebars.compile(TEMPLATE);
+const compiled = Handlebars.compile(DEFAULT_CERTIFICATE_TEMPLATE);
 
-// Render del certificado a HTML. Pura: no toca BD ni Puppeteer.
+// Render del certificado a HTML con la plantilla por defecto. Pura: no toca BD ni Puppeteer.
 export function renderCertificateHtml(data: CertificateData): string {
   return compiled(data);
+}
+
+// Render con una plantilla personalizada (la del producto). Lanza si la plantilla
+// no compila o falla al renderizar; el llamante decide si cae a la por defecto.
+export function renderWithTemplate(template: string, data: CertificateData): string {
+  return Handlebars.compile(template)(data);
+}
+
+// Datos de ejemplo para validar/previsualizar una plantilla sin una revisión real.
+export function sampleCertificateData(): CertificateData {
+  return {
+    tenantName: "Clínica Ejemplo",
+    centerName: "Centro Centro",
+    centerLine: "Calle Mayor 1, Madrid (Madrid) · 28001",
+    centerCif: "B12345678",
+    patientName: "Juan Pérez García",
+    patientDni: "12345678Z",
+    patientBirthDate: "01/01/1980",
+    patientProvince: "Madrid",
+    productName: "Carnet de Conducir (B)",
+    doctorName: "Ana López",
+    outcomeLabel: "APTO",
+    apto: true,
+    completedAt: "30/06/2026",
+    expiryDate: "30/06/2031",
+    notes: "Sin observaciones.",
+    fields: [
+      { label: "Agudeza visual", value: "0,8" },
+      { label: "Audición", value: "Normal" },
+    ],
+    generatedAt: "30/06/2026 12:00",
+    signatureDataUrl: undefined,
+    doctorLicense: "282812345",
+    doctorSignatureDataUrl: undefined,
+  };
 }

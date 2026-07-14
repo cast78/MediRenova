@@ -16,7 +16,7 @@ import { CSS } from "@dnd-kit/utilities";
 
 // ── Types ───────────────────────────────────────────────────────────────────────
 
-export type FieldType = "text" | "number" | "boolean" | "select" | "textarea" | "date";
+export type FieldType = "text" | "number" | "boolean" | "select" | "textarea" | "date" | "image";
 
 export interface BuilderField {
   id: string;
@@ -49,10 +49,20 @@ const TYPE_LABELS: Record<FieldType, string> = {
   select: "Lista",
   textarea: "Texto largo",
   date: "Fecha",
+  image: "Imagen",
 };
 const TYPES = Object.keys(TYPE_LABELS) as FieldType[];
 
 const BASE_TEMPLATES: Record<string, Omit<BuilderField, "id">[]> = {
+  // Debe coincidir con el formulario por defecto del backend (lib/default-form.ts):
+  // es el que usan las revisiones cuando un producto no tiene formulario propio.
+  "Por defecto (sistema)": [
+    { name: "tension", label: "Tensión arterial", type: "text", required: true, options: [], unit: "" },
+    { name: "vista", label: "Vista", type: "text", required: true, options: [], unit: "" },
+    { name: "manejo_volante", label: "Manejo de volante", type: "text", required: true, options: [], unit: "" },
+    { name: "oido", label: "Oído", type: "text", required: true, options: [], unit: "" },
+    { name: "espirometria", label: "Espirometría", type: "image", required: true, options: [], unit: "" },
+  ],
   "Reconocimiento conducir": [
     { name: "agudeza_visual", label: "Agudeza visual", type: "number", required: true, options: [], unit: "/10" },
     { name: "campo_visual_ok", label: "Campo visual normal", type: "boolean", required: false, options: [], unit: "" },
@@ -70,6 +80,14 @@ const BASE_TEMPLATES: Record<string, Omit<BuilderField, "id">[]> = {
     { name: "foto_tomada", label: "Fotografía tomada", type: "boolean", required: false, options: [], unit: "" },
     { name: "observaciones", label: "Observaciones", type: "textarea", required: false, options: [], unit: "" },
   ],
+};
+
+// Color por plantilla base (la "Por defecto" se destaca como recomendada).
+const TPL_STYLE: Record<string, string> = {
+  "Por defecto (sistema)": "bg-blue-50 text-blue-700 border-blue-300 ring-1 ring-blue-100",
+  "Reconocimiento conducir": "bg-teal-50 text-teal-700 border-teal-200",
+  "Licencia de armas": "bg-amber-50 text-amber-700 border-amber-200",
+  "DNI": "bg-violet-50 text-violet-700 border-violet-200",
 };
 
 function errorMessage(err: unknown): string {
@@ -121,6 +139,11 @@ function FormPreview({ fields }: { fields: BuilderField[] }) {
           <label className="block text-xs font-medium text-gray-600 mb-1">{f.label || f.name}{f.required && <span className="text-red-500 ml-1">*</span>}</label>
           {f.type === "boolean" ? (
             <input type="checkbox" disabled className="w-4 h-4" />
+          ) : f.type === "image" ? (
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              <span className="px-3 py-2 rounded-lg border border-dashed border-gray-300">📷 Hacer foto</span>
+              <span className="px-3 py-2 rounded-lg border border-dashed border-gray-300">Adjuntar imagen</span>
+            </div>
           ) : f.type === "select" ? (
             <select disabled className={base}><option>— Seleccionar —</option>{f.options.map((o) => <option key={o}>{o}</option>)}</select>
           ) : f.type === "textarea" ? (
@@ -139,7 +162,7 @@ function FormPreview({ fields }: { fields: BuilderField[] }) {
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 
-export function Builder({ productId, editing, onClose }: { productId: string; editing: FormTemplate | null; onClose: () => void }) {
+export function Builder({ productId, productName, editing, onClose }: { productId: string; productName?: string | undefined; editing: FormTemplate | null; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(editing?.name ?? "");
   const [fields, setFields] = useState<BuilderField[]>(
@@ -151,6 +174,7 @@ export function Builder({ productId, editing, onClose }: { productId: string; ed
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingTpl, setPendingTpl] = useState<string | null>(null); // confirmar reemplazo de campos
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const selected = fields.find((f) => f.id === selectedId) ?? null;
 
@@ -188,7 +212,11 @@ export function Builder({ productId, editing, onClose }: { productId: string; ed
         ? apiFetch(`/forms/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) })
         : apiFetch(`/products/${productId}/forms`, { method: "POST", body: JSON.stringify(payload) });
     },
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["forms", productId] }); onClose(); },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["forms", productId] });
+      void queryClient.invalidateQueries({ queryKey: ["products"] }); // refresca el estado "Propio/Por defecto" de la tarjeta
+      onClose();
+    },
     onError: (err: unknown) => setError(errorMessage(err)),
   });
 
@@ -208,22 +236,29 @@ export function Builder({ productId, editing, onClose }: { productId: string; ed
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <div className="flex items-center justify-between mb-4">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del formulario"
-          className="text-lg font-semibold text-gray-900 border-b border-gray-200 focus:border-blue-500 focus:outline-none px-1 py-1 w-72" />
-        <div className="flex gap-2">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] text-gray-400 mb-0.5 truncate">Formulario de exploración{productName ? ` · ${productName}` : ""}</p>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del formulario"
+            className="text-lg font-semibold text-gray-900 border-b border-gray-200 focus:border-blue-500 focus:outline-none px-1 py-1 w-full" />
+        </div>
+        <div className="flex gap-2 shrink-0">
           <button onClick={() => setPreview((v) => !v)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">{preview ? "Editar" : "Vista previa"}</button>
-          <button onClick={onClose} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Cancelar</button>
+          <button onClick={onClose} className="text-xs px-3 py-1.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-600">Cancelar</button>
           <button onClick={submit} disabled={save.isPending} className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{save.isPending ? "Guardando..." : "Guardar"}</button>
         </div>
       </div>
 
-      {!editing && fields.length === 0 && (
-        <div className="flex items-center gap-2 mb-4 text-xs text-gray-500">
-          <span>Plantilla base:</span>
+      {!preview && (
+        <div className="flex items-center gap-2 flex-wrap mb-4 px-3 py-2.5 bg-gray-50 rounded-lg">
+          <span className="text-xs font-medium text-gray-600 mr-1">Plantilla base</span>
           {Object.keys(BASE_TEMPLATES).map((k) => (
-            <button key={k} onClick={() => loadTemplate(k)} className="px-2.5 py-1 rounded-lg border border-gray-200 hover:bg-gray-50">{k}</button>
+            <button key={k} onClick={() => (fields.length === 0 ? loadTemplate(k) : setPendingTpl(k))}
+              className={`text-xs px-2.5 py-1 rounded-full border inline-flex items-center gap-1 transition-colors hover:brightness-95 ${TPL_STYLE[k] ?? "bg-white text-gray-600 border-gray-200"}`}>
+              {k === "Por defecto (sistema)" && <span aria-hidden>★</span>}{k}
+            </button>
           ))}
+          {fields.length > 0 && <span className="text-[11px] text-gray-400 ml-auto">Reemplaza los campos actuales</span>}
         </div>
       )}
 
@@ -291,6 +326,18 @@ export function Builder({ productId, editing, onClose }: { productId: string; ed
                 </label>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {pendingTpl && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setPendingTpl(null)}>
+          <div className="w-full max-w-xs rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm text-gray-700 mb-4">Esto reemplaza los <span className="font-medium">{fields.length}</span> campos actuales por la plantilla «<span className="font-medium">{pendingTpl}</span>». ¿Continuar?</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setPendingTpl(null)} className="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button onClick={() => { loadTemplate(pendingTpl); setPendingTpl(null); }} className="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700">Reemplazar</button>
+            </div>
           </div>
         </div>
       )}

@@ -17,8 +17,9 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
-      router.push("/dashboard");
+      const u = await login(email, password);
+      // El médico aterriza en su cabina (Consulta); el resto, en el panel.
+      router.push(u.role === "DOCTOR" ? "/consulta" : "/dashboard");
     } catch {
       setError("Credenciales incorrectas. Inténtalo de nuevo.");
     } finally {

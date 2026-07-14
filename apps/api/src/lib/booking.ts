@@ -1,8 +1,8 @@
 import { prisma } from "./prisma.js";
 
 // Detecta si una cita [start, start+durationMin) solapa con alguna reserva
-// existente de la sala (excluyendo CANCELLED/NO_SHOW y, opcionalmente, una cita).
-// El índice único anti-double-booking se eliminó: el solape se controla aquí.
+// existente de la sala (excluyendo CANCELLED/NO_SHOW/RESCHEDULED y, opcionalmente,
+// una cita). El índice único anti-double-booking se eliminó: se controla aquí.
 export async function roomHasOverlap(
   roomId: string,
   start: Date,
@@ -15,7 +15,7 @@ export async function roomHasOverlap(
   const candidates = await prisma.appointment.findMany({
     where: {
       roomId,
-      status: { notIn: ["CANCELLED", "NO_SHOW"] },
+      status: { notIn: ["CANCELLED", "NO_SHOW", "RESCHEDULED"] },
       scheduledAt: { gte: new Date(startMs - window), lte: new Date(endMs + window) },
       ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
     },

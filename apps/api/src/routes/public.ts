@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { encryptDni } from "../lib/crypto.js";
 import { validateSpanishDni, hashDni } from "../lib/dni.js";
-import { computeDaySlots, productAllowedInRoom } from "../lib/availability.js";
+import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/availability.js";
 import { roomHasOverlap } from "../lib/booking.js";
 
 // ── Envelope (tarea 14.7) ────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ const publicAppointmentSchema = z.object({
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Sched = { openTime?: string; closeTime?: string; activeDays?: number[] };
+type Sched = { slotsByDay?: Record<string, string[]> };
 
 export async function publicApiRoutes(server: FastifyInstance) {
   // Rate limit (la auth por API Key ya la garantiza el plugin global).
@@ -95,9 +95,9 @@ export async function publicApiRoutes(server: FastifyInstance) {
       const product = await prisma.product.findFirst({ where: { id: q.data.productId, tenantId: request.ctx.tenantId, active: true } });
       if (!product) return fail(reply, 400, "INVALID_PRODUCT", "Producto no válido");
 
-      const config = await prisma.tenantConfig.findUnique({ where: { tenantId: request.ctx.tenantId } });
-      const step = config?.bookingGranularity ?? 15;
       const holidays = (center.holidays as string[] | null) ?? [];
+      const config = await prisma.tenantConfig.findUnique({ where: { tenantId: request.ctx.tenantId }, select: { timezone: true } });
+      const now = nowInTimezone(config?.timezone || "Europe/Madrid");
       const dayStart = new Date(`${q.data.date}T00:00:00.000Z`);
       const dayEnd = new Date(`${q.data.date}T23:59:59.999Z`);
 
@@ -111,8 +111,8 @@ export async function publicApiRoutes(server: FastifyInstance) {
         });
         const booked = existing.map((a) => ({ start: a.scheduledAt.getTime(), end: a.scheduledAt.getTime() + a.durationMinutes * 60_000 }));
         const slots = computeDaySlots({
-          date: q.data.date, openTime: sched.openTime ?? "08:00", closeTime: sched.closeTime ?? "20:00",
-          activeDays: sched.activeDays, slotDuration: product.slotDuration, step, booked, isHoliday: holidays.includes(q.data.date),
+          date: q.data.date, slotsByDay: sched.slotsByDay,
+          slotDuration: product.slotDuration, booked, isHoliday: holidays.includes(q.data.date), now,
         });
         rooms.push({ roomId: room.id, roomName: room.name, slots });
       }
@@ -142,6 +142,8 @@ export async function publicApiRoutes(server: FastifyInstance) {
         dniHash,
         dniEncrypted: encryptDni(body.data.dni),
         birthDate: body.data.birthDate ? new Date(body.data.birthDate) : null,
+        // Reserva online: el propio paciente ha sido informado y ha consentido.
+        gdprInformedAt: new Date(),
         gdprConsentAt: new Date(),
         gdprConsentIp: request.ip,
       },

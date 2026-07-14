@@ -15,6 +15,7 @@ export interface MagicLinkPayload {
   cid: string;      // customer_id
   pid: string;      // product_id
   tid: string;      // tenant_id
+  aid?: string;     // appointment_id — presente en links de CONFIRMACIÓN de cita
   type: "magic_link";
   iat?: number;
   exp?: number;
@@ -38,6 +39,14 @@ export function signMagicLinkToken(payload: Omit<MagicLinkPayload, "iat" | "exp"
   return jwt.sign(payload, secret, {
     algorithm: "HS256",
     expiresIn: "24h",
+  });
+}
+
+// Link de confirmación de cita: vive más (hasta el día de la cita), 30 días.
+export function signConfirmationToken(payload: Omit<MagicLinkPayload, "iat" | "exp">): string {
+  return jwt.sign(payload, secret, {
+    algorithm: "HS256",
+    expiresIn: "30d",
   });
 }
 

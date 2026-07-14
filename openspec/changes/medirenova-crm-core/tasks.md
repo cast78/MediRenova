@@ -48,17 +48,17 @@
 - [x] 5.1 Implementar endpoints CRUD de centros (`/centers`) con validación de tenant_id
 - [x] 5.2 Implementar validación de desactivación de centro con reservas futuras
 - [x] 5.3 Implementar endpoints CRUD de salas (`/rooms`, `/centers/{id}/rooms`)
-- [ ] 5.4 Implementar endpoints de horarios semanales de sala (`PUT /rooms/{id}/schedule`)
+- [x] 5.4 Implementar horarios de sala por huecos explícitos por día (`schedule.slotsByDay`, no lineal; create/patch de sala)
 - [x] 5.5 Implementar endpoints de festivos de centro (`PUT /centers/{id}/holidays`)
 - [x] 5.6 Implementar UI de gestión de centros en Next.js (listado, creación, edición)
-- [x] 5.7 Implementar UI de gestión de salas y horarios (calendario semanal visual)
+- [x] 5.7 Implementar UI de gestión de salas y horarios (editor de huecos por día + vista semanal read-only)
 
 ## 6. Productos y Reglas de Renovación
 
 - [x] 6.1 Implementar endpoints CRUD de productos (`/products`) con validación de reglas por edad
 - [x] 6.2 Implementar validación de cobertura completa de rangos de edad en `renewal_rules`
 - [x] 6.3 Implementar función de cálculo de `expiry_date` dado `birth_date` + `revision_date` + `renewal_rules`
-- [ ] 6.4 Implementar endpoint de upload de plantilla PDF por producto
+- [x] 6.4 Implementar plantilla HTML/Handlebars del certificado por producto (GET/PUT con validación + preview PDF; fallback a la plantilla por defecto)
 - [x] 6.5 Implementar UI de gestión de productos con editor de reglas de renovación por edad
 - [x] 6.6 Cargar reglas DGT por defecto como seed para productos de tipo `CARNET_CONDUCIR`
 

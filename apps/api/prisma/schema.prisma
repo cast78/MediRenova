@@ -32,6 +32,7 @@ enum ProductType {
 enum AppointmentStatus {
   PENDING
   CONFIRMED
+  ATTENDED
   CANCELLED
   RESCHEDULED
   NO_SHOW
@@ -44,10 +45,32 @@ enum AppointmentSource {
   WALK_IN
 }
 
+// Motivo de una cancelación. Distingue oportunidades de recaptura (CLIENTE) de
+// las que el centro debería reprogramar (CENTRO) y del ruido (DUPLICADA/ERROR,
+// excluibles de métricas).
+enum CancellationReason {
+  CLIENTE
+  CENTRO
+  DUPLICADA
+  ERROR
+  OTRO
+}
+
 enum RevisionOutcome {
   PENDING
   APTO
   NO_APTO
+}
+
+// Episodio físico de un cliente en un centro (el "presente"): desde que llega
+// (check-in) hasta que sale con el certificado. Distinto de la reserva (futuro)
+// y de la revisión (registro clínico). Ver módulo Visitas.
+enum VisitStatus {
+  WAITING
+  IN_PROGRESS
+  COMPLETED
+  LEFT
+  CANCELLED
 }
 
 enum WorkflowAction {
@@ -62,6 +85,29 @@ enum WorkflowExecutionStatus {
   COMPLETED
 }
 
+// Canal de una plantilla/campaña de comunicación comercial.
+enum MessageChannel {
+  EMAIL
+  WHATSAPP
+  SMS
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum CampaignRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED // sin consentimiento o sin medio de contacto al momento del envío
+}
+
 enum AuditAction {
   CREATE
   UPDATE
@@ -73,12 +119,15 @@ enum AuditAction {
 // ─────────────────────────────────────────────────────────────
 
 model Tenant {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid())
+  name           String
+  slug           String   @unique
+  active         Boolean  @default(true)
+  legalName      String?  @map("legal_name")
+  taxId          String?  @map("tax_id")
+  billingAddress String?  @map("billing_address")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   config    TenantConfig?
   apiKeys   ApiKey[]
@@ -102,6 +151,13 @@ model TenantConfig {
   maxAppointmentsPerDay Int?    @map("max_appointments_per_day")
   metaWaPhoneNumberId   String? @map("meta_wa_phone_number_id")
   metaWaAccessToken     String? @map("meta_wa_access_token")
+  dataRetentionMonths   Int?    @map("data_retention_months")
+  minBookingLeadHours   Int?    @map("min_booking_lead_hours")
+  cancellationWindowHours Int?  @map("cancellation_window_hours")
+  noShowGraceMinutes    Int?    @map("no_show_grace_minutes")
+  consentText           String? @map("consent_text")
+  waitAmberMinutes      Int?    @map("wait_amber_minutes")
+  waitRedMinutes        Int?    @map("wait_red_minutes")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -212,6 +268,7 @@ model Center {
   rooms       Room[]
   staff       User[]
   memberships UserCenter[]
+  visits      Visit[]
 
   @@index([tenantId])
   @@map("centers")
@@ -230,6 +287,7 @@ model Room {
   center       Center        @relation(fields: [centerId], references: [id], onDelete: Cascade)
   doctors      RoomDoctor[]
   appointments Appointment[]
+  visits       Visit[]
 
   @@index([centerId])
   @@map("rooms")
@@ -257,6 +315,13 @@ model Product {
   type         ProductType
   slotDuration Int         @map("slot_duration")
   renewalRules Json        @map("renewal_rules")
+  // Plantilla HTML/Handlebars del certificado. NULL = se usa la plantilla por
+  // defecto del sistema (lib/certificate.ts). Variables {{...}} mapeadas a CertificateData.
+  certificateTemplate String? @map("certificate_template")
+  // Configuración del editor visual del certificado (bloques, color, logo…). Si está
+  // presente, tiene prioridad sobre certificateTemplate (modo visual). NULL + template
+  // NULL = plantilla por defecto del sistema. Ver lib/certificate-config.ts.
+  certificateConfig Json? @map("certificate_config")
   active       Boolean     @default(true)
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
@@ -306,16 +371,28 @@ model Customer {
   province      String?
   phone         String?
   email         String?
+  // Deber de información RGPD cumplido en el alta (atestación del personal). Es
+  // distinto del consentimiento firmado (gdprConsentAt): la base legal del
+  // tratamiento clínico es la asistencia sanitaria (art. 9.2.h), no el consentimiento.
+  gdprInformedAt DateTime? @map("gdpr_informed_at")
   gdprConsentAt DateTime? @map("gdpr_consent_at")
   gdprConsentIp String?   @map("gdpr_consent_ip")
+  // Consentimientos de comunicación (RGPD): preferencia del cliente por canal.
+  acceptsEmail        Boolean @default(false) @map("accepts_email")
+  acceptsSms          Boolean @default(false) @map("accepts_sms")
+  acceptsWhatsapp     Boolean @default(false) @map("accepts_whatsapp")
+  // Clave en storage de la firma de consentimiento del paciente (RGPD).
+  consentSignatureKey String? @map("consent_signature_key")
   deletedAt     DateTime? @map("deleted_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  appointments       Appointment[]
-  revisions          Revision[]
-  workflowExecutions WorkflowExecution[]
+  appointments        Appointment[]
+  revisions           Revision[]
+  visits              Visit[]
+  workflowExecutions  WorkflowExecution[]
+  campaignRecipients  CampaignRecipient[]
 
   @@unique([tenantId, dniHash])
   @@index([tenantId])
@@ -338,23 +415,70 @@ model Appointment {
   durationMinutes Int               @map("duration_minutes")
   status          AppointmentStatus @default(PENDING)
   source          AppointmentSource @default(BACKOFFICE)
+  cancelReason    CancellationReason? @map("cancel_reason")
   notes           String?
   icsUrl          String?           @map("ics_url")
   createdById     String?           @map("created_by_id")
+  // Trazabilidad de reprogramación (modelo "fantasma"): al reprogramar, esta cita
+  // queda RESCHEDULED en su día y se crea una NUEVA cuyo rescheduledFromId apunta
+  // aquí. Permite ver el rastro en el día original y navegar vieja↔nueva.
+  rescheduledFromId String?         @unique @map("rescheduled_from_id")
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
-  customer Customer  @relation(fields: [customerId], references: [id])
-  product  Product   @relation(fields: [productId], references: [id])
-  room     Room      @relation(fields: [roomId], references: [id])
-  doctor   User?     @relation(fields: [doctorId], references: [id])
-  revision Revision?
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  product         Product       @relation(fields: [productId], references: [id])
+  room            Room          @relation(fields: [roomId], references: [id])
+  doctor          User?         @relation(fields: [doctorId], references: [id])
+  revision        Revision?
+  visit           Visit?
+  rescheduledFrom Appointment?  @relation("Reschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
+  rescheduledTo   Appointment?  @relation("Reschedule")
 
   @@index([tenantId])
   @@index([tenantId, scheduledAt])
   @@index([tenantId, status])
   @@index([roomId, scheduledAt])
   @@map("appointments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// VISITS
+// ─────────────────────────────────────────────────────────────
+
+// Presencia física del cliente en el centro. Nace en el check-in (desde una
+// reserva o como walk-in sin reserva) y muere al cerrar la revisión. Es la
+// fuente de verdad OPERATIVA (llegada, espera, sala); la revisión sigue siendo
+// la fuente clínica. Alimenta el dashboard de actividad por centro y sala.
+model Visit {
+  id            String      @id @default(uuid())
+  tenantId      String      @map("tenant_id")
+  centerId      String      @map("center_id")
+  customerId    String      @map("customer_id")
+  // Reserva de origen. NULL = walk-in (llegó sin cita previa).
+  appointmentId String?     @unique @map("appointment_id")
+  // Sala en la que está ahora mismo (columna del tablero). NULL mientras espera.
+  currentRoomId String?     @map("current_room_id")
+  status        VisitStatus @default(WAITING)
+  arrivedAt     DateTime    @default(now()) @map("arrived_at")
+  calledAt      DateTime?   @map("called_at")
+  startedAt     DateTime?   @map("started_at")
+  completedAt   DateTime?   @map("completed_at")
+  notes         String?
+  createdById   String?     @map("created_by_id")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  center      Center       @relation(fields: [centerId], references: [id])
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  currentRoom Room?        @relation(fields: [currentRoomId], references: [id])
+  revision    Revision?
+
+  @@index([tenantId])
+  @@index([tenantId, centerId, status])
+  @@index([tenantId, arrivedAt])
+  @@map("visits")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -365,6 +489,9 @@ model Revision {
   id             String          @id @default(uuid())
   tenantId       String          @map("tenant_id")
   appointmentId  String          @unique @map("appointment_id")
+  // Visita (episodio físico) a la que pertenece. Nullable durante la transición
+  // al módulo de Visitas; se enlaza al abrir la revisión desde una visita.
+  visitId        String?         @unique @map("visit_id")
   customerId     String          @map("customer_id")
   productId      String          @map("product_id")
   roomId         String          @map("room_id")
@@ -381,6 +508,7 @@ model Revision {
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
   appointment        Appointment         @relation(fields: [appointmentId], references: [id])
+  visit              Visit?              @relation(fields: [visitId], references: [id])
   customer           Customer            @relation(fields: [customerId], references: [id])
   doctor             User                @relation(fields: [doctorId], references: [id])
   formTemplate       FormTemplate        @relation(fields: [formTemplateId], references: [id])
@@ -412,6 +540,109 @@ model RevisionAttachment {
 // ─────────────────────────────────────────────────────────────
 // COMMERCIAL WORKFLOW
 // ─────────────────────────────────────────────────────────────
+
+// Plantilla de mensaje reutilizable en avisos y campañas. `body` admite
+// variables tipo {{nombre}} {{producto}} {{caduca}} que se sustituyen al enviar.
+// `subject` solo aplica al canal EMAIL.
+model MessageTemplate {
+  id        String         @id @default(uuid())
+  tenantId  String         @map("tenant_id")
+  name      String
+  channel   MessageChannel
+  subject   String?
+  body      String
+  active    Boolean        @default(true)
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([tenantId, channel])
+  @@map("message_templates")
+
+  campaigns Campaign[]
+}
+
+// Segmento de clientes: un nombre + una definición JSON de filtros (producto,
+// ventana de caducidad, edad, centro, no-shows, consentimiento). La definición se
+// traduce a un `where` de Customer en runtime (lib/segments.ts), así que el conteo
+// es siempre "en vivo" y no hay que materializar la pertenencia.
+model Segment {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  name       String
+  definition Json
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("segments")
+
+  campaigns Campaign[]
+}
+
+// Campaña: envío puntual de una plantilla a un segmento por un canal. El canal se
+// deriva de la plantilla. Los contadores se materializan tras el envío para el
+// panel de resultados (los detalles por cliente viven en CampaignRecipient).
+model Campaign {
+  id           String         @id @default(uuid())
+  tenantId     String         @map("tenant_id")
+  name         String
+  channel      MessageChannel
+  templateId   String         @map("template_id")
+  segmentId    String         @map("segment_id")
+  status       CampaignStatus @default(DRAFT)
+  scheduledAt  DateTime?      @map("scheduled_at")
+  sentAt       DateTime?      @map("sent_at")
+  totalCount   Int            @default(0) @map("total_count")
+  sentCount    Int            @default(0) @map("sent_count")
+  failedCount  Int            @default(0) @map("failed_count")
+  skippedCount Int            @default(0) @map("skipped_count")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  template   MessageTemplate     @relation(fields: [templateId], references: [id])
+  segment    Segment             @relation(fields: [segmentId], references: [id])
+  recipients CampaignRecipient[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("campaigns")
+}
+
+// Registro ligero de acciones de cliente que no dejan rastro en otras tablas
+// (se solicitó confirmación, el cliente confirmó/canceló por enlace, etc.). Alimenta
+// el timeline de la ficha del cliente. `type` es texto libre (extensible sin migrar).
+model CustomerEvent {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  customerId    String   @map("customer_id")
+  appointmentId String?  @map("appointment_id")
+  type          String // confirmacion_solicitada | cliente_confirmo | cliente_cancelo | ...
+  channel       String? // WHATSAPP | EMAIL | SMS
+  actor         String? // recepcion | cliente | sistema
+  detail        String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, customerId])
+  @@map("customer_events")
+}
+
+model CampaignRecipient {
+  id         String                  @id @default(uuid())
+  campaignId String                  @map("campaign_id")
+  customerId String                  @map("customer_id")
+  status     CampaignRecipientStatus @default(PENDING)
+  error      String?
+  sentAt     DateTime?               @map("sent_at")
+  createdAt  DateTime                @default(now()) @map("created_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([campaignId])
+  @@index([campaignId, status])
+  @@map("campaign_recipients")
+}
 
 model WorkflowRule {
   id               String         @id @default(uuid())

@@ -3,14 +3,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { apiFetch, getAccessToken } from "@/lib/api";
+import { apiFetch, ApiError, authHeaders } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface FormField {
   name: string;
   label: string;
-  type: "text" | "number" | "boolean" | "select" | "textarea" | "date";
+  type: "text" | "number" | "boolean" | "select" | "textarea" | "date" | "image";
   required?: boolean;
   options?: string[];
   unit?: string;
@@ -150,9 +150,8 @@ function AttachmentThumb({
     let revoked = false;
     let objectUrl: string | null = null;
     void (async () => {
-      const token = getAccessToken();
       const res = await fetch(`/api/proxy/revisions/${revisionId}/attachments/${att.id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: authHeaders(),
       });
       if (!res.ok || revoked) return;
       const blob = await res.blob();
@@ -167,9 +166,8 @@ function AttachmentThumb({
   }, [revisionId, att.id, isImage]);
 
   async function open() {
-    const token = getAccessToken();
     const res = await fetch(`/api/proxy/revisions/${revisionId}/attachments/${att.id}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: authHeaders(),
     });
     if (!res.ok) return;
     const blob = await res.blob();
@@ -202,6 +200,127 @@ function AttachmentThumb({
         </button>
       )}
       <p className="mt-1 text-[10px] text-gray-500 truncate" title={att.fileName}>{att.fileName}</p>
+    </div>
+  );
+}
+
+// ── Captura de cámara (getUserMedia) ───────────────────────────────────────────
+
+function CameraCapture({ onCapture, onClose }: { onCapture: (blob: Blob) => void; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    navigator.mediaDevices
+      ?.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      .then((stream) => {
+        if (!active) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) { videoRef.current.srcObject = stream; void videoRef.current.play(); setReady(true); }
+      })
+      .catch(() => setError("No se pudo acceder a la cámara. Concede permisos o usa «Adjuntar imagen»."));
+    return () => { active = false; streamRef.current?.getTracks().forEach((t) => t.stop()); };
+  }, []);
+
+  function snap() {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = v.videoWidth;
+    canvas.height = v.videoHeight;
+    canvas.getContext("2d")!.drawImage(v, 0, 0);
+    canvas.toBlob((b) => { if (b) { onCapture(b); onClose(); } }, "image/jpeg", 0.9);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl p-4 w-full max-w-lg">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-medium text-gray-900">Hacer foto</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+        </div>
+        {error ? (
+          <p className="text-sm text-red-600 py-8 text-center">{error}</p>
+        ) : (
+          <>
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <video ref={videoRef} playsInline className="w-full rounded-lg bg-black aspect-video object-cover" />
+            <div className="flex justify-end gap-2 mt-3">
+              <button onClick={onClose} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Cancelar</button>
+              <button onClick={snap} disabled={!ready} className="text-sm px-4 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Capturar</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Campo de imagen (foto/cámara o adjuntar), guardado como adjunto del campo ──
+
+function ImageField({
+  revisionId,
+  fieldName,
+  attachment,
+  disabled,
+  uploading,
+  onUpload,
+  onDelete,
+}: {
+  revisionId: string;
+  fieldName: string;
+  attachment: Attachment | undefined;
+  disabled: boolean;
+  uploading: boolean;
+  onUpload: (fieldName: string, blob: Blob, fileName: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [showCam, setShowCam] = useState(false);
+
+  if (attachment) {
+    return (
+      <div className="flex items-start gap-3">
+        <AttachmentThumb revisionId={revisionId} att={attachment} onDelete={onDelete} canDelete={!disabled} />
+        {!disabled && <p className="text-xs text-gray-400 pt-1">Imagen guardada. Bórrala para cambiarla.</p>}
+      </div>
+    );
+  }
+  if (disabled) return <p className="text-sm text-gray-400">Sin imagen.</p>;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setShowCam(true)}
+        disabled={uploading}
+        className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-700 disabled:opacity-50"
+      >
+        📷 Hacer foto
+      </button>
+      <label className={`text-sm px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer ${uploading ? "opacity-50" : "hover:bg-gray-50 text-gray-700"}`}>
+        Adjuntar imagen
+        <input
+          type="file"
+          accept="image/*"
+          disabled={uploading}
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onUpload(fieldName, f, f.name);
+            e.target.value = "";
+          }}
+        />
+      </label>
+      {uploading && <span className="text-xs text-gray-400">Subiendo…</span>}
+      {showCam && (
+        <CameraCapture
+          onCapture={(blob) => onUpload(fieldName, blob, `foto-${fieldName}.jpg`)}
+          onClose={() => setShowCam(false)}
+        />
+      )}
     </div>
   );
 }
@@ -296,8 +415,10 @@ export default function RevisionPage() {
   const [outcome, setOutcome] = useState<"APTO" | "NO_APTO">("APTO");
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState<string[]>([]);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
   const [savingSig, setSavingSig] = useState(false);
 
   const isCompleted = revision?.outcome !== "PENDING";
@@ -306,14 +427,13 @@ export default function RevisionPage() {
     if (!files || files.length === 0) return;
     setUploading(true);
     setError(null);
-    const token = getAccessToken();
     try {
       for (const file of Array.from(files)) {
         const fd = new FormData();
         fd.append("file", file);
         const res = await fetch(`/api/proxy/revisions/${id}/attachments`, {
           method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: authHeaders(),
           body: fd,
         });
         if (!res.ok) throw new Error("No se pudo subir el archivo (revisa tipo/tamaño)");
@@ -326,11 +446,36 @@ export default function RevisionPage() {
     }
   }
 
+  // Sube la imagen de un campo (foto de cámara o archivo) como adjunto con
+  // fieldId = nombre del campo, reemplazando la anterior de ese campo si existía.
+  async function uploadFieldImage(fieldName: string, blob: Blob, fileName: string) {
+    setUploadingField(fieldName);
+    setError(null);
+    const authHeader = authHeaders();
+    try {
+      for (const a of (revision?.attachments ?? []).filter((x) => x.fieldId === fieldName)) {
+        await fetch(`/api/proxy/revisions/${id}/attachments/${a.id}`, { method: "DELETE", headers: authHeader });
+      }
+      const fd = new FormData();
+      fd.append("file", new File([blob], fileName, { type: blob.type || "image/jpeg" }));
+      const res = await fetch(`/api/proxy/revisions/${id}/attachments?fieldId=${encodeURIComponent(fieldName)}`, {
+        method: "POST",
+        headers: authHeader,
+        body: fd,
+      });
+      if (!res.ok) throw new Error("No se pudo subir la imagen (revisa tipo/tamaño)");
+      await queryClient.invalidateQueries({ queryKey: ["revision", id] });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al subir la imagen");
+    } finally {
+      setUploadingField(null);
+    }
+  }
+
   async function deleteAttachment(attId: string) {
-    const token = getAccessToken();
     await fetch(`/api/proxy/revisions/${id}/attachments/${attId}`, {
       method: "DELETE",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: authHeaders(),
     });
     await queryClient.invalidateQueries({ queryKey: ["revision", id] });
   }
@@ -338,8 +483,7 @@ export default function RevisionPage() {
   async function uploadSignature(blob: Blob) {
     setSavingSig(true);
     setError(null);
-    const token = getAccessToken();
-    const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+    const authHeader = authHeaders();
     try {
       // Reemplaza la firma anterior, si existe
       for (const a of (revision?.attachments ?? []).filter((x) => x.fieldId === "signature")) {
@@ -365,9 +509,8 @@ export default function RevisionPage() {
     setPdfLoading(true);
     setError(null);
     try {
-      const token = getAccessToken();
       const res = await fetch(`/api/proxy/revisions/${id}/pdf`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: authHeaders(),
       });
       if (!res.ok) throw new Error("No se pudo generar el certificado");
       const blob = await res.blob();
@@ -412,6 +555,11 @@ export default function RevisionPage() {
       void queryClient.invalidateQueries({ queryKey: ["revision", id] });
     },
     onError: (err: unknown) => {
+      // El backend devuelve la lista de campos que faltan (INCOMPLETE_REVISION).
+      if (err instanceof ApiError && Array.isArray(err.errors)) {
+        const e = err.errors[0] as { code?: string; fields?: string[] } | undefined;
+        if (e?.code === "INCOMPLETE_REVISION" && Array.isArray(e.fields)) { setMissing(e.fields); return; }
+      }
       setError(err instanceof Error ? err.message : "Error al completar la revisión");
     },
   });
@@ -419,6 +567,7 @@ export default function RevisionPage() {
   function handleFieldChange(name: string, value: unknown) {
     const next = { ...formData, [name]: value };
     setFormData(next);
+    setMissing([]);
     saveDraft.mutate(next);
   }
 
@@ -429,7 +578,38 @@ export default function RevisionPage() {
   const fields: FormField[] = formTemplate.schema?.fields ?? [];
   const allAttachments = revision.attachments ?? [];
   const signatureAtt = allAttachments.find((a) => a.fieldId === "signature");
-  const generalAttachments = allAttachments.filter((a) => a.fieldId !== "signature");
+  // Los adjuntos de campos imagen pertenecen a su campo, no a la sección general.
+  const imageFieldNames = new Set(fields.filter((f) => f.type === "image").map((f) => f.name));
+  const generalAttachments = allAttachments.filter((a) => a.fieldId !== "signature" && !imageFieldNames.has(a.fieldId));
+
+  // Qué falta para poder finalizar: formulario con campos, obligatorios rellenos,
+  // notas clínicas y firma. Misma lógica que valida el backend.
+  function computeMissing(): string[] {
+    const miss: string[] = [];
+    if (fields.length === 0) miss.push("No hay un formulario con campos definidos para este producto");
+    for (const f of fields) {
+      if (!f.required) continue;
+      const label = f.label || f.name;
+      if (f.type === "image") {
+        if (!allAttachments.some((a) => a.fieldId === f.name)) miss.push(`${label} (imagen)`);
+      } else if (f.type === "boolean") {
+        continue;
+      } else {
+        const v = formData[f.name];
+        const empty = v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+        if (empty) miss.push(label);
+      }
+    }
+    if (!notes.trim()) miss.push("Notas clínicas");
+    if (!signatureAtt) miss.push("Firma del paciente");
+    return miss;
+  }
+
+  function handleComplete() {
+    const miss = computeMissing();
+    setMissing(miss);
+    if (miss.length === 0) { setError(null); complete.mutate(); }
+  }
 
   return (
     <div className="p-6 max-w-2xl">
@@ -495,12 +675,24 @@ export default function RevisionPage() {
                 {field.label}
                 {field.required && <span className="text-red-500 ml-1">*</span>}
               </label>
-              <DynamicField
-                field={field}
-                value={formData[field.name]}
-                onChange={(v) => handleFieldChange(field.name, v)}
-                disabled={isCompleted}
-              />
+              {field.type === "image" ? (
+                <ImageField
+                  revisionId={id}
+                  fieldName={field.name}
+                  attachment={allAttachments.find((a) => a.fieldId === field.name)}
+                  disabled={isCompleted}
+                  uploading={uploadingField === field.name}
+                  onUpload={(fn, blob, name) => void uploadFieldImage(fn, blob, name)}
+                  onDelete={(aid) => void deleteAttachment(aid)}
+                />
+              ) : (
+                <DynamicField
+                  field={field}
+                  value={formData[field.name]}
+                  onChange={(v) => handleFieldChange(field.name, v)}
+                  disabled={isCompleted}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -543,7 +735,7 @@ export default function RevisionPage() {
 
       {/* Signature */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-        <h2 className="font-medium text-gray-900 mb-4">Firma del paciente</h2>
+        <h2 className="font-medium text-gray-900 mb-4">Firma del paciente <span className="text-red-500">*</span></h2>
         {signatureAtt ? (
           <div className="flex items-start gap-4">
             <AttachmentThumb
@@ -566,10 +758,10 @@ export default function RevisionPage() {
         <h2 className="font-medium text-gray-900 mb-4">Resultado</h2>
 
         <div className="mb-4">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Notas clínicas</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Notas clínicas <span className="text-red-500">*</span></label>
           <textarea
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={(e) => { setNotes(e.target.value); setMissing([]); }}
             disabled={isCompleted}
             rows={3}
             placeholder="Observaciones, restricciones, recomendaciones..."
@@ -597,10 +789,19 @@ export default function RevisionPage() {
               </div>
             </div>
 
+            {missing.length > 0 && (
+              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                <p className="text-xs font-medium text-amber-800 mb-1">Faltan datos para finalizar la revisión:</p>
+                <ul className="text-xs text-amber-700 list-disc list-inside space-y-0.5">
+                  {missing.map((m) => <li key={m}>{m}</li>)}
+                </ul>
+              </div>
+            )}
+
             {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
 
             <button
-              onClick={() => complete.mutate()}
+              onClick={handleComplete}
               disabled={complete.isPending}
               className="w-full py-3 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-50"
             >

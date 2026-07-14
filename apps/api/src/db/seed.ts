@@ -129,14 +129,16 @@ async function main() {
       centerId: demoCenter.id,
       name: "Sala 1",
       allowedProductIds: [],
-      // Monday–Friday 09:00–14:00
-      schedule: [
-        { dayOfWeek: 1, startTime: "09:00", endTime: "14:00" },
-        { dayOfWeek: 2, startTime: "09:00", endTime: "14:00" },
-        { dayOfWeek: 3, startTime: "09:00", endTime: "14:00" },
-        { dayOfWeek: 4, startTime: "09:00", endTime: "14:00" },
-        { dayOfWeek: 5, startTime: "09:00", endTime: "14:00" },
-      ],
+      // Huecos explícitos por día (0=Dom … 6=Sáb): lunes a viernes 09:00–13:30 cada 30 min.
+      schedule: {
+        slotsByDay: {
+          "1": ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"],
+          "2": ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"],
+          "3": ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"],
+          "4": ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"],
+          "5": ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"],
+        },
+      },
     },
   });
   console.log("✓ Demo room:", demoRoom.name);
@@ -150,39 +152,53 @@ async function main() {
   console.log("✓ Doctor assigned to room");
 
   // ─── Demo Product: Carnet B ───────────────────────────────────
+  // Carnet Grupo 1 (A/B/B+E): 10 años hasta los 65, 5 años a partir de 65 (DGT).
+  const carnetBRules = {
+    requiresMedical: true,
+    requiresPsych: true,
+    requiresVision: false,
+    ageRules: [
+      { minAge: 0,  maxAge: 17,  validityDays: 0 },
+      { minAge: 18, maxAge: 65,  validityDays: 3650 },
+      { minAge: 66, maxAge: 120, validityDays: 1825 },
+    ],
+  };
   const carnetB = await prisma.product.upsert({
     where: { id: "00000000-0000-0000-0000-000000000003" },
-    update: {},
+    update: { renewalRules: carnetBRules },
     create: {
       id: "00000000-0000-0000-0000-000000000003",
       tenantId: demoTenant.id,
       name: "Carnet de Conducir (A/B/B+E)",
       type: "CARNET_CONDUCIR",
       slotDuration: 20,
-      renewalRules: [
-        { ageMin: 0,  ageMax: 64, validityYears: 10, categories: ["A", "B", "B+E"] },
-        { ageMin: 65, ageMax: 70, validityYears: 5,  categories: ["A", "B", "B+E"] },
-        { ageMin: 71, ageMax: 999,validityYears: 2,  categories: ["A", "B", "B+E"] },
-      ],
+      renewalRules: carnetBRules,
     },
   });
   console.log("✓ Product:", carnetB.name);
 
   // ─── Demo Product: Carnet C/D ─────────────────────────────────
+  // Carnet Grupo 2 (C/D): 5 años hasta los 65, 3 años a partir de 65 (DGT).
+  const carnetCDRules = {
+    requiresMedical: true,
+    requiresPsych: true,
+    requiresVision: true,
+    ageRules: [
+      { minAge: 0,  maxAge: 17,  validityDays: 0 },
+      { minAge: 18, maxAge: 65,  validityDays: 1825 },
+      { minAge: 66, maxAge: 120, validityDays: 1095 },
+    ],
+  };
   const carnetCD = await prisma.product.upsert({
     where: { id: "00000000-0000-0000-0000-000000000004" },
-    update: {},
+    update: { renewalRules: carnetCDRules },
     create: {
       id: "00000000-0000-0000-0000-000000000004",
       tenantId: demoTenant.id,
       name: "Carnet de Conducir (C/D)",
       type: "CARNET_CONDUCIR",
       slotDuration: 30,
-      renewalRules: [
-        { ageMin: 0,  ageMax: 44, validityYears: 5, categories: ["C", "C+E", "D", "D+E"] },
-        { ageMin: 45, ageMax: 64, validityYears: 3, categories: ["C", "C+E", "D", "D+E"] },
-        { ageMin: 65, ageMax: 999,validityYears: 1, categories: ["C", "C+E", "D", "D+E"] },
-      ],
+      renewalRules: carnetCDRules,
     },
   });
   console.log("✓ Product:", carnetCD.name);

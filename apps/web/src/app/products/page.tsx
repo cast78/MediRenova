@@ -4,9 +4,11 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Builder, type FormTemplate } from "@/components/form-builder";
+import { CertificateTemplateModal } from "@/components/certificate-editor";
+import { Car, Target, IdCard, Package, Clock, FileText, Award, Check, AlertTriangle, Minus, MoreVertical } from "lucide-react";
 
 // Modal con el form builder del producto (abre el formulario activo o uno nuevo)
-function ProductFormModal({ productId, onClose }: { productId: string; onClose: () => void }) {
+function ProductFormModal({ productId, productName, onClose }: { productId: string; productName?: string | undefined; onClose: () => void }) {
   const { data: forms, isLoading } = useQuery<FormTemplate[]>({
     queryKey: ["forms", productId],
     queryFn: () => apiFetch<FormTemplate[]>(`/products/${productId}/forms`),
@@ -18,7 +20,7 @@ function ProductFormModal({ productId, onClose }: { productId: string; onClose: 
         {isLoading ? (
           <div className="bg-white rounded-xl p-8 text-center text-gray-400">Cargando formulario...</div>
         ) : (
-          <Builder productId={productId} editing={editing} onClose={onClose} />
+          <Builder productId={productId} productName={productName} editing={editing} onClose={onClose} />
         )}
       </div>
     </div>
@@ -48,6 +50,8 @@ interface Product {
   slotDuration: number;
   renewalRules: RenewalRules;
   active: boolean;
+  hasOwnForm: boolean;
+  hasCertificateTemplate: boolean;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -59,6 +63,11 @@ const PRODUCT_TYPES = [
   { value: "OTRO", label: "Otro" },
 ];
 const TYPE_MAP = Object.fromEntries(PRODUCT_TYPES.map((t) => [t.value, t.label]));
+const TYPE_ICON: Record<string, typeof Car> = {
+  CARNET_CONDUCIR: Car,
+  LICENCIA_ARMAS: Target,
+  DNI: IdCard,
+};
 
 // ── Product Modal ─────────────────────────────────────────────────────────────
 
@@ -328,16 +337,18 @@ function ProductModal({ product, onClose }: { product?: Product; onClose: () => 
   );
 }
 
-// ── Product Row ───────────────────────────────────────────────────────────────
+// ── Product Card ──────────────────────────────────────────────────────────────
 
-function ProductRow({ product }: { product: Product }) {
+function ProductCard({ product }: { product: Product }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [showTemplate, setShowTemplate] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const toggleActive = useMutation({
     mutationFn: () => apiFetch(`/products/${product.id}`, { method: "PATCH", body: JSON.stringify({ active: !product.active }) }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["products"] }),
+    onSuccess: () => { setMenuOpen(false); void queryClient.invalidateQueries({ queryKey: ["products"] }); },
   });
 
   const rules = product.renewalRules;
@@ -345,55 +356,95 @@ function ProductRow({ product }: { product: Product }) {
     rules.requiresMedical && "Médico",
     rules.requiresPsych && "Psicotécnico",
     rules.requiresVision && "Visión",
-  ].filter(Boolean);
+  ].filter(Boolean) as string[];
   const hasAgeRules = (rules.ageRules?.length ?? 0) > 0;
+  const allowed = hasAgeRules ? rules.ageRules!.filter((r) => r.validityDays > 0).length : 0;
+  const denied = hasAgeRules ? rules.ageRules!.filter((r) => r.validityDays === 0).length : 0;
+  const TypeIcon = TYPE_ICON[product.type] ?? Package;
 
   return (
     <>
       {editing && <ProductModal product={product} onClose={() => setEditing(false)} />}
-      {showForm && <ProductFormModal productId={product.id} onClose={() => setShowForm(false)} />}
-      <tr className="hover:bg-gray-50 group align-top">
-        <td className="px-4 py-3 font-medium text-gray-900">{product.name}</td>
-        <td className="px-4 py-3 text-gray-600 text-sm">{TYPE_MAP[product.type] ?? product.type}</td>
-        <td className="px-4 py-3 text-gray-600 text-sm">{product.slotDuration} min</td>
-        <td className="px-4 py-3 text-sm">
-          <div className="flex flex-wrap gap-1">
-            {hasAgeRules ? (
-              <>
-                <span className="bg-purple-50 text-purple-700 text-xs px-2 py-0.5 rounded">
-                  {rules.ageRules!.filter((r) => r.validityDays > 0).length} tramos permitidos
-                </span>
-                {rules.ageRules!.some((r) => r.validityDays === 0) && (
-                  <span className="bg-red-50 text-red-500 text-xs px-2 py-0.5 rounded">
-                    {rules.ageRules!.filter((r) => r.validityDays === 0).length} no permitidos
-                  </span>
-                )}
-              </>
-            ) : rules.validityDays ? (
-              <span className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded">{rules.validityDays}d</span>
-            ) : null}
-            {checks.map((c) => (
-              <span key={c as string} className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded">{c}</span>
-            ))}
-            {checks.length === 0 && !rules.validityDays && !hasAgeRules && <span className="text-gray-400 text-xs">—</span>}
+      {showForm && <ProductFormModal productId={product.id} productName={product.name} onClose={() => setShowForm(false)} />}
+      {showTemplate && <CertificateTemplateModal productId={product.id} productName={product.name} onClose={() => setShowTemplate(false)} />}
+
+      <div className={`bg-white rounded-xl border p-4 flex flex-col ${product.active ? "border-gray-200" : "border-gray-200 opacity-70"}`}>
+        {/* Cabecera */}
+        <div className="flex items-start justify-between gap-2 mb-2.5">
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900 text-[15px] leading-snug">{product.name}</p>
+            <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+              <TypeIcon className="w-3.5 h-3.5 shrink-0" /> {TYPE_MAP[product.type] ?? product.type}
+              <span className="text-gray-300">·</span>
+              <Clock className="w-3 h-3 shrink-0" /> {product.slotDuration} min
+            </p>
           </div>
-        </td>
-        <td className="px-4 py-3">
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${product.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-            {product.active ? "Activo" : "Inactivo"}
-          </span>
-        </td>
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-2">
-            <button onClick={() => setShowForm(true)} className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-blue-600">Formulario</button>
-            <button onClick={() => setEditing(true)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Editar</button>
-            <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending}
-              className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
-              {product.active ? "Desactivar" : "Activar"}
-            </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${product.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+              {product.active ? "Activo" : "Inactivo"}
+            </span>
+            <div className="relative">
+              <button onClick={() => setMenuOpen((v) => !v)} className="p-1 rounded-md hover:bg-gray-100 text-gray-400" aria-label="Más acciones">
+                <MoreVertical className="w-4 h-4" />
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                  <div className="absolute right-0 top-8 z-20 w-40 bg-white rounded-lg border border-gray-200 shadow-lg py-1">
+                    <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                      {product.active ? "Desactivar producto" : "Activar producto"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </td>
-      </tr>
+        </div>
+
+        {/* Reglas de renovación */}
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {hasAgeRules ? (
+            <>
+              <span className="bg-purple-50 text-purple-700 text-[11px] px-2 py-0.5 rounded">{allowed} tramo{allowed === 1 ? "" : "s"} permitido{allowed === 1 ? "" : "s"}</span>
+              {denied > 0 && <span className="bg-red-50 text-red-500 text-[11px] px-2 py-0.5 rounded">{denied} no permitido{denied === 1 ? "" : "s"}</span>}
+            </>
+          ) : rules.validityDays ? (
+            <span className="bg-blue-50 text-blue-700 text-[11px] px-2 py-0.5 rounded">{rules.validityDays} días validez</span>
+          ) : null}
+          {checks.map((c) => (
+            <span key={c} className="bg-gray-100 text-gray-600 text-[11px] px-2 py-0.5 rounded">{c}</span>
+          ))}
+          {checks.length === 0 && !rules.validityDays && !hasAgeRules && <span className="text-gray-400 text-[11px]">Sin reglas</span>}
+        </div>
+
+        {/* Estado de configuración */}
+        <div className="border-t border-gray-100 pt-2.5 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-500 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Formulario exploración</span>
+            {product.hasOwnForm ? (
+              <span className="text-[11px] font-medium text-green-600 flex items-center gap-0.5"><Check className="w-3.5 h-3.5" /> Propio</span>
+            ) : (
+              <span className="text-[11px] font-medium text-amber-600 flex items-center gap-0.5"><AlertTriangle className="w-3 h-3" /> Por defecto</span>
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-500 flex items-center gap-1.5"><Award className="w-3.5 h-3.5" /> Plantilla certificado</span>
+            {product.hasCertificateTemplate ? (
+              <span className="text-[11px] font-medium text-green-600 flex items-center gap-0.5"><Check className="w-3.5 h-3.5" /> Propia</span>
+            ) : (
+              <span className="text-[11px] font-medium text-gray-400 flex items-center gap-0.5"><Minus className="w-3.5 h-3.5" /> Por defecto</span>
+            )}
+          </div>
+        </div>
+
+        {/* Acciones */}
+        <div className="flex gap-1.5 mt-3">
+          <button onClick={() => setShowForm(true)} className="flex-1 text-xs py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-blue-600">Formulario</button>
+          <button onClick={() => setShowTemplate(true)} className="flex-1 text-xs py-1.5 rounded-lg border border-purple-200 hover:bg-purple-50 text-purple-600">Plantilla</button>
+          <button onClick={() => setEditing(true)} className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Editar</button>
+        </div>
+      </div>
     </>
   );
 }
@@ -414,7 +465,7 @@ export default function ProductsPage() {
   );
 
   const active = (products ?? []).filter((p) => p.active).length;
-  const inactive = (products ?? []).length - active;
+  const configured = (products ?? []).filter((p) => p.hasOwnForm && p.hasCertificateTemplate).length;
   const avgDuration = products && products.length > 0
     ? Math.round(products.reduce((s, p) => s + p.slotDuration, 0) / products.length)
     : 0;
@@ -441,8 +492,8 @@ export default function ProductsPage() {
           <p className="text-2xl font-bold text-emerald-700">{active}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <p className="text-xs text-gray-400 font-medium mb-0.5">Inactivos</p>
-          <p className="text-2xl font-bold text-gray-400">{inactive}</p>
+          <p className="text-xs text-gray-400 font-medium mb-0.5">Configuración</p>
+          <p className="text-2xl font-bold text-gray-800">{configured}<span className="text-sm font-normal text-gray-400 ml-1">/{(products ?? []).length} completos</span></p>
         </div>
         <div className="bg-blue-50 rounded-xl border border-blue-100 px-4 py-3">
           <p className="text-xs text-gray-400 font-medium mb-0.5">Dur. media cita</p>
@@ -460,30 +511,14 @@ export default function ProductsPage() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Nombre</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Tipo</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Duración</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Reglas renovación</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {isLoading && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Cargando...</td></tr>
-            )}
-            {!isLoading && visible.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                {filter === "all" ? "Sin productos registrados" : `Sin productos ${filter === "active" ? "activos" : "inactivos"}`}
-              </td></tr>
-            )}
-            {visible.map((p) => <ProductRow key={p.id} product={p} />)}
-          </tbody>
-        </table>
+      {isLoading && <div className="bg-white rounded-xl border border-gray-200 px-4 py-10 text-center text-gray-400">Cargando...</div>}
+      {!isLoading && visible.length === 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-10 text-center text-gray-400">
+          {filter === "all" ? "Sin productos registrados" : `Sin productos ${filter === "active" ? "activos" : "inactivos"}`}
+        </div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {visible.map((p) => <ProductCard key={p.id} product={p} />)}
       </div>
     </div>
   );

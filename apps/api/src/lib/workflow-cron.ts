@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { prisma } from "../lib/prisma.js";
 import { signMagicLinkToken } from "./jwt.js";
 import { whatsapp } from "./whatsapp.js";
+import { runDueCampaigns } from "./campaign-runner.js";
 
 const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
 
@@ -15,6 +16,7 @@ export function startWorkflowCron(): void {
     async () => {
       try {
         await runWorkflowJob();
+        await runDueCampaigns();
       } catch (err) {
         console.error("[workflow-cron] Error:", err);
       }
@@ -106,7 +108,8 @@ async function sendWorkflowNotification(
     if (!tenant) return;
 
     const token = signMagicLinkToken({ cid: revision.customerId, pid: revision.productId, tid: tenant.tenantId, type: "magic_link" });
-    const magicUrl = `${PUBLIC_URL}/link/${token}`;
+    // Página pública de auto-reserva: /booking/:token (consume la API /link/:token).
+    const magicUrl = `${PUBLIC_URL}/booking/${token}`;
 
     if (rule.actionType === "WHATSAPP") {
       if (!revision.customer.phone) throw new Error("El cliente no tiene teléfono");

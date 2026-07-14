@@ -15,7 +15,7 @@ interface User {
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
 }
 
@@ -56,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
     setTokens(data.accessToken, data.refreshToken);
     setUser(data.user);
+    return data.user;
   }
 
   function logout() {

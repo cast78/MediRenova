@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireRole } from "../lib/authorization.js";
+import { requireRole, requireAnyRole, ROLES_STAFF } from "../lib/authorization.js";
 import { auditLog } from "../lib/audit.js";
 import { stripUndefined } from "../lib/utils.js";
 
@@ -29,13 +29,17 @@ const holidaysSchema = z.object({
   holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD")).max(365),
 });
 
-// Room schedule stored as JSON: { openTime, closeTime, activeDays, slotDuration, slotBuffer }
-// La duración y el margen ya no son de la sala: la duración la marca el producto
-// y la granularidad de huecos se configura por empresa (TenantConfig).
+// Room schedule stored as JSON: { slotsByDay: { "0": ["07:00", ...], ... } }.
+// Cada sala define qué huecos concretos ofrece cada día de la semana (0=Dom … 6=Sáb),
+// para adaptarse a centros pequeños que no trabajan de forma lineal. La duración de
+// la cita la marca el producto; aquí solo se eligen las horas de inicio disponibles.
 const roomScheduleSchema = z.object({
-  openTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  closeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  activeDays: z.array(z.number().int().min(0).max(6)).optional(),
+  slotsByDay: z
+    .record(
+      z.string().regex(/^[0-6]$/),
+      z.array(z.string().regex(/^\d{2}:\d{2}$/)).max(48),
+    )
+    .optional(),
 });
 
 const roomSchema = z.object({
@@ -47,7 +51,7 @@ const roomSchema = z.object({
 const assignDoctorSchema = z.object({ userId: z.string().uuid() });
 
 export async function centerRoutes(server: FastifyInstance) {
-  server.get("/centers", { preHandler: [requireRole("RECEPTIONIST")] },
+  server.get("/centers", { preHandler: [requireAnyRole(ROLES_STAFF)] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const centers = await prisma.center.findMany({
         where: { tenantId: request.ctx.tenantId, ...(request.ctx.centerId ? { id: request.ctx.centerId } : {}) },
@@ -67,7 +71,7 @@ export async function centerRoutes(server: FastifyInstance) {
       return reply.status(201).send({ data: center, errors: null });
     });
 
-  server.get<{ Params: { id: string } }>("/centers/:id", { preHandler: [requireRole("RECEPTIONIST")] },
+  server.get<{ Params: { id: string } }>("/centers/:id", { preHandler: [requireAnyRole(ROLES_STAFF)] },
     async (request, reply: FastifyReply) => {
       if (request.ctx.centerId && request.params.id !== request.ctx.centerId) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
       const center = await prisma.center.findFirst({ where: { id: request.params.id, tenantId: request.ctx.tenantId }, include: { rooms: true } });
@@ -125,7 +129,7 @@ export async function centerRoutes(server: FastifyInstance) {
 
   // ── ROOMS ──────────────────────────────────────────────────────────────
 
-  server.get<{ Params: { centerId: string } }>("/centers/:centerId/rooms", { preHandler: [requireRole("RECEPTIONIST")] },
+  server.get<{ Params: { centerId: string } }>("/centers/:centerId/rooms", { preHandler: [requireAnyRole(ROLES_STAFF)] },
     async (request, reply: FastifyReply) => {
       if (request.ctx.centerId && request.params.centerId !== request.ctx.centerId) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
       const center = await prisma.center.findFirst({ where: { id: request.params.centerId, tenantId: request.ctx.tenantId } });

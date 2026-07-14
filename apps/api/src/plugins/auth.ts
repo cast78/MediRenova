@@ -24,9 +24,9 @@ async function authPlugin(server: FastifyInstance) {
     const skipPaths = ["/health", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout"];
     if (skipPaths.includes(request.routerPath ?? request.url)) return;
 
-    // Skip solo el magic-link público. La API pública (/public) exige API Key,
-    // así que pasa por la autenticación de abajo.
-    if (request.url.startsWith("/api/v1/link/")) return;
+    // Skip solo el magic-link público (rutas por token, que usa el cliente sin login).
+    // `/link/generate` NO se exime: es interno y exige autenticación de staff.
+    if (request.url.startsWith("/api/v1/link/") && !request.url.startsWith("/api/v1/link/generate")) return;
     // Documentación OpenAPI/Swagger pública.
     if (request.url.startsWith("/docs")) return;
 
@@ -37,8 +37,20 @@ async function authPlugin(server: FastifyInstance) {
       const token = authHeader.slice(7);
       try {
         const payload: AccessTokenPayload = verifyAccessToken(token);
-        request.ctx = { userId: payload.sub, tenantId: payload.tid, role: payload.role, centerId: payload.cen ?? null };
-        setTenantContext({ tenantId: payload.tid, role: payload.role });
+        let tenantId = payload.tid;
+        let centerId = payload.cen ?? null;
+        // Un SUPERADMIN puede "actuar como" otra empresa enviando la cabecera
+        // `x-act-as-tenant`. Solo se respeta para SUPERADMIN; para cualquier otro
+        // rol se ignora (no puede saltarse su aislamiento de tenant).
+        if (payload.role === "SUPERADMIN") {
+          const actAs = request.headers["x-act-as-tenant"];
+          if (typeof actAs === "string" && actAs.length > 0) {
+            tenantId = actAs;
+            centerId = null;
+          }
+        }
+        request.ctx = { userId: payload.sub, tenantId, role: payload.role, centerId };
+        setTenantContext({ tenantId, role: payload.role });
         return;
       } catch {
         return reply.status(401).send({ errors: [{ code: "UNAUTHORIZED", message: "Token inválido o caducado" }] });

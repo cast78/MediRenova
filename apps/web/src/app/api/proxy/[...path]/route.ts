@@ -29,14 +29,18 @@ async function proxyRequest(request: NextRequest, path: string[], method: string
 
   const url = `${API_BASE}/${path.join("/")}${request.nextUrl.search}`;
   const headers: Record<string, string> = {};
-  // Reenvía el Content-Type original (preserva el boundary en multipart/form-data).
-  headers["Content-Type"] = request.headers.get("content-type") ?? "application/json";
   const auth = request.headers.get("authorization");
   if (auth) headers["Authorization"] = auth;
+  // Impersonación de empresa por superadmin (el backend solo la respeta si el rol lo es).
+  const actAs = request.headers.get("x-act-as-tenant");
+  if (actAs) headers["x-act-as-tenant"] = actAs;
 
   const hasBody = method !== "GET" && method !== "DELETE";
   const body = hasBody ? await request.arrayBuffer() : undefined;
   const hasContent = body !== undefined && body.byteLength > 0;
+  // Solo se reenvía Content-Type cuando hay cuerpo real (preserva el boundary de
+  // multipart). Con cuerpo vacío, Fastify daría 400 (FST_ERR_CTP_EMPTY_JSON_BODY).
+  if (hasContent) headers["Content-Type"] = request.headers.get("content-type") ?? "application/json";
 
   try {
     const response = await fetch(url, { method, headers, ...(hasContent ? { body } : {}) });
