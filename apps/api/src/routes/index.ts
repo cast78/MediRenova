@@ -14,6 +14,7 @@ import { messageTemplateRoutes } from "./message-templates.js";
 import { segmentRoutes } from "./segments.js";
 import { campaignRoutes } from "./campaigns.js";
 import { dashboardRoutes } from "./dashboard.js";
+import { analyticsRoutes } from "./analytics.js";
 import { userRoutes } from "./users.js";
 import { doctorRoutes } from "./doctors.js";
 import { publicApiRoutes } from "./public.js";
@@ -36,6 +37,7 @@ export async function registerRoutes(server: FastifyInstance) {
   await server.register(segmentRoutes, { prefix });
   await server.register(campaignRoutes, { prefix });
   await server.register(dashboardRoutes, { prefix });
+  await server.register(analyticsRoutes, { prefix });
   await server.register(userRoutes, { prefix });
   await server.register(doctorRoutes, { prefix });
   await server.register(publicApiRoutes, { prefix });

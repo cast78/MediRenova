@@ -24,6 +24,7 @@ import {
   FileText,
   UserCog,
   Stethoscope,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -63,6 +64,12 @@ const navSections: NavSection[] = [
       { href: "/consulta", label: "Consulta", icon: Activity, roles: ["DOCTOR"] },
       { href: "/revisions", label: "Revisiones", icon: ClipboardList, roles: CLINICO },
       { href: "/customers", label: "Clientes", icon: Users, roles: RECEPCION },
+    ],
+  },
+  {
+    title: "Gestión",
+    items: [
+      { href: "/analitica", label: "Analítica", icon: BarChart3, roles: ["ADMIN"] },
     ],
   },
   {

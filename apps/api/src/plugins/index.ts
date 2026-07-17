@@ -34,20 +34,27 @@ export async function registerPlugins(server: FastifyInstance) {
     limits: { fileSize: 10 * 1024 * 1024, files: 5 }, // 10 MB por archivo
   });
 
-  // OpenAPI/Swagger de la API pública (tarea 14.8). Solo documenta /public/*.
+  // OpenAPI/Swagger: documenta la API pública (/public/*, por API Key) y la API de
+  // analítica (/analytics/*, por Bearer JWT). El resto de rutas se ocultan.
   await server.register(swagger, {
     openapi: {
       info: {
-        title: "MediRenova — API pública",
+        title: "MediRenova — API pública y de analítica",
         version: "1.0.0",
-        description: "API REST para integraciones de terceros. Autenticación por API Key en la cabecera `x-api-key`.",
+        description: "API REST para integraciones. `/public/*` con API Key (`x-api-key`); `/analytics/*` con Bearer JWT (rol ADMIN/SUPERADMIN).",
       },
-      components: { securitySchemes: { apiKey: { type: "apiKey", name: "x-api-key", in: "header" } } },
+      components: {
+        securitySchemes: {
+          apiKey: { type: "apiKey", name: "x-api-key", in: "header" },
+          bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+        },
+      },
       security: [{ apiKey: [] }],
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     transform: ({ schema, url }: any) => {
-      if (!url.startsWith("/api/v1/public/")) return { schema: { ...(schema ?? {}), hide: true }, url };
+      const documented = url.startsWith("/api/v1/public/") || url.startsWith("/api/v1/analytics/");
+      if (!documented) return { schema: { ...(schema ?? {}), hide: true }, url };
       return { schema, url };
     },
   });
