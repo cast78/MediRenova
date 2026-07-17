@@ -1,9 +1,9 @@
 ## 1. Núcleos puros de cálculo (`lib/analytics.ts`)
 
-- [ ] 1.1 `acquisitionFrom(customers, firstApptSourceByCustomer, granularity)`: altas por bucket + desglose por canal (proxy primera cita) + "sin cita"
-- [ ] 1.2 `newVsReturningFrom(...)`: nuevos (primera cita en rango) vs recurrentes
-- [ ] 1.3 `campaignEffectivenessFrom(campaigns, recipients, appointments, windowDays)`: convertidos por ventana, last-touch sin doble conteo, reservas y visitas atribuidas
-- [ ] 1.4 Tests unitarios de los núcleos (ventana dentro/fuera, last-touch, sin doble conteo, canal "sin cita")
+- [x] 1.1 `acquisitionFrom(customers, firstApptSourceByCustomer, granularity)`: altas por bucket + desglose por canal (proxy primera cita) + "sin cita"
+- [x] 1.2 `newVsReturningFrom(...)`: nuevos (primera cita en rango) vs recurrentes
+- [x] 1.3 `campaignEffectivenessFrom(campaigns, recipients, appointments, windowDays)`: convertidos por ventana, last-touch sin doble conteo, reservas y visitas atribuidas
+- [x] 1.4 Tests unitarios de los núcleos (ventana dentro/fuera, last-touch, sin doble conteo, canal "sin cita")
 
 ## 2. Consultas y endpoints (`routes/analytics.ts`)
 
