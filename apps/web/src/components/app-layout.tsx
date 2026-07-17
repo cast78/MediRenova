@@ -74,17 +74,17 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    // Analítica de gestión: KPIs operativos de los centros.
+    // Módulos de gestión (KPIs) para admin/superadmin: analítica operativa y captación.
     title: "Gestión",
     items: [
       { href: "/analitica", label: "Analítica", icon: BarChart3, roles: ["ADMIN"] },
+      { href: "/captacion", label: "Captación", icon: UserPlus, roles: ["ADMIN"] },
     ],
   },
   {
-    // Parte comercial: captación, campañas y automatización de retención.
+    // Parte comercial: campañas y automatización de retención.
     title: "Comercial",
     items: [
-      { href: "/captacion", label: "Captación", icon: UserPlus, roles: ["ADMIN"] },
       { href: "/campaigns", label: "Campañas", icon: Megaphone, roles: ["ADMIN"] },
       { href: "/workflow", label: "Workflow", icon: Zap, roles: ["ADMIN"] },
     ],
