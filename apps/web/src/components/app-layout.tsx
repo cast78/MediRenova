@@ -25,6 +25,7 @@ import {
   UserCog,
   Stethoscope,
   BarChart3,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 
@@ -73,10 +74,17 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    // Parte comercial: KPIs/captación, campañas y automatización de retención.
-    title: "Comercial",
+    // Analítica de gestión: KPIs operativos de los centros.
+    title: "Gestión",
     items: [
       { href: "/analitica", label: "Analítica", icon: BarChart3, roles: ["ADMIN"] },
+    ],
+  },
+  {
+    // Parte comercial: captación, campañas y automatización de retención.
+    title: "Comercial",
+    items: [
+      { href: "/captacion", label: "Captación", icon: UserPlus, roles: ["ADMIN"] },
       { href: "/campaigns", label: "Campañas", icon: Megaphone, roles: ["ADMIN"] },
       { href: "/workflow", label: "Workflow", icon: Zap, roles: ["ADMIN"] },
     ],
