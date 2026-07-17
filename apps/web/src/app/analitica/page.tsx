@@ -29,8 +29,19 @@ interface DoctorRow { doctorId: string; doctorName: string; visitasAtendidas: nu
 interface CompRow { id: string; name: string; centerName?: string; reservas: number; atendidas: number; conversion: number; ocupacion: number }
 interface Comparison { porCentro: CompRow[]; porSala: CompRow[] }
 interface VolBucket { bucket: string; reservas: number; visitas: number }
+interface AcquisitionResult { series: { bucket: string; total: number; canales: Record<string, number> }[]; nuevosVsRecurrentes: { nuevos: number; recurrentes: number } }
+interface CampaignEffRow { campaignId: string; name: string; enviados: number; convertidos: number; tasaConversion: number; reservasAtribuidas: number; visitasAtribuidas: number }
 
 interface Filters { from: string; to: string; centerId: string; roomId: string; doctorId: string; productId: string; scope: string }
+
+// Canales de captación (proxy: source de la 1ª cita).
+const CHANNEL_META: Record<string, { label: string; color: string }> = {
+  BACKOFFICE: { label: "Backoffice", color: "#3b82f6" },
+  MAGIC_LINK: { label: "Enlace", color: "#10b981" },
+  API: { label: "API", color: "#8b5cf6" },
+  WALK_IN: { label: "Sin cita previa", color: "#f59e0b" },
+  SIN_CITA: { label: "Sin cita", color: "#9ca3af" },
+};
 
 // Listados para los desplegables de filtro.
 interface CenterOpt { id: string; name: string; rooms?: { id: string; name: string }[] }
@@ -146,6 +157,7 @@ const VIEWS = [
   { id: "medicos", label: "Médicos" },
   { id: "comparativa", label: "Comparativa" },
   { id: "volumen", label: "Volumen" },
+  { id: "captacion", label: "Captación" },
 ];
 
 export default function AnaliticaPage() {
@@ -272,6 +284,7 @@ function AnaliticaInner() {
       {view === "medicos" && <MedicosView f={f} />}
       {view === "comparativa" && <ComparativaView f={f} onDrillCenter={(id) => setCenterId(id)} />}
       {view === "volumen" && <VolumenView f={f} />}
+      {view === "captacion" && <CaptacionView f={f} />}
     </div>
   );
 }
@@ -568,5 +581,95 @@ function VolumenView({ f }: { f: Filters }) {
         </ResponsiveContainer>
       )}
     </Card>
+  );
+}
+
+// ── Vista: Captación (crm-captacion) ─────────────────────────────────────────
+function CaptacionView({ f }: { f: Filters }) {
+  const [g, setG] = useState("month");
+  const [win, setWin] = useState("30");
+  const acq = useReport<AcquisitionResult>("acquisition", f, { granularity: g });
+  const eff = useReport<CampaignEffRow[]>("campaign-effectiveness", f, { attributionWindowDays: win });
+
+  const series = acq.data?.series ?? [];
+  const channels = [...new Set(series.flatMap((b) => Object.keys(b.canales)))];
+  const chartData = series.map((b) => ({ label: bucketLabel(b.bucket), ...b.canales }));
+  const nvr = acq.data?.nuevosVsRecurrentes;
+
+  return (
+    <div className="space-y-4">
+      <Card title="Altas de clientes por periodo y canal"
+        action={
+          <div className="flex items-center gap-2">
+            <select value={g} onChange={(e) => setG(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white">
+              <option value="month">Mes</option><option value="week">Semana</option><option value="year">Año</option>
+            </select>
+            <CsvButton ep="acquisition" f={f} extra={{ granularity: g }} />
+          </div>
+        }>
+        {nvr && (
+          <div className="flex gap-3 mb-4">
+            <div className="rounded-xl border bg-emerald-50 border-emerald-100 text-emerald-700 px-4 py-2 flex-1">
+              <p className="text-xs font-medium">Clientes nuevos</p><p className="text-2xl font-bold">{nvr.nuevos}</p>
+            </div>
+            <div className="rounded-xl border bg-blue-50 border-blue-100 text-blue-700 px-4 py-2 flex-1">
+              <p className="text-xs font-medium">Recurrentes</p><p className="text-2xl font-bold">{nvr.recurrentes}</p>
+            </div>
+          </div>
+        )}
+        {series.length === 0 ? empty : (
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} allowDecimals={false} width={28} />
+              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              {channels.map((c) => (
+                <Bar key={c} dataKey={c} stackId="a" name={CHANNEL_META[c]?.label ?? c} fill={CHANNEL_META[c]?.color ?? "#cbd5e1"} maxBarSize={40} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </Card>
+
+      <Card title="Efectividad de campañas"
+        action={
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500 flex items-center gap-1">
+              Ventana
+              <select value={win} onChange={(e) => setWin(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white">
+                {["7", "15", "30", "60", "90"].map((d) => <option key={d} value={d}>{d}d</option>)}
+              </select>
+            </label>
+            <CsvButton ep="campaign-effectiveness" f={f} extra={{ attributionWindowDays: win }} />
+          </div>
+        }>
+        {(eff.data?.length ?? 0) === 0 ? empty : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-gray-400 border-b border-gray-100">
+                <th className="py-2 font-medium">Campaña</th><th className="py-2 font-medium text-right">Enviados</th>
+                <th className="py-2 font-medium text-right">Convertidos</th><th className="py-2 font-medium text-right">Tasa</th>
+                <th className="py-2 font-medium text-right">Reservas atrib.</th><th className="py-2 font-medium text-right">Visitas atrib.</th>
+              </tr></thead>
+              <tbody>
+                {eff.data!.map((c) => (
+                  <tr key={c.campaignId} className="border-b border-gray-50">
+                    <td className="py-2 text-gray-700">{c.name}</td>
+                    <td className="py-2 text-right tabular-nums">{c.enviados}</td>
+                    <td className="py-2 text-right tabular-nums">{c.convertidos}</td>
+                    <td className="py-2 text-right tabular-nums font-medium">{c.tasaConversion}%</td>
+                    <td className="py-2 text-right tabular-nums">{c.reservasAtribuidas}</td>
+                    <td className="py-2 text-right tabular-nums">{c.visitasAtribuidas}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-[11px] text-gray-400 mt-2">Atribución heurística: un envío cuenta como convertido si el cliente reservó dentro de la ventana (last-touch).</p>
+      </Card>
+    </div>
   );
 }

@@ -20,15 +20,15 @@
 
 ## 4. Frontend — vista Captación (en `/analitica`)
 
-- [ ] 4.1 Añadir pestaña "Captación" al módulo de analítica (consume solo la API)
-- [ ] 4.2 Altas por periodo + desglose por canal (gráfico) y nuevos vs recurrentes
-- [ ] 4.3 Tabla de efectividad de campañas (enviados, convertidos, tasa, reservas/visitas atribuidas) + selector de ventana + export CSV
+- [x] 4.1 Añadir pestaña "Captación" al módulo de analítica (consume solo la API)
+- [x] 4.2 Altas por periodo + desglose por canal (gráfico) y nuevos vs recurrentes
+- [x] 4.3 Tabla de efectividad de campañas (enviados, convertidos, tasa, reservas/visitas atribuidas) + selector de ventana + export CSV
 
 ## 5. Verificación (fase 1, freeze-safe)
 
-- [ ] 5.1 `tsc --noEmit` (api + web) y build limpios
-- [ ] 5.2 Suite de tests en verde (incluye los núcleos nuevos)
-- [ ] 5.3 Smoke local de los 2 endpoints con datos del seed (sin tocar prod ni migrar)
+- [x] 5.1 `tsc --noEmit` (api + web) y build limpios
+- [x] 5.2 Suite de tests en verde (incluye los núcleos nuevos)
+- [x] 5.3 Smoke local de los 2 endpoints con datos del seed (sin tocar prod ni migrar)
 
 ## 6. Fase 2 — atribución almacenada (TRAS el freeze de demos)
 
