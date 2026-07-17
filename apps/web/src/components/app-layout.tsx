@@ -53,12 +53,18 @@ interface NavSection {
 // ítem visible dentro (así médico/recepción ven un menú corto y sin títulos vacíos).
 const navSections: NavSection[] = [
   {
-    // Operación (día a día), ordenado por el flujo del paciente:
-    // reservar → llegada/sala → atención → resultado → ficha/seguimiento.
+    // Landing.
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: RECEPCION },
+    ],
+  },
+  {
+    // Operación clínica (día a día), por el flujo del paciente:
+    // reservar → llegada/sala → atención → resultado → ficha/seguimiento.
+    title: "Operación",
+    items: [
       { href: "/appointments", label: "Reservas", icon: CalendarCheck, roles: RECEPCION },
-      // Landing de Visitas = Gestión (tablero en vivo); resalta en todo /visits.
+      // Landing de Visitas = tablero en vivo; resalta en todo /visits.
       { href: "/visits", label: "Visitas", icon: DoorOpen, match: "/visits", roles: RECEPCION },
       // Consulta = cabina del médico (su lista de trabajo del día); primer ítem para él.
       { href: "/consulta", label: "Consulta", icon: Activity, roles: ["DOCTOR"] },
@@ -67,14 +73,10 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    title: "Gestión",
+    // Parte comercial: KPIs/captación, campañas y automatización de retención.
+    title: "Comercial",
     items: [
       { href: "/analitica", label: "Analítica", icon: BarChart3, roles: ["ADMIN"] },
-    ],
-  },
-  {
-    title: "Comunicación",
-    items: [
       { href: "/campaigns", label: "Campañas", icon: Megaphone, roles: ["ADMIN"] },
       { href: "/workflow", label: "Workflow", icon: Zap, roles: ["ADMIN"] },
     ],
