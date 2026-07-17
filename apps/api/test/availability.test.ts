@@ -54,10 +54,16 @@ describe("computeDaySlots (motor de disponibilidad)", () => {
     expect(slots.some((s) => s.includes("T10:30:00"))).toBe(true);
   });
 
-  it("no filtra por hora si la fecha no es hoy", () => {
-    // now en otra fecha → no se descarta ningún hueco por hora.
-    const slots = computeDaySlots({ ...base, now: { date: "2026-07-02", minutes: 1439 } });
+  it("no filtra por hora si la fecha del slot es futura", () => {
+    // now anterior a la fecha del slot → el día aún no ha llegado, no se descarta ningún hueco.
+    const slots = computeDaySlots({ ...base, now: { date: "2026-06-30", minutes: 1439 } });
     expect(slots).toHaveLength(4);
+  });
+
+  it("descarta todos los huecos si la fecha del slot ya pasó", () => {
+    // now posterior a la fecha del slot (lógica cross-día) → el día quedó atrás.
+    const slots = computeDaySlots({ ...base, now: { date: "2026-07-02", minutes: 0 } });
+    expect(slots).toEqual([]);
   });
 
   it("solo ofrece los huecos elegidos por el centro (no lineal)", () => {
