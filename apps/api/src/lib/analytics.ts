@@ -442,6 +442,58 @@ export function campaignEffectivenessFrom(campaigns: EffCampaign[], recipients: 
   }).sort((a, b) => b.convertidos - a.convertidos);
 }
 
+// Consultas Prisma que alimentan los núcleos de captación (solo lectura).
+
+export interface AcquisitionResult { series: AcquisitionBucket[]; nuevosVsRecurrentes: { nuevos: number; recurrentes: number } }
+
+export async function computeAcquisition(scope: AnalyticsScope, f: AnalyticsFilters, granularity: Granularity): Promise<AcquisitionResult> {
+  const range = { gte: dayStart(f.from), lte: dayEnd(f.to) };
+
+  // Altas del periodo + canal (source de su 1ª cita histórica).
+  const created = await prisma.customer.findMany({ where: { ...scope.tenantWhere, deletedAt: null, createdAt: range }, select: { id: true, createdAt: true } });
+  const createdIds = created.map((c) => c.id);
+  const sourceByCustomer = new Map<string, string>();
+  if (createdIds.length) {
+    const appts = await prisma.appointment.findMany({ where: { ...scope.tenantWhere, customerId: { in: createdIds } }, select: { customerId: true, source: true, scheduledAt: true }, orderBy: { scheduledAt: "asc" } });
+    for (const a of appts) if (!sourceByCustomer.has(a.customerId)) sourceByCustomer.set(a.customerId, a.source);
+  }
+  const series = acquisitionFrom(created.map((c) => ({ createdAt: c.createdAt, firstApptSource: sourceByCustomer.get(c.id) ?? null })), granularity);
+
+  // Nuevos vs recurrentes entre los clientes activos (con cita en el rango).
+  const activeAppts = await prisma.appointment.findMany({ where: { ...scope.tenantWhere, scheduledAt: range }, select: { customerId: true } });
+  const activeIds = [...new Set(activeAppts.map((a) => a.customerId))];
+  const tenure: CustomerTenure[] = [];
+  if (activeIds.length) {
+    const firstEver = await prisma.appointment.findMany({ where: { ...scope.tenantWhere, customerId: { in: activeIds } }, select: { customerId: true, scheduledAt: true }, orderBy: { scheduledAt: "asc" } });
+    const firstDate = new Map<string, string>();
+    for (const a of firstEver) if (!firstDate.has(a.customerId)) firstDate.set(a.customerId, a.scheduledAt.toISOString().slice(0, 10));
+    for (const id of activeIds) tenure.push({ firstApptDate: firstDate.get(id) ?? null });
+  }
+  return { series, nuevosVsRecurrentes: newVsReturningFrom(tenure, f.from, f.to) };
+}
+
+export async function computeCampaignEffectiveness(scope: AnalyticsScope, f: AnalyticsFilters, windowDays: number): Promise<CampaignEffRow[]> {
+  const range = { gte: dayStart(f.from), lte: dayEnd(f.to) };
+  const campaigns = await prisma.campaign.findMany({ where: { ...scope.tenantWhere, sentAt: range }, select: { id: true, name: true, sentAt: true } });
+  if (campaigns.length === 0) return [];
+  const campIds = campaigns.map((c) => c.id);
+  const recipients = await prisma.campaignRecipient.findMany({ where: { campaignId: { in: campIds }, status: "SENT" }, select: { campaignId: true, customerId: true } });
+  const custIds = [...new Set(recipients.map((r) => r.customerId))];
+
+  // Citas de esos clientes en la ventana global [primer envío, último envío + N días].
+  const sentTimes = campaigns.map((c) => c.sentAt!.getTime());
+  const minSent = new Date(Math.min(...sentTimes));
+  const maxSentPlusWindow = new Date(Math.max(...sentTimes) + windowDays * 86_400_000);
+  const appts = custIds.length
+    ? await prisma.appointment.findMany({
+        where: { ...scope.tenantWhere, customerId: { in: custIds }, createdAt: { gte: minSent, lte: maxSentPlusWindow } },
+        select: { customerId: true, createdAt: true, visit: { select: { status: true } } },
+      })
+    : [];
+  const effAppts: EffAppointment[] = appts.map((a) => ({ customerId: a.customerId, createdAt: a.createdAt, completedVisit: a.visit?.status === "COMPLETED" }));
+  return campaignEffectivenessFrom(campaigns as EffCampaign[], recipients, effAppts, windowDays);
+}
+
 // ── Serialización CSV (para format=csv) — pura ───────────────────────────────
 
 function flatten(row: Record<string, unknown>): Record<string, string> {

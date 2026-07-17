@@ -7,11 +7,11 @@
 
 ## 2. Consultas y endpoints (`routes/analytics.ts`)
 
-- [ ] 2.1 `computeAcquisition(scope, filtros)`: carga clientes del rango + primera cita/canal; delega en el núcleo
-- [ ] 2.2 `computeCampaignEffectiveness(scope, filtros, windowDays)`: carga campañas+recipients+citas de la ventana; delega en el núcleo
-- [ ] 2.3 `GET /analytics/acquisition` (reusa filtros/alcance/CSV)
-- [ ] 2.4 `GET /analytics/campaign-effectiveness` (+ `attributionWindowDays`, por defecto 30)
-- [ ] 2.5 Documentar ambos en OpenAPI (`/docs`, Bearer)
+- [x] 2.1 `computeAcquisition(scope, filtros)`: carga clientes del rango + primera cita/canal; delega en el núcleo
+- [x] 2.2 `computeCampaignEffectiveness(scope, filtros, windowDays)`: carga campañas+recipients+citas de la ventana; delega en el núcleo
+- [x] 2.3 `GET /analytics/acquisition` (reusa filtros/alcance/CSV)
+- [x] 2.4 `GET /analytics/campaign-effectiveness` (+ `attributionWindowDays`, por defecto 30)
+- [x] 2.5 Documentar ambos en OpenAPI (`/docs`, Bearer)
 
 ## 3. Pruebas de API
 

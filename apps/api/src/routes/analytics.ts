@@ -10,6 +10,7 @@ import {
   type AnalyticsScope, type AnalyticsFilters, type Granularity,
   MAX_RANGE_DAYS, rangeDays, toCsv,
   computeFunnel, computeOccupancy, computeSaturation, computeDoctors, computeComparison, computeVolume,
+  computeAcquisition, computeCampaignEffectiveness,
 } from "../lib/analytics.js";
 
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD");
@@ -25,6 +26,7 @@ export const filtersSchema = z.object({
   granularity: z.enum(["day", "week", "month", "year"]).optional(),
   scope: z.enum(["all"]).optional(),
   tenantId: z.string().uuid().optional(),
+  attributionWindowDays: z.coerce.number().int().min(1).max(365).optional(),
   format: z.enum(["csv"]).optional(),
 }).refine((v) => v.from <= v.to, { message: "El rango de fechas es inválido (from > to)" });
 
@@ -105,6 +107,7 @@ const FILTER_QS = {
     granularity: { type: "string", enum: ["day", "week", "month", "year"], description: "Agrupación temporal (según endpoint)" },
     scope: { type: "string", enum: ["all"], description: "Solo SUPERADMIN: rollup de todos los tenants" },
     tenantId: { type: "string", format: "uuid", description: "Solo SUPERADMIN: acotar a un tenant" },
+    attributionWindowDays: { type: "integer", description: "Ventana de atribución campaña→visita en días (efectividad; por defecto 30)" },
     format: { type: "string", enum: ["csv"], description: "Exportar el resultado en CSV" },
   },
 };
@@ -167,6 +170,21 @@ export async function analyticsRoutes(server: FastifyInstance) {
   server.get("/analytics/volume", { ...guard, ...doc("Volumen de reservas y visitas") }, async (req, reply) =>
     handle(req, reply, "volume", async (scope, f, q) => {
       const r = await computeVolume(scope, f, gran(q, "month", ["month", "year"]));
+      return { data: r, rows: r as unknown as Record<string, unknown>[] };
+    }));
+
+  // GET /analytics/acquisition — altas por periodo/canal + nuevos vs recurrentes (crm-captacion)
+  server.get("/analytics/acquisition", { ...guard, ...doc("Altas de clientes por periodo y canal + nuevos vs recurrentes") }, async (req, reply) =>
+    handle(req, reply, "acquisition", async (scope, f, q) => {
+      const r = await computeAcquisition(scope, f, gran(q, "month", ["day", "week", "month", "year"]));
+      const rows = r.series.map((b) => ({ bucket: b.bucket, total: b.total, ...b.canales }));
+      return { data: r, rows };
+    }));
+
+  // GET /analytics/campaign-effectiveness — efectividad de campañas por atribución de ventana
+  server.get("/analytics/campaign-effectiveness", { ...guard, ...doc("Efectividad de campañas (atribución por ventana)") }, async (req, reply) =>
+    handle(req, reply, "campaign-effectiveness", async (scope, f, q) => {
+      const r = await computeCampaignEffectiveness(scope, f, q.attributionWindowDays ?? 30);
       return { data: r, rows: r as unknown as Record<string, unknown>[] };
     }));
 }
