@@ -15,7 +15,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:seed": "tsx src/db/seed.ts",
-    "db:seed:demo": "tsx src/db/seed.ts && tsx src/db/seed-next-week.ts && tsx src/db/seed-renewals.ts && tsx src/db/seed-consulta-demo.ts",
+    "db:seed:demo": "tsx src/db/seed.ts && tsx src/db/seed-next-week.ts && tsx src/db/seed-renewals.ts && tsx src/db/seed-demo-day.ts && tsx src/db/seed-campaigns.ts && tsx src/db/seed-consulta-demo.ts",
+    "db:seed:live": "tsx src/db/seed-consulta-demo.ts",
     "db:studio": "prisma studio"
   },
   "prisma": {
