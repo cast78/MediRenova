@@ -35,7 +35,7 @@ type Query = z.infer<typeof filtersSchema>;
 // Resuelve el alcance (aislamiento) según rol. ADMIN → su tenant. SUPERADMIN →
 // cross-tenant sólo si lo pide explícitamente (scope=all o tenantId), si no su propio
 // contexto (que puede venir ya fijado por `x-act-as-tenant`).
-async function resolveScope(request: FastifyRequest, q: Query): Promise<AnalyticsScope> {
+export async function resolveScope(request: FastifyRequest, q: Query): Promise<AnalyticsScope> {
   const { role, tenantId } = request.ctx;
   if (role === "SUPERADMIN") {
     if (q.scope === "all") {

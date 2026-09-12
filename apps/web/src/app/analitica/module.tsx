@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Percent, DoorOpen, Gauge, UserX, Download, AlertTriangle, ChevronRight, Stethoscope,
+  UserPlus, Users, Send, CheckCircle,
 } from "lucide-react";
 
 // ── Tipos que devuelve la API ────────────────────────────────────────────────
@@ -162,6 +163,7 @@ const VIEWS_GESTION = [
   { id: "volumen", label: "Volumen" },
 ];
 const VIEWS_CAPTACION = [
+  { id: "resumen", label: "Resumen" },
   { id: "altas", label: "Altas" },
   { id: "campanas", label: "Campañas" },
 ];
@@ -181,6 +183,10 @@ export function AnalyticsModule({ mod }: { mod: Mod }) {
 function AnaliticaInner({ mod }: { mod: Mod }) {
   const { views, title, base } = MOD_META[mod];
   const defaultView = views[0]!.id;
+  // Los filtros de entidad (centro/sala/médico/producto) sólo afectan a la analítica
+  // de gestión; la captación agrega por tenant (altas y campañas por segmento), así
+  // que se ocultan para no mostrar controles que no filtran nada.
+  const showEntityFilters = mod === "gestion";
   const router = useRouter();
   const sp = useSearchParams();
   const { user } = useAuth();
@@ -253,30 +259,34 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
           <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1" /></label>
         <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Hasta</span>
           <input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1" /></label>
-        {scope !== "all" && (
+        {showEntityFilters && scope !== "all" && (
           <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Centro</span>
             <select value={centerId} onChange={(e) => { setCenterId(e.target.value); setRoomId(""); }} className="border border-gray-200 rounded-lg px-2 py-1 bg-white">
               <option value="">Todos</option>
               {(centers ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select></label>
         )}
-        {scope !== "all" && centerId && rooms.length > 0 && (
+        {showEntityFilters && scope !== "all" && centerId && rooms.length > 0 && (
           <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Sala</span>
             <select value={roomId} onChange={(e) => setRoomId(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1 bg-white">
               <option value="">Todas</option>
               {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select></label>
         )}
-        <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Médico</span>
-          <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1 bg-white">
-            <option value="">Todos</option>
-            {(doctors ?? []).map((d) => <option key={d.id} value={d.id}>{`${d.firstName ?? ""} ${d.lastName ?? ""}`.trim() || d.id}</option>)}
-          </select></label>
-        <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Producto</span>
-          <select value={productId} onChange={(e) => setProductId(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1 bg-white">
-            <option value="">Todos</option>
-            {(products ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select></label>
+        {showEntityFilters && (
+          <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Médico</span>
+            <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1 bg-white">
+              <option value="">Todos</option>
+              {(doctors ?? []).map((d) => <option key={d.id} value={d.id}>{`${d.firstName ?? ""} ${d.lastName ?? ""}`.trim() || d.id}</option>)}
+            </select></label>
+        )}
+        {showEntityFilters && (
+          <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Producto</span>
+            <select value={productId} onChange={(e) => setProductId(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1 bg-white">
+              <option value="">Todos</option>
+              {(products ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select></label>
+        )}
       </div>
 
       {/* Pestañas de vista */}
@@ -289,7 +299,9 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
         ))}
       </div>
 
-      {view === "resumen" && <Resumen f={f} onDrillCenter={(id) => { setCenterId(id); setView("comparativa"); }} />}
+      {view === "resumen" && (mod === "captacion"
+        ? <ResumenCaptacion f={f} onGoTo={setView} />
+        : <Resumen f={f} onDrillCenter={(id) => { setCenterId(id); setView("comparativa"); }} />)}
       {view === "embudo" && <EmbudoView f={f} />}
       {view === "ocupacion" && <OcupacionView f={f} />}
       {view === "saturacion" && <SaturacionView f={f} />}
@@ -594,6 +606,87 @@ function VolumenView({ f }: { f: Filters }) {
         </ResponsiveContainer>
       )}
     </Card>
+  );
+}
+
+// ── Vista: Resumen de captación (KPIs + alertas + navegación) ────────────────
+// Consume sólo la API (acquisition + campaign-effectiveness); el periodo anterior
+// de igual longitud alimenta los deltas, igual que el Resumen de gestión.
+function ResumenCaptacion({ f, onGoTo }: { f: Filters; onGoTo: (view: string) => void }) {
+  const prev = prevPeriod(f);
+  const prevF: Filters = { ...f, from: prev.from, to: prev.to };
+  const acq = useReport<AcquisitionResult>("acquisition", f, { granularity: "month" });
+  const acqPrev = useReport<AcquisitionResult>("acquisition", prevF, { granularity: "month" });
+  const eff = useReport<CampaignEffRow[]>("campaign-effectiveness", f, { attributionWindowDays: "30" });
+  const effPrev = useReport<CampaignEffRow[]>("campaign-effectiveness", prevF, { attributionWindowDays: "30" });
+
+  const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+  const altas = sum((acq.data?.series ?? []).map((b) => b.total));
+  const altasPrev = sum((acqPrev.data?.series ?? []).map((b) => b.total));
+  const nvr = acq.data?.nuevosVsRecurrentes;
+  const nvrPrev = acqPrev.data?.nuevosVsRecurrentes;
+
+  const rows = eff.data ?? [], rowsPrev = effPrev.data ?? [];
+  const enviados = sum(rows.map((c) => c.enviados));
+  const convertidos = sum(rows.map((c) => c.convertidos));
+  const visitasAtrib = sum(rows.map((c) => c.visitasAtribuidas));
+  const tasaMedia = enviados > 0 ? Math.round((convertidos / enviados) * 1000) / 10 : 0;
+  const envPrev = sum(rowsPrev.map((c) => c.enviados));
+  const tasaMediaPrev = envPrev > 0 ? Math.round((sum(rowsPrev.map((c) => c.convertidos)) / envPrev) * 1000) / 10 : 0;
+  const best = rows[0]; // la API ya las devuelve ordenadas por convertidos desc
+
+  const alerts: { text: string; tone: "danger" | "warning" | "success" }[] = [];
+  if (rows.length === 0) alerts.push({ text: "No hay campañas enviadas en el periodo — sin datos de efectividad que mostrar", tone: "warning" });
+  if (enviados >= 20 && tasaMedia < 10) alerts.push({ text: `Conversión media de campañas ${tasaMedia}% (baja para ${enviados} envíos) — revisa segmento, canal o mensaje`, tone: "warning" });
+  if (best && best.convertidos > 0) alerts.push({ text: `Mejor campaña: "${best.name}" — ${best.convertidos} convertidos (${best.tasaConversion}%)`, tone: "success" });
+
+  const loading = acq.isLoading || eff.isLoading;
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Kpi icon={UserPlus} label="Altas del periodo" value={altas} delta={altas - altasPrev} goodWhenUp tone="success" />
+        <Kpi icon={Users} label="Clientes nuevos" value={nvr?.nuevos ?? 0}
+          delta={nvr && nvrPrev ? nvr.nuevos - nvrPrev.nuevos : null} goodWhenUp tone="accent" />
+        <Kpi icon={Percent} label="Conversión media campañas" value={tasaMedia} suffix="%"
+          delta={tasaMedia - tasaMediaPrev} goodWhenUp tone="plain" />
+        <Kpi icon={CheckCircle} label="Visitas atribuidas" value={visitasAtrib} tone="plain" />
+      </div>
+
+      {nvr && (nvr.nuevos + nvr.recurrentes) > 0 && (
+        <p className="text-xs text-gray-500">
+          Reparto de clientes activos: <span className="font-medium text-gray-700">{nvr.nuevos} nuevos</span> ·{" "}
+          <span className="font-medium text-gray-700">{nvr.recurrentes} recurrentes</span>
+        </p>
+      )}
+
+      {alerts.length > 0 && (
+        <div className="space-y-2">
+          {alerts.map((a, i) => (
+            <div key={i} className={`rounded-lg border px-3 py-2 text-sm flex items-center gap-2 ${
+              a.tone === "danger" ? "bg-red-50 border-red-100 text-red-700"
+                : a.tone === "success" ? "bg-emerald-50 border-emerald-100 text-emerald-700"
+                : "bg-amber-50 border-amber-100 text-amber-700"}`}>
+              {a.tone === "success" ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />} {a.text}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid sm:grid-cols-2 gap-3">
+        <button onClick={() => onGoTo("altas")}
+          className="bg-white rounded-xl border border-gray-200 p-4 text-left hover:border-blue-300 hover:bg-blue-50/30 transition-colors flex items-center justify-between">
+          <span className="flex items-center gap-2 text-sm font-medium text-gray-700"><UserPlus className="w-4 h-4 text-blue-500" /> Ver altas por canal</span>
+          <ChevronRight className="w-4 h-4 text-gray-400" />
+        </button>
+        <button onClick={() => onGoTo("campanas")}
+          className="bg-white rounded-xl border border-gray-200 p-4 text-left hover:border-blue-300 hover:bg-blue-50/30 transition-colors flex items-center justify-between">
+          <span className="flex items-center gap-2 text-sm font-medium text-gray-700"><Send className="w-4 h-4 text-blue-500" /> Ver efectividad de campañas</span>
+          <ChevronRight className="w-4 h-4 text-gray-400" />
+        </button>
+      </div>
+
+      {loading && <p className="text-center text-gray-400 text-sm py-2">Cargando…</p>}
+    </div>
   );
 }
 
