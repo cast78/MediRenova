@@ -77,6 +77,20 @@ export async function enforceSingleBooking(tenantId: string, customerId: string,
   return { autoResolvedId: existing!.id };
 }
 
+// Solo lectura: devuelve la reserva activa que BLOQUEARÍA una nueva (futura/reciente,
+// no walk-in), o null si no hay o si la existente ya caducó (esa se auto-resuelve al
+// crear). Se usa para avisar pronto en el formulario, sin mutar nada.
+export async function findBlockingBooking(tenantId: string, customerId: string, productId: string): Promise<{ id: string; scheduledAt: Date } | null> {
+  const cfg = await prisma.tenantConfig.findUnique({ where: { tenantId }, select: { timezone: true } });
+  const nowMs = nowWallMs(cfg?.timezone ?? "Europe/Madrid");
+  const existing = await prisma.appointment.findFirst({
+    where: { tenantId, customerId, productId, status: { in: ["PENDING", "CONFIRMED"] }, source: { not: "WALK_IN" } },
+    select: { id: true, scheduledAt: true },
+    orderBy: { scheduledAt: "desc" },
+  });
+  return classifyExistingBooking(existing ? existing.scheduledAt.getTime() : null, nowMs) === "block" ? existing : null;
+}
+
 // Etiqueta corta "DD/MM HH:MM" del instante wall-clock-en-Z de una cita (para mensajes).
 export function bookingLabel(d: Date): string {
   const s = d.toISOString();

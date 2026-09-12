@@ -1,17 +1,21 @@
 import { prisma } from "./prisma.js";
 import { nowInTimezone } from "./availability.js";
-import { BOOKING_GRACE_MS } from "./booking.js";
 
-// Barrido de reservas caducadas (regla de reserva única).
-// Marca como NO_SHOW auto-cerradas las citas PENDING/CONFIRMED cuya hora pasó hace más
-// del margen (+2h) y que NO tienen visita asociada (el paciente no llegó). Walk-in
-// excluido (su hora es "ahora"). Así se libera al cliente para volver a reservar y la
-// analítica de no-show refleja la realidad. Excluir "con visita" evita marcar como
-// no-show a quien sí acudió (aunque no se cerrara la revisión).
+// Días de gracia antes de que el sistema cierre automáticamente una cita pasada.
+// Damos margen a recepción para resolverla a mano desde la pestaña "Sin cerrar"
+// (registrar revisión / no-show / cancelar). Pasado el margen, el barrido cierra las
+// que quedan abandonadas. NO se confunde con la regla de reserva única, que usa su
+// propio margen corto (BOOKING_GRACE_MS, +2h) para el desbloqueo al reservar.
+export const SWEEP_GRACE_DAYS = 2;
+
+// Barrido de reservas caducadas abandonadas.
+// Marca NO_SHOW (auto-cerradas) las citas PENDING/CONFIRMED de hace más de
+// SWEEP_GRACE_DAYS días, sin walk-in y SIN visita (el paciente no llegó). Excluir "con
+// visita" evita marcar no-show a quien sí acudió aunque no se cerrara la revisión.
 export async function sweepExpiredAppointments(tz = "Europe/Madrid"): Promise<number> {
   const n = nowInTimezone(tz);
-  const nowMs = Date.parse(`${n.date}T00:00:00.000Z`) + n.minutes * 60_000;
-  const threshold = new Date(nowMs - BOOKING_GRACE_MS);
+  const todayStartMs = Date.parse(`${n.date}T00:00:00.000Z`);
+  const threshold = new Date(todayStartMs - SWEEP_GRACE_DAYS * 86_400_000);
 
   const stale = await prisma.appointment.findMany({
     where: {
