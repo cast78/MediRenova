@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireRole } from "../lib/authorization.js";
+import { requireRole, requireAnyRole, ROLES_STAFF } from "../lib/authorization.js";
 import { auditLog } from "../lib/audit.js";
 import { markWorkflowConverted } from "../lib/workflow-cron.js";
 import { markCampaignConverted } from "../lib/campaign-attribution.js";
@@ -10,6 +10,7 @@ import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/ava
 import { roomHasOverlap, enforceSingleBooking, bookingLabel, findBlockingBooking } from "../lib/booking.js";
 import { signConfirmationToken } from "../lib/jwt.js";
 import { appointmentEvents } from "../lib/appointment-timeline.js";
+import { classifyStuckEpisode, episodeAgeDays, STUCK_LABELS } from "../lib/episodes.js";
 
 const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
 
@@ -193,9 +194,12 @@ export async function appointmentRoutes(server: FastifyInstance) {
       return reply.send({ data: appointments, meta: { page: query.page, limit: query.limit, total, pages: Math.ceil(total / query.limit) }, errors: null });
     });
 
-  // GET /appointments/unclosed — citas "sin cerrar": de días pasados y aún en
-  // PENDING/CONFIRMED (nadie las cerró como atendida/no-show/cancelada). Worklist
-  // de higiene para recepción; sin ellas, el KPI de no-show queda infravalorado.
+  // GET /appointments/unclosed — citas "sin cerrar": de días pasados, en
+  // PENDING/CONFIRMED y SIN visita (el paciente no llegó). Worklist de higiene de
+  // reservas para recepción: candidatas a no-show/cancelar. Las citas CON visita
+  // (el paciente llegó pero no se cerró) NO salen aquí; viven en
+  // GET /appointments/unclosed-episodes. Sin esta worklist, el KPI de no-show
+  // queda infravalorado.
   server.get("/appointments/unclosed", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const q = z.object({
@@ -214,6 +218,9 @@ export async function appointmentRoutes(server: FastifyInstance) {
         tenantId: request.ctx.tenantId,
         status: { in: ["PENDING", "CONFIRMED"] },
         scheduledAt: { lt: todayStart },
+        // Solo citas SIN visita: si el paciente llegó (hay visita), es un episodio
+        // sin cerrar, no una reserva pendiente de resolver.
+        visit: { is: null },
       };
       if (request.ctx.centerId) where["room"] = { centerId: request.ctx.centerId };
 
@@ -234,6 +241,59 @@ export async function appointmentRoutes(server: FastifyInstance) {
         prisma.appointment.count({ where }),
       ]);
       return reply.send({ data: appointments, meta: { page, limit, total, pages: Math.ceil(total / limit) }, errors: null });
+    });
+
+  // GET /appointments/unclosed-episodes — episodios "sin cerrar": citas de días
+  // pasados CON visita cuyo episodio no alcanzó desenlace (el paciente llegó pero
+  // nadie cerró la visita/revisión). Visible para todo el personal (recepción,
+  // médico y admin), que son quienes pueden cerrarlos. Cada fila trae su estado
+  // atascado, el médico responsable y la antigüedad en días.
+  server.get("/appointments/unclosed-episodes", { preHandler: [requireAnyRole(ROLES_STAFF)] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const config = await prisma.tenantConfig.findUnique({ where: { tenantId: request.ctx.tenantId }, select: { timezone: true } });
+      const nowNaive = nowInTimezone(config?.timezone ?? "Europe/Madrid");
+      const todayStart = new Date(`${nowNaive.date}T00:00:00.000Z`);
+      // Referencia "hoy" (día natural en Z) para calcular la antigüedad en días.
+      const nowRef = todayStart;
+
+      const where: Record<string, unknown> = {
+        tenantId: request.ctx.tenantId,
+        scheduledAt: { lt: todayStart },
+        // Candidatas: tienen visita no terminal, o una revisión sin completar.
+        // La clasificación fina (y el descarte de resueltas) se hace en memoria con
+        // el núcleo puro classifyStuckEpisode. El volumen esperado es muy bajo.
+        OR: [
+          { visit: { is: { status: { in: ["WAITING", "IN_PROGRESS"] } } } },
+          { visit: { isNot: null }, revision: { is: { completedAt: null } } },
+        ],
+      };
+      if (request.ctx.centerId) where["room"] = { centerId: request.ctx.centerId };
+
+      const candidates = await prisma.appointment.findMany({
+        where,
+        take: 200,
+        include: {
+          customer: { select: { id: true, firstName: true, lastName: true, phone: true } },
+          product: { select: { id: true, name: true } },
+          room: { include: { center: { select: { id: true, name: true } } } },
+          doctor: { select: { id: true, firstName: true, lastName: true } },
+          visit: { select: { id: true, status: true, centerId: true, arrivedAt: true, startedAt: true, completedAt: true } },
+          revision: { select: { id: true, outcome: true, completedAt: true, doctorId: true } },
+        },
+        orderBy: { scheduledAt: "asc" },
+      });
+
+      const episodes = candidates
+        .map((a) => ({ appt: a, stuck: classifyStuckEpisode(a.visit, a.revision) }))
+        .filter((e): e is { appt: (typeof candidates)[number]; stuck: NonNullable<ReturnType<typeof classifyStuckEpisode>> } => e.stuck !== null)
+        .map(({ appt, stuck }) => ({
+          ...appt,
+          stuck,
+          stuckLabel: STUCK_LABELS[stuck],
+          ageDays: episodeAgeDays(appt.scheduledAt, nowRef),
+        }));
+
+      return reply.send({ data: episodes, meta: { total: episodes.length }, errors: null });
     });
 
   // POST /appointments
