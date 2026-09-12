@@ -302,7 +302,7 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
       </div>
 
       {/* Barra de filtros (Opción B: resumen de periodo + desplegables + chips) */}
-      <div className="bg-white border border-gray-200 border-l-[3px] border-l-blue-500 rounded-xl overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         {/* Cabecera: resumen del periodo + atajos de rango */}
         <div className="flex items-end justify-between gap-3 flex-wrap p-3 bg-gradient-to-b from-gray-50/70 to-transparent">
           <div>
@@ -347,27 +347,27 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
           </div>
         )}
 
-        {/* Fila de chips: filtros activos / alcance */}
-        <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-t border-dashed border-gray-200 bg-gray-50/60">
-          {!showEntityFilters ? (
-            <span className="text-xs text-gray-400 italic">Mostrando altas de todos los canales · sin filtros de entidad</span>
-          ) : scope === "all" ? (
-            <span className="text-xs text-gray-400 italic">Alcance: plataforma · todas las empresas</span>
-          ) : activeChips.length > 0 ? (
-            <>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-gray-400">Filtros</span>
-              {activeChips.map((c) => (
-                <span key={c.label} className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700">
-                  {c.label}: {c.value}
-                  <button onClick={c.clear} className="opacity-60 hover:opacity-100" aria-label={`Quitar filtro ${c.label}`}><X className="w-3 h-3" /></button>
-                </span>
-              ))}
-              <button onClick={clearAll} className="ml-auto text-[11px] text-gray-500 hover:text-gray-700 underline underline-offset-2">Limpiar todo</button>
-            </>
-          ) : (
-            <span className="text-xs text-gray-400 italic">Sin filtros aplicados · mostrando todos los centros</span>
-          )}
-        </div>
+        {/* Fila de chips: filtros activos / alcance (solo Analítica de gestión) */}
+        {showEntityFilters && (
+          <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-t border-dashed border-gray-200 bg-gray-50/60">
+            {scope === "all" ? (
+              <span className="text-xs text-gray-400 italic">Alcance: plataforma · todas las empresas</span>
+            ) : activeChips.length > 0 ? (
+              <>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-gray-400">Filtros</span>
+                {activeChips.map((c) => (
+                  <span key={c.label} className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700">
+                    {c.label}: {c.value}
+                    <button onClick={c.clear} className="opacity-60 hover:opacity-100" aria-label={`Quitar filtro ${c.label}`}><X className="w-3 h-3" /></button>
+                  </span>
+                ))}
+                <button onClick={clearAll} className="ml-auto text-[11px] text-gray-500 hover:text-gray-700 underline underline-offset-2">Limpiar todo</button>
+              </>
+            ) : (
+              <span className="text-xs text-gray-400 italic">Sin filtros aplicados · mostrando todos los centros</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Pestañas de vista */}
