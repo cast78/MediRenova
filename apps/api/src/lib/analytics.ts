@@ -353,6 +353,147 @@ export async function computeVolume(scope: AnalyticsScope, f: AnalyticsFilters, 
   );
 }
 
+// ── CAPTACIÓN (crm-captacion, fase 1 — solo lectura) ─────────────────────────
+
+// 7. Altas de clientes por periodo y canal (proxy: source de la 1ª cita).
+export interface AcquisitionCustomer { createdAt: Date; firstApptSource: string | null }
+export interface AcquisitionBucket { bucket: string; total: number; canales: Record<string, number> }
+
+// NÚCLEO PURO: agrupa altas por bucket y desglosa por canal ("SIN_CITA" si no tiene cita).
+export function acquisitionFrom(customers: AcquisitionCustomer[], granularity: Granularity): AcquisitionBucket[] {
+  const acc = new Map<string, { total: number; canales: Record<string, number> }>();
+  for (const c of customers) {
+    const key = bucketKey(c.createdAt.toISOString().slice(0, 10), granularity);
+    const cur = acc.get(key) ?? { total: 0, canales: {} };
+    cur.total++;
+    const canal = c.firstApptSource ?? "SIN_CITA";
+    cur.canales[canal] = (cur.canales[canal] ?? 0) + 1;
+    acc.set(key, cur);
+  }
+  return [...acc.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([bucket, v]) => ({ bucket, total: v.total, canales: v.canales }));
+}
+
+// 8. Clientes nuevos vs recurrentes entre los activos del periodo.
+export interface CustomerTenure { firstApptDate: string | null } // YYYY-MM-DD de su 1ª cita histórica
+
+// NÚCLEO PURO: nuevo = 1ª cita dentro del rango; recurrente = ya tenía cita antes.
+export function newVsReturningFrom(active: CustomerTenure[], from: string, to: string): { nuevos: number; recurrentes: number } {
+  let nuevos = 0, recurrentes = 0;
+  for (const c of active) {
+    if (!c.firstApptDate) continue;
+    if (c.firstApptDate < from) recurrentes++;
+    else if (c.firstApptDate <= to) nuevos++;
+  }
+  return { nuevos, recurrentes };
+}
+
+// 9. Efectividad de campañas por atribución de ventana (last-touch, sin doble conteo).
+export interface EffCampaign { id: string; name: string; sentAt: Date | null }
+export interface EffRecipient { campaignId: string; customerId: string }
+export interface EffAppointment { customerId: string; createdAt: Date; completedVisit: boolean }
+export interface CampaignEffRow { campaignId: string; name: string; enviados: number; convertidos: number; tasaConversion: number; reservasAtribuidas: number; visitasAtribuidas: number }
+
+// NÚCLEO PURO: atribuye cada cita a la campaña más reciente enviada al cliente dentro
+// de la ventana (last-touch). `convertidos` cuenta clientes distintos (sin doble conteo);
+// `reservasAtribuidas` cuenta todas las citas atribuidas.
+export function campaignEffectivenessFrom(campaigns: EffCampaign[], recipients: EffRecipient[], appointments: EffAppointment[], windowDays: number): CampaignEffRow[] {
+  const windowMs = windowDays * 86_400_000;
+  // Solo campañas enviadas (con sentAt).
+  const campById = new Map<string, { name: string; sentAt: Date }>();
+  for (const c of campaigns) if (c.sentAt) campById.set(c.id, { name: c.name, sentAt: c.sentAt });
+
+  // Envíos por campaña y por cliente.
+  const enviados = new Map<string, number>();
+  const sentToCustomer = new Map<string, { campaignId: string; sentAt: Date }[]>();
+  for (const r of recipients) {
+    const camp = campById.get(r.campaignId);
+    if (!camp) continue;
+    enviados.set(r.campaignId, (enviados.get(r.campaignId) ?? 0) + 1);
+    const arr = sentToCustomer.get(r.customerId) ?? [];
+    arr.push({ campaignId: r.campaignId, sentAt: camp.sentAt });
+    sentToCustomer.set(r.customerId, arr);
+  }
+
+  // Atribución de cada cita a la campaña last-touch dentro de la ventana.
+  interface Agg { reservas: number; visitas: number; convertidos: Set<string> }
+  const byCamp = new Map<string, Agg>();
+  for (const a of appointments) {
+    const sent = sentToCustomer.get(a.customerId);
+    if (!sent) continue;
+    const t = a.createdAt.getTime();
+    let best: { campaignId: string; sentAt: number } | null = null;
+    for (const s of sent) {
+      const st = s.sentAt.getTime();
+      if (st <= t && t - st <= windowMs && (!best || st > best.sentAt)) best = { campaignId: s.campaignId, sentAt: st };
+    }
+    if (!best) continue;
+    const agg = byCamp.get(best.campaignId) ?? { reservas: 0, visitas: 0, convertidos: new Set() };
+    agg.reservas++;
+    if (a.completedVisit) agg.visitas++;
+    agg.convertidos.add(a.customerId);
+    byCamp.set(best.campaignId, agg);
+  }
+
+  return [...campById.entries()].map(([id, c]) => {
+    const agg = byCamp.get(id);
+    const env = enviados.get(id) ?? 0;
+    const conv = agg?.convertidos.size ?? 0;
+    return { campaignId: id, name: c.name, enviados: env, convertidos: conv, tasaConversion: rate(conv, env), reservasAtribuidas: agg?.reservas ?? 0, visitasAtribuidas: agg?.visitas ?? 0 };
+  }).sort((a, b) => b.convertidos - a.convertidos);
+}
+
+// Consultas Prisma que alimentan los núcleos de captación (solo lectura).
+
+export interface AcquisitionResult { series: AcquisitionBucket[]; nuevosVsRecurrentes: { nuevos: number; recurrentes: number } }
+
+export async function computeAcquisition(scope: AnalyticsScope, f: AnalyticsFilters, granularity: Granularity): Promise<AcquisitionResult> {
+  const range = { gte: dayStart(f.from), lte: dayEnd(f.to) };
+
+  // Altas del periodo + canal (source de su 1ª cita histórica).
+  const created = await prisma.customer.findMany({ where: { ...scope.tenantWhere, deletedAt: null, createdAt: range }, select: { id: true, createdAt: true } });
+  const createdIds = created.map((c) => c.id);
+  const sourceByCustomer = new Map<string, string>();
+  if (createdIds.length) {
+    const appts = await prisma.appointment.findMany({ where: { ...scope.tenantWhere, customerId: { in: createdIds } }, select: { customerId: true, source: true, scheduledAt: true }, orderBy: { scheduledAt: "asc" } });
+    for (const a of appts) if (!sourceByCustomer.has(a.customerId)) sourceByCustomer.set(a.customerId, a.source);
+  }
+  const series = acquisitionFrom(created.map((c) => ({ createdAt: c.createdAt, firstApptSource: sourceByCustomer.get(c.id) ?? null })), granularity);
+
+  // Nuevos vs recurrentes entre los clientes activos (con cita en el rango).
+  const activeAppts = await prisma.appointment.findMany({ where: { ...scope.tenantWhere, scheduledAt: range }, select: { customerId: true } });
+  const activeIds = [...new Set(activeAppts.map((a) => a.customerId))];
+  const tenure: CustomerTenure[] = [];
+  if (activeIds.length) {
+    const firstEver = await prisma.appointment.findMany({ where: { ...scope.tenantWhere, customerId: { in: activeIds } }, select: { customerId: true, scheduledAt: true }, orderBy: { scheduledAt: "asc" } });
+    const firstDate = new Map<string, string>();
+    for (const a of firstEver) if (!firstDate.has(a.customerId)) firstDate.set(a.customerId, a.scheduledAt.toISOString().slice(0, 10));
+    for (const id of activeIds) tenure.push({ firstApptDate: firstDate.get(id) ?? null });
+  }
+  return { series, nuevosVsRecurrentes: newVsReturningFrom(tenure, f.from, f.to) };
+}
+
+export async function computeCampaignEffectiveness(scope: AnalyticsScope, f: AnalyticsFilters, windowDays: number): Promise<CampaignEffRow[]> {
+  const range = { gte: dayStart(f.from), lte: dayEnd(f.to) };
+  const campaigns = await prisma.campaign.findMany({ where: { ...scope.tenantWhere, sentAt: range }, select: { id: true, name: true, sentAt: true } });
+  if (campaigns.length === 0) return [];
+  const campIds = campaigns.map((c) => c.id);
+  const recipients = await prisma.campaignRecipient.findMany({ where: { campaignId: { in: campIds }, status: "SENT" }, select: { campaignId: true, customerId: true } });
+  const custIds = [...new Set(recipients.map((r) => r.customerId))];
+
+  // Citas de esos clientes en la ventana global [primer envío, último envío + N días].
+  const sentTimes = campaigns.map((c) => c.sentAt!.getTime());
+  const minSent = new Date(Math.min(...sentTimes));
+  const maxSentPlusWindow = new Date(Math.max(...sentTimes) + windowDays * 86_400_000);
+  const appts = custIds.length
+    ? await prisma.appointment.findMany({
+        where: { ...scope.tenantWhere, customerId: { in: custIds }, createdAt: { gte: minSent, lte: maxSentPlusWindow } },
+        select: { customerId: true, createdAt: true, visit: { select: { status: true } } },
+      })
+    : [];
+  const effAppts: EffAppointment[] = appts.map((a) => ({ customerId: a.customerId, createdAt: a.createdAt, completedVisit: a.visit?.status === "COMPLETED" }));
+  return campaignEffectivenessFrom(campaigns as EffCampaign[], recipients, effAppts, windowDays);
+}
+
 // ── Serialización CSV (para format=csv) — pura ───────────────────────────────
 
 function flatten(row: Record<string, unknown>): Record<string, string> {
