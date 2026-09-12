@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Percent, DoorOpen, Gauge, UserX, Download, AlertTriangle, ChevronRight, Stethoscope,
-  UserPlus, Users, Send, CheckCircle,
+  UserPlus, Users, Send, CheckCircle, Building2, Package, ChevronDown, X, Calendar,
 } from "lucide-react";
 
 // ── Tipos que devuelve la API ────────────────────────────────────────────────
@@ -93,6 +93,13 @@ function bucketLabel(b: string): string {
   if (d) return `${d[3]}/${d[2]}`;
   return b;
 }
+// Fecha legible "1 ene 2026" (el año es opcional para no repetirlo en un rango del mismo año).
+function fmtDate(s: string, withYear = true): string {
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return s;
+  const label = `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]!.toLowerCase()}`;
+  return withYear ? `${label} ${m[1]}` : label;
+}
 
 // ── Componentes de presentación ──────────────────────────────────────────────
 const TONE: Record<string, string> = {
@@ -149,6 +156,26 @@ function CsvButton({ ep, f, extra }: { ep: string; f: Filters; extra?: Record<st
 
 const empty = <p className="text-center text-gray-400 text-sm py-8">Sin datos en el periodo</p>;
 
+// Desplegable de filtro con icono y etiqueta (barra de filtros, Opción B).
+function FilterSelect({ label, icon: Icon, value, onChange, options }: {
+  label: string; icon: typeof Percent; value: string; onChange: (v: string) => void;
+  options: { v: string; t: string }[];
+}) {
+  return (
+    <label className="flex flex-col gap-1 min-w-[150px] flex-1">
+      <span className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">{label}</span>
+      <div className="relative flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-2.5 focus-within:border-blue-400 transition-colors">
+        <Icon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+        <select value={value} onChange={(e) => onChange(e.target.value)}
+          className="appearance-none bg-transparent text-[12.5px] text-gray-700 flex-1 outline-none py-2 pr-5 cursor-pointer">
+          {options.map((o) => <option key={o.v} value={o.v}>{o.t}</option>)}
+        </select>
+        <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 pointer-events-none" />
+      </div>
+    </label>
+  );
+}
+
 // ── Página ───────────────────────────────────────────────────────────────────
 // El mismo motor sirve dos módulos: "gestion" (analítica operativa de centros) y
 // "captacion" (comercial). Cada uno muestra sus propias pestañas.
@@ -201,6 +228,7 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
   const [productId, setProductId] = useState(sp.get("productId") ?? "");
   const [scope, setScope] = useState(sp.get("scope") === "all" ? "all" : "tenant");
   const [view, setView] = useState(sp.get("view") ?? defaultView);
+  const [showCustom, setShowCustom] = useState(false);
 
   const f: Filters = useMemo(() => ({ from, to, centerId, roomId, doctorId, productId, scope }),
     [from, to, centerId, roomId, doctorId, productId, scope]);
@@ -233,6 +261,32 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
     else { setFrom(addDays(today, -(days - 1))); setTo(today); }
   };
 
+  // ── Resumen del periodo (barra de filtros, Opción B) ──
+  const yearStart = `${new Date().getFullYear()}-01-01`;
+  const activePreset: number | "year" | null =
+    to !== today ? null
+      : from === yearStart ? "year"
+      : from === addDays(today, -29) ? 30
+      : from === addDays(today, -89) ? 90
+      : null;
+  const periodLabel = activePreset === "year" ? "Este año"
+    : activePreset === 30 ? "Últimos 30 días"
+    : activePreset === 90 ? "Últimos 90 días"
+    : "Rango personalizado";
+  const sameYear = from.slice(0, 4) === to.slice(0, 4);
+  const periodRange = `${fmtDate(from, !sameYear)} → ${fmtDate(to)} · ${daysBetween(from, to)} días`;
+  const datesVisible = showCustom || activePreset === null;
+
+  // Chips de filtros activos (solo gestión).
+  const doctorObj = (doctors ?? []).find((d) => d.id === doctorId);
+  const activeChips = ([
+    centerId && { label: "Centro", value: (centers ?? []).find((c) => c.id === centerId)?.name ?? centerId, clear: () => { setCenterId(""); setRoomId(""); } },
+    roomId && { label: "Sala", value: rooms.find((r) => r.id === roomId)?.name ?? roomId, clear: () => setRoomId("") },
+    doctorId && { label: "Médico", value: (`${doctorObj?.firstName ?? ""} ${doctorObj?.lastName ?? ""}`.trim() || doctorId), clear: () => setDoctorId("") },
+    productId && { label: "Producto", value: (products ?? []).find((p) => p.id === productId)?.name ?? productId, clear: () => setProductId("") },
+  ].filter(Boolean) as { label: string; value: string; clear: () => void }[]);
+  const clearAll = () => { setCenterId(""); setRoomId(""); setDoctorId(""); setProductId(""); };
+
   return (
     <div className="p-6 max-w-6xl space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -247,46 +301,73 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
         )}
       </div>
 
-      {/* Barra de filtros */}
-      <div className="bg-white border border-gray-200 rounded-xl p-3 flex flex-wrap items-end gap-3 text-sm">
-        <div className="flex gap-1.5">
-          {([["30d", 30], ["90d", 90], ["Año", "year"]] as const).map(([l, d]) => (
-            <button key={l} onClick={() => setPreset(d)}
-              className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">{l}</button>
-          ))}
+      {/* Barra de filtros (Opción B: resumen de periodo + desplegables + chips) */}
+      <div className="bg-white border border-gray-200 border-l-[3px] border-l-blue-500 rounded-xl overflow-hidden">
+        {/* Cabecera: resumen del periodo + atajos de rango */}
+        <div className="flex items-end justify-between gap-3 flex-wrap p-3 bg-gradient-to-b from-gray-50/70 to-transparent">
+          <div>
+            <div className="text-[15px] font-bold tracking-tight text-gray-900">{periodLabel}</div>
+            <div className="text-[11px] text-gray-500 mt-0.5 tabular-nums">{periodRange}</div>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {([["30d", 30], ["90d", 90], ["Año", "year"]] as const).map(([l, d]) => (
+              <button key={l} onClick={() => { setPreset(d); setShowCustom(false); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${activePreset === d ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:text-gray-800"}`}>{l}</button>
+            ))}
+            <button onClick={() => setShowCustom((v) => !v)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${datesVisible ? "bg-blue-50 border-blue-100 text-blue-700" : "bg-white border-gray-200 text-gray-600 hover:border-blue-300"}`}>
+              <Calendar className="w-3.5 h-3.5" /> Personalizar
+            </button>
+          </div>
         </div>
-        <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Desde</span>
-          <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1" /></label>
-        <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Hasta</span>
-          <input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1" /></label>
+
+        {/* Fechas (se revelan con Personalizar o cuando el rango no coincide con un atajo) */}
+        {datesVisible && (
+          <div className="flex flex-wrap items-end gap-3 px-3 pb-3 text-sm">
+            <label className="flex flex-col gap-1"><span className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Desde</span>
+              <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="border border-gray-200 rounded-lg px-2.5 py-1.5 bg-gray-50" /></label>
+            <label className="flex flex-col gap-1"><span className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Hasta</span>
+              <input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} className="border border-gray-200 rounded-lg px-2.5 py-1.5 bg-gray-50" /></label>
+          </div>
+        )}
+
+        {/* Filtros de entidad (solo Analítica de gestión; Captación agrega por empresa) */}
         {showEntityFilters && scope !== "all" && (
-          <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Centro</span>
-            <select value={centerId} onChange={(e) => { setCenterId(e.target.value); setRoomId(""); }} className="border border-gray-200 rounded-lg px-2 py-1 bg-white">
-              <option value="">Todos</option>
-              {(centers ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select></label>
+          <div className="flex flex-wrap gap-2.5 px-3 pb-3">
+            <FilterSelect label="Centro" icon={Building2} value={centerId} onChange={(v) => { setCenterId(v); setRoomId(""); }}
+              options={[{ v: "", t: "Todos los centros" }, ...(centers ?? []).map((c) => ({ v: c.id, t: c.name }))]} />
+            {centerId && rooms.length > 0 && (
+              <FilterSelect label="Sala" icon={DoorOpen} value={roomId} onChange={setRoomId}
+                options={[{ v: "", t: "Todas" }, ...rooms.map((r) => ({ v: r.id, t: r.name }))]} />
+            )}
+            <FilterSelect label="Médico" icon={Stethoscope} value={doctorId} onChange={setDoctorId}
+              options={[{ v: "", t: "Todos" }, ...(doctors ?? []).map((d) => ({ v: d.id, t: `${d.firstName ?? ""} ${d.lastName ?? ""}`.trim() || d.id }))]} />
+            <FilterSelect label="Producto" icon={Package} value={productId} onChange={setProductId}
+              options={[{ v: "", t: "Todos" }, ...(products ?? []).map((p) => ({ v: p.id, t: p.name }))]} />
+          </div>
         )}
-        {showEntityFilters && scope !== "all" && centerId && rooms.length > 0 && (
-          <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Sala</span>
-            <select value={roomId} onChange={(e) => setRoomId(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1 bg-white">
-              <option value="">Todas</option>
-              {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select></label>
-        )}
-        {showEntityFilters && (
-          <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Médico</span>
-            <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1 bg-white">
-              <option value="">Todos</option>
-              {(doctors ?? []).map((d) => <option key={d.id} value={d.id}>{`${d.firstName ?? ""} ${d.lastName ?? ""}`.trim() || d.id}</option>)}
-            </select></label>
-        )}
-        {showEntityFilters && (
-          <label className="flex flex-col gap-0.5"><span className="text-[10px] text-gray-400 uppercase">Producto</span>
-            <select value={productId} onChange={(e) => setProductId(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1 bg-white">
-              <option value="">Todos</option>
-              {(products ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select></label>
-        )}
+
+        {/* Fila de chips: filtros activos / alcance */}
+        <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-t border-dashed border-gray-200 bg-gray-50/60">
+          {!showEntityFilters ? (
+            <span className="text-xs text-gray-400 italic">Mostrando altas de todos los canales · sin filtros de entidad</span>
+          ) : scope === "all" ? (
+            <span className="text-xs text-gray-400 italic">Alcance: plataforma · todas las empresas</span>
+          ) : activeChips.length > 0 ? (
+            <>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-gray-400">Filtros</span>
+              {activeChips.map((c) => (
+                <span key={c.label} className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700">
+                  {c.label}: {c.value}
+                  <button onClick={c.clear} className="opacity-60 hover:opacity-100" aria-label={`Quitar filtro ${c.label}`}><X className="w-3 h-3" /></button>
+                </span>
+              ))}
+              <button onClick={clearAll} className="ml-auto text-[11px] text-gray-500 hover:text-gray-700 underline underline-offset-2">Limpiar todo</button>
+            </>
+          ) : (
+            <span className="text-xs text-gray-400 italic">Sin filtros aplicados · mostrando todos los centros</span>
+          )}
+        </div>
       </div>
 
       {/* Pestañas de vista */}
