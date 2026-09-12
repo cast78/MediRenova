@@ -416,6 +416,9 @@ model Appointment {
   status          AppointmentStatus @default(PENDING)
   source          AppointmentSource @default(BACKOFFICE)
   cancelReason    CancellationReason? @map("cancel_reason")
+  // true = cerrada automáticamente por el sistema (barrido de caducadas) como NO_SHOW,
+  // frente a un NO_SHOW marcado por recepción. Permite distinguir/auditar sin un estado nuevo.
+  autoClosed      Boolean           @default(false) @map("auto_closed")
   notes           String?
   icsUrl          String?           @map("ics_url")
   createdById     String?           @map("created_by_id")

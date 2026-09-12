@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { encryptDni } from "../lib/crypto.js";
 import { validateSpanishDni, hashDni } from "../lib/dni.js";
 import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/availability.js";
-import { roomHasOverlap } from "../lib/booking.js";
+import { roomHasOverlap, enforceSingleBooking, bookingLabel } from "../lib/booking.js";
 
 // ── Envelope (tarea 14.7) ────────────────────────────────────────────────────
 function ok(reply: FastifyReply, data: unknown, status = 200) {
@@ -170,6 +170,11 @@ export async function publicApiRoutes(server: FastifyInstance) {
     const start = new Date(body.data.scheduledAt);
     if (await roomHasOverlap(body.data.roomId, start, product.slotDuration)) {
       return fail(reply, 409, "SLOT_TAKEN", "La franja ya está reservada");
+    }
+    // Regla: 1 reserva activa por cliente+producto. Si ya tiene una futura → bloquear.
+    const single = await enforceSingleBooking(request.ctx.tenantId, body.data.customerId, body.data.productId);
+    if (single.blockedBy) {
+      return fail(reply, 409, "CUSTOMER_HAS_ACTIVE_BOOKING", `El cliente ya tiene una reserva activa de este producto (${bookingLabel(single.blockedBy.scheduledAt)}).`);
     }
 
     const appointment = await prisma.appointment.create({
