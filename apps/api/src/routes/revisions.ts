@@ -10,6 +10,7 @@ import { missingForCompletion, type RevFieldDef } from "../lib/revision-validati
 import { DEFAULT_EXPLORATION_FORM } from "../lib/default-form.js";
 import { hashDni } from "../lib/dni.js";
 import { signMagicLinkToken } from "../lib/jwt.js";
+import { isClosedLate } from "../lib/episodes.js";
 
 const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
 
@@ -371,6 +372,10 @@ export async function revisionRoutes(server: FastifyInstance) {
             )
           : null;
 
+      // ② Episodio "completado tarde": si la revisión se cierra en un día posterior
+      // al de la cita, se marca "fuera de plazo" (sin alterar el desenlace clínico).
+      const closedLate = isClosedLate(existing.appointment.scheduledAt, completedAt);
+
       const updated = await prisma.revision.update({
         where: { id: request.params.id },
         data: {
@@ -381,6 +386,7 @@ export async function revisionRoutes(server: FastifyInstance) {
           // colegiado y firma van en el certificado), no quien la abrió.
           doctorId: request.ctx.userId,
           completedAt,
+          closedLate,
           expiryDate,
         },
       });

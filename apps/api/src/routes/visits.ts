@@ -326,6 +326,8 @@ export async function visitRoutes(server: FastifyInstance) {
         if (!existing.startedAt) data.startedAt = now;
       }
       if (body.data.status === "COMPLETED" && !existing.completedAt) data.completedAt = now;
+      // "Se fue" (LEFT): deja constancia del motivo en la propia visita.
+      if (body.data.status === "LEFT" && !existing.cancelReason) data.cancelReason = "SE_FUE";
     }
 
     const visit = await prisma.visit.update({ where: { id: existing.id }, data, include: visitInclude });
@@ -335,15 +337,11 @@ export async function visitRoutes(server: FastifyInstance) {
       "UPDATE", "visit", visit.id, { after: { status: visit.status, currentRoomId: visit.currentRoomId } },
     );
 
-    // "Se fue" (LEFT): el paciente llegó pero se marchó → la reserva se cierra como
-    // No presentó (así sale de "Sin cerrar" y cuenta en métricas). El matiz "se fue"
-    // queda en la visita (LEFT), que el ciclo/timeline muestran como "Se fue".
-    if (body.data.status === "LEFT" && existing.appointmentId) {
-      await prisma.appointment.updateMany({
-        where: { id: existing.appointmentId, tenantId: request.ctx.tenantId, status: { in: ["PENDING", "CONFIRMED"] } },
-        data: { status: "NO_SHOW" },
-      }).catch(() => {});
-    }
+    // "Se fue" (LEFT): el paciente llegó pero se marchó sin completar. La visita
+    // LEFT es la fuente de verdad y cuenta como fuga "se fue" del embudo. NO se
+    // marca la cita como NO_SHOW (sí vino): eso falsearía el KPI de no-show y
+    // duplicaría la fuga. La cita queda resuelta por el estado terminal de la visita.
+    // (Ver crm-episodios-sin-cerrar.)
 
     return reply.send({ data: visit, errors: null });
   });

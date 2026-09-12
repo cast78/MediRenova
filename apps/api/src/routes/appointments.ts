@@ -296,6 +296,109 @@ export async function appointmentRoutes(server: FastifyInstance) {
       return reply.send({ data: episodes, meta: { total: episodes.length }, errors: null });
     });
 
+  // ── Cierres de episodios sin cerrar (por rol) ─────────────────────────────
+  // Cada cierre registra el motivo/auditoría; nunca se fabrica un desenlace clínico.
+
+  // ① POST /appointments/:id/left — "Se fue" (recepción/médico/admin). El paciente
+  // llegó pero se marchó sin completar. La visita pasa a LEFT (fuga "se fue" del
+  // embudo). NO se marca la cita como NO_SHOW: sí vino. La cita queda resuelta por
+  // el estado terminal de la visita.
+  server.post<{ Params: { id: string } }>("/appointments/:id/left", { preHandler: [requireAnyRole(ROLES_STAFF)] },
+    async (request, reply: FastifyReply) => {
+      const body = z.object({ reason: z.string().max(300).optional() }).safeParse(request.body ?? {});
+      if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
+
+      const appt = await prisma.appointment.findFirst({
+        where: { id: request.params.id, tenantId: request.ctx.tenantId },
+        include: { visit: { select: { id: true, status: true } }, revision: { select: { completedAt: true } } },
+      });
+      if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      if (!classifyStuckEpisode(appt.visit, appt.revision)) {
+        return reply.status(409).send({ errors: [{ code: "NOT_STUCK", message: "El episodio no está sin cerrar (ya resuelto o sin visita)" }] });
+      }
+
+      await prisma.visit.update({
+        where: { id: appt.visit!.id },
+        data: { status: "LEFT", cancelReason: body.data.reason?.trim() || "SE_FUE" },
+      });
+      await auditLog(
+        { tenantId: request.ctx.tenantId, userId: request.ctx.userId, ip: request.ip },
+        "UPDATE", "visit", appt.visit!.id, { kind: "episode_left", reason: body.data.reason ?? null },
+      );
+      return reply.send({ data: { id: appt.id, visitStatus: "LEFT" }, errors: null });
+    });
+
+  // ③ POST /appointments/:id/void-visit — Anular por llegada errónea
+  // (recepción/admin). El check-in fue un error (paciente equivocado, duplicado o
+  // dato de prueba): se descarta la visita y la cita vuelve a "sin visita" (podrá
+  // marcarse no-show/cancelar/reprogramar). Excluida de KPIs como ruido. Solo si NO
+  // hay revisión (una revisión iniciada la gestiona el médico).
+  server.post<{ Params: { id: string } }>("/appointments/:id/void-visit", { preHandler: [requireRole("RECEPTIONIST")] },
+    async (request, reply: FastifyReply) => {
+      const body = z.object({ reason: z.string().max(300).optional() }).safeParse(request.body ?? {});
+      if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
+
+      const appt = await prisma.appointment.findFirst({
+        where: { id: request.params.id, tenantId: request.ctx.tenantId },
+        include: { visit: { select: { id: true, status: true } }, revision: { select: { id: true } } },
+      });
+      if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      if (!appt.visit) return reply.status(409).send({ errors: [{ code: "NO_VISIT", message: "La cita no tiene visita que anular" }] });
+      if (["COMPLETED", "LEFT", "CANCELLED"].includes(appt.visit.status)) {
+        return reply.status(409).send({ errors: [{ code: "VISIT_RESOLVED", message: "La visita ya está resuelta" }] });
+      }
+      if (appt.revision) {
+        return reply.status(409).send({ errors: [{ code: "HAS_REVISION", message: "El episodio tiene una revisión; complétala (médico) o gestiónala antes de anular" }] });
+      }
+
+      // Descarta la visita (CANCELLED + motivo) y la desvincula de la cita, que así
+      // vuelve a "sin visita" y a la worklist de reservas.
+      await prisma.visit.update({
+        where: { id: appt.visit.id },
+        data: { status: "CANCELLED", cancelReason: body.data.reason?.trim() || "ANULADA_ERROR", appointmentId: null },
+      });
+      await auditLog(
+        { tenantId: request.ctx.tenantId, userId: request.ctx.userId, ip: request.ip },
+        "UPDATE", "appointment", appt.id, { kind: "episode_void", visitId: appt.visit.id, reason: body.data.reason ?? null },
+      );
+      return reply.send({ data: { id: appt.id, voided: true }, errors: null });
+    });
+
+  // ④ POST /appointments/:id/admin-close — Cierre administrativo (SOLO admin) de un
+  // episodio irrecuperable (huérfano sin información, limpieza de datos demo). Estado
+  // terminal propio (CLOSED_ADMIN) + nota obligatoria + auditoría. Aislado de las
+  // tasas clínicas y visible en su propia métrica.
+  server.post<{ Params: { id: string } }>("/appointments/:id/admin-close", { preHandler: [requireRole("ADMIN")] },
+    async (request, reply: FastifyReply) => {
+      const body = z.object({ note: z.string().trim().min(1, "La nota es obligatoria").max(500) }).safeParse(request.body);
+      if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
+
+      const appt = await prisma.appointment.findFirst({
+        where: { id: request.params.id, tenantId: request.ctx.tenantId },
+        include: { visit: { select: { id: true, status: true } }, revision: { select: { completedAt: true } } },
+      });
+      if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      if (!classifyStuckEpisode(appt.visit, appt.revision)) {
+        return reply.status(409).send({ errors: [{ code: "NOT_STUCK", message: "El episodio no está sin cerrar (ya resuelto o sin visita)" }] });
+      }
+
+      const now = new Date();
+      await prisma.$transaction(async (tx) => {
+        await tx.appointment.update({
+          where: { id: appt.id },
+          data: { status: "CLOSED_ADMIN", adminClosedAt: now, adminClosedById: request.ctx.userId, adminClosureNote: body.data.note },
+        });
+        if (appt.visit) {
+          await tx.visit.update({ where: { id: appt.visit.id }, data: { status: "CANCELLED", cancelReason: "CIERRE_ADMIN" } });
+        }
+      });
+      await auditLog(
+        { tenantId: request.ctx.tenantId, userId: request.ctx.userId, ip: request.ip },
+        "UPDATE", "appointment", appt.id, { kind: "admin_close", note: body.data.note },
+      );
+      return reply.send({ data: { id: appt.id, status: "CLOSED_ADMIN" }, errors: null });
+    });
+
   // POST /appointments
   server.post("/appointments", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request: FastifyRequest, reply: FastifyReply) => {

@@ -1,6 +1,6 @@
 // Clasificación de episodios sin cerrar (núcleo puro, sin BD).
 import { describe, it, expect } from "vitest";
-import { classifyStuckEpisode, episodeAgeDays, STUCK_LABELS } from "../src/lib/episodes";
+import { classifyStuckEpisode, episodeAgeDays, isClosedLate, STUCK_LABELS } from "../src/lib/episodes";
 
 describe("classifyStuckEpisode — detección de episodio atascado", () => {
   it("sin visita → null (es no-show/cancelar en la worklist de reservas)", () => {
@@ -54,5 +54,17 @@ describe("episodeAgeDays — antigüedad del episodio", () => {
   });
   it("nunca negativa (cita futura)", () => {
     expect(episodeAgeDays(new Date("2026-09-20T10:00:00Z"), now)).toBe(0);
+  });
+});
+
+describe("isClosedLate — revisión completada fuera de plazo", () => {
+  it("completada el mismo día de la cita → no es tardía", () => {
+    expect(isClosedLate(new Date("2026-09-13T09:00:00Z"), new Date("2026-09-13T18:30:00Z"))).toBe(false);
+  });
+  it("completada al día siguiente → tardía", () => {
+    expect(isClosedLate(new Date("2026-09-12T09:00:00Z"), new Date("2026-09-13T09:05:00Z"))).toBe(true);
+  });
+  it("completada varios días después → tardía", () => {
+    expect(isClosedLate(new Date("2026-09-06T09:00:00Z"), new Date("2026-09-13T10:00:00Z"))).toBe(true);
   });
 });

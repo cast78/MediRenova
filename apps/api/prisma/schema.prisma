@@ -36,6 +36,10 @@ enum AppointmentStatus {
   CANCELLED
   RESCHEDULED
   NO_SHOW
+  // Cierre administrativo (solo ADMIN) de un episodio irrecuperable: estado
+  // terminal propio, distinto de atendida/no-show/cancelada. Aislado de las tasas
+  // clínicas y auditado. Ver crm-episodios-sin-cerrar.
+  CLOSED_ADMIN
 }
 
 enum AppointmentSource {
@@ -419,6 +423,11 @@ model Appointment {
   // true = cerrada automáticamente por el sistema (barrido de caducadas) como NO_SHOW,
   // frente a un NO_SHOW marcado por recepción. Permite distinguir/auditar sin un estado nuevo.
   autoClosed      Boolean           @default(false) @map("auto_closed")
+  // Cierre administrativo (status CLOSED_ADMIN): quién lo cerró, cuándo y por qué.
+  // El actor también queda en audit_logs; estos campos facilitan mostrarlo en el panel.
+  adminClosedAt   DateTime?         @map("admin_closed_at")
+  adminClosedById String?           @map("admin_closed_by_id")
+  adminClosureNote String?          @map("admin_closure_note")
   notes           String?
   icsUrl          String?           @map("ics_url")
   createdById     String?           @map("created_by_id")
@@ -467,6 +476,9 @@ model Visit {
   calledAt      DateTime?   @map("called_at")
   startedAt     DateTime?   @map("started_at")
   completedAt   DateTime?   @map("completed_at")
+  // Motivo al cerrar la visita fuera del flujo normal: "se fue" (LEFT), anulación
+  // por llegada errónea o cierre administrativo (CANCELLED). Texto/código libre.
+  cancelReason  String?     @map("cancel_reason")
   notes         String?
   createdById   String?     @map("created_by_id")
   createdAt     DateTime    @default(now()) @map("created_at")
@@ -506,6 +518,9 @@ model Revision {
   pdfUrl         String?         @map("pdf_url")
   startedAt      DateTime?       @map("started_at")
   completedAt    DateTime?       @map("completed_at")
+  // true = la revisión se completó DESPUÉS del día de la cita (cierre "fuera de
+  // plazo"). No altera el desenlace clínico; alimenta una métrica propia.
+  closedLate     Boolean         @default(false) @map("closed_late")
   notes          String?
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")

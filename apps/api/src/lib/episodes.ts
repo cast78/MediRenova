@@ -57,3 +57,9 @@ export function episodeAgeDays(scheduledAt: Date, now: Date): number {
   const diff = Math.floor((dayStart(now) - dayStart(scheduledAt)) / DAY);
   return diff < 0 ? 0 : diff;
 }
+
+// ② "Cerrada fuera de plazo": true si la revisión se completó en un día NATURAL
+// posterior al de la cita. No altera el desenlace clínico; solo marca el retraso.
+export function isClosedLate(scheduledAt: Date, completedAt: Date): boolean {
+  return episodeAgeDays(scheduledAt, completedAt) > 0;
+}
