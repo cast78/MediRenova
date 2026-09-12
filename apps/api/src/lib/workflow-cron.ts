@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { signMagicLinkToken } from "./jwt.js";
 import { whatsapp } from "./whatsapp.js";
 import { runDueCampaigns } from "./campaign-runner.js";
+import { sweepExpiredAppointments } from "./appointment-sweep.js";
 
 const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
 
@@ -24,6 +25,22 @@ export function startWorkflowCron(): void {
     { timezone: "Europe/Madrid" },
   );
   console.log("[workflow-cron] Scheduled daily at 08:00 Europe/Madrid");
+
+  // Barrido de reservas caducadas cada hora: cierra como NO_SHOW (auto) las citas
+  // pasadas sin resolver y sin visita, para liberar al cliente y mantener el KPI real.
+  cron.schedule(
+    "0 * * * *",
+    async () => {
+      try {
+        const n = await sweepExpiredAppointments();
+        if (n > 0) console.log(`[appointment-sweep] ${n} cita(s) caducada(s) -> NO_SHOW (auto)`);
+      } catch (err) {
+        console.error("[appointment-sweep] Error:", err);
+      }
+    },
+    { timezone: "Europe/Madrid" },
+  );
+  console.log("[appointment-sweep] Scheduled hourly");
 }
 
 export async function runWorkflowJob(): Promise<void> {

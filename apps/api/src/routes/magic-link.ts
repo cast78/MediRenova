@@ -6,7 +6,7 @@ import { requireRole } from "../lib/authorization.js";
 import { markWorkflowConverted } from "../lib/workflow-cron.js";
 import { markCampaignConverted } from "../lib/campaign-attribution.js";
 import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/availability.js";
-import { roomHasOverlap } from "../lib/booking.js";
+import { roomHasOverlap, enforceSingleBooking, bookingLabel } from "../lib/booking.js";
 
 const confirmSchema = z.object({
   roomId: z.string().uuid(),
@@ -136,6 +136,11 @@ export async function magicLinkRoutes(server: FastifyInstance) {
         // El flujo público (paciente) NO permite solapar.
         if (await roomHasOverlap(body.data.roomId, new Date(body.data.scheduledAt), product.slotDuration)) {
           return reply.status(409).send({ errors: [{ code: "SLOT_TAKEN", message: "Franja ya reservada, elige otra" }] });
+        }
+        // Regla: 1 reserva activa por cliente+producto. Si ya tiene una futura → bloquear.
+        const single = await enforceSingleBooking(payload.tid, payload.cid, payload.pid);
+        if (single.blockedBy) {
+          return reply.status(409).send({ errors: [{ code: "CUSTOMER_HAS_ACTIVE_BOOKING", message: `Ya tienes una reserva activa de este producto (${bookingLabel(single.blockedBy.scheduledAt)}). Reprográmala en vez de crear otra.` }] });
         }
 
         try {

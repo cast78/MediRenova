@@ -78,8 +78,8 @@ const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-700 border-amber-200",
   CONFIRMED: "bg-emerald-50 text-emerald-700 border-emerald-200",
   ATTENDED: "bg-violet-50 text-violet-700 border-violet-200",
-  CANCELLED: "bg-gray-100 text-gray-500 border-gray-200",
-  NO_SHOW: "bg-red-50 text-red-600 border-red-200",
+  CANCELLED: "bg-red-50 text-red-600 border-red-200",
+  NO_SHOW: "bg-orange-50 text-orange-600 border-orange-200",
   RESCHEDULED: "bg-slate-100 text-slate-700 border-slate-200",
 };
 
@@ -87,8 +87,8 @@ const STATUS_DOT: Record<string, string> = {
   PENDING: "bg-amber-400",
   CONFIRMED: "bg-emerald-500",
   ATTENDED: "bg-violet-500",
-  CANCELLED: "bg-gray-400",
-  NO_SHOW: "bg-red-400",
+  CANCELLED: "bg-red-500",
+  NO_SHOW: "bg-orange-400",
   RESCHEDULED: "bg-slate-400",
 };
 
@@ -170,7 +170,7 @@ function DateNav({ date, onChange }: { date: string; onChange: (d: string) => vo
 
 // ── New Booking Modal ─────────────────────────────────────────────────────────
 
-function NewAppointmentModal({ onClose }: { onClose: () => void }) {
+function NewAppointmentModal({ onClose, onManageExisting }: { onClose: () => void; onManageExisting: (id: string) => void }) {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [customerId, setCustomerId] = useState("");
@@ -204,6 +204,14 @@ function NewAppointmentModal({ onClose }: { onClose: () => void }) {
     queryKey: ["centers"],
     queryFn: () => apiFetch<Center[]>("/centers"),
   });
+
+  // Aviso temprano (paso 1): ¿el cliente ya tiene una reserva activa de este producto?
+  const { data: activeBooking } = useQuery<{ blocking: { id: string; scheduledAt: string; label: string } | null }>({
+    queryKey: ["active-booking", customerId, productId],
+    queryFn: () => apiFetch(`/appointments/active-booking?customerId=${customerId}&productId=${productId}`),
+    enabled: !!(customerId && productId),
+  });
+  const blockingBooking = activeBooking?.blocking ?? null;
 
   const selectedCenter = centers?.find((c) => c.id === centerId);
 
@@ -343,10 +351,22 @@ function NewAppointmentModal({ onClose }: { onClose: () => void }) {
                 {products?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
+            {blockingBooking && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+                <p className="font-medium">Este cliente ya tiene una reserva activa de este producto</p>
+                <p className="text-amber-700 mt-0.5">Fecha: {blockingBooking.label}. Reprográmala en vez de crear una nueva.</p>
+                <button
+                  onClick={() => { onManageExisting(blockingBooking.id); onClose(); }}
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-amber-800 hover:bg-amber-100 transition-colors"
+                >
+                  Gestionar la reserva existente →
+                </button>
+              </div>
+            )}
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setStep(2)}
-                disabled={!customerId || !productId}
+                disabled={!customerId || !productId || !!blockingBooking}
                 className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40"
               >
                 Siguiente →
@@ -883,6 +903,7 @@ function apptErr(e: unknown): string {
 // Fila de la worklist "Sin cerrar": cita de un día pasado aún sin resolver.
 function UnclosedRow({ appt, onManage, onChanged }: { appt: Appointment; onManage: (a: Appointment) => void; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [showClient, setShowClient] = useState(false);
   const name = `${appt.customer?.firstName ?? ""} ${appt.customer?.lastName ?? ""}`.trim() || "Sin nombre";
   const dateLabel = new Date(`${appt.scheduledAt.slice(0, 10)}T00:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
   async function markNoShow() {
@@ -891,13 +912,21 @@ function UnclosedRow({ appt, onManage, onChanged }: { appt: Appointment; onManag
     catch { setBusy(false); }
   }
   return (
+    <>
     <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50/60">
       <div className="w-16 shrink-0">
         <p className="text-xs text-gray-400 capitalize leading-tight">{dateLabel}</p>
         <p className="font-mono font-bold text-blue-700 text-sm">{appt.scheduledAt.slice(11, 16)}</p>
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 truncate">{name}</p>
+        {appt.customer?.id ? (
+          <button onClick={() => setShowClient(true)} title="Ver ficha del cliente" className="group/name inline-flex items-center gap-1.5 min-w-0 text-left">
+            <UserCircle className="w-4 h-4 text-blue-600 shrink-0" />
+            <span className="text-sm font-semibold text-gray-900 group-hover/name:text-blue-700 group-hover/name:underline underline-offset-2 truncate">{name}</span>
+          </button>
+        ) : (
+          <p className="text-sm font-medium text-gray-900 truncate">{name}</p>
+        )}
         <p className="text-xs text-gray-500 truncate">
           {appt.product?.name ?? "—"}{appt.room ? ` · ${appt.room.name}` : ""} · <span className="text-gray-400">{STATUS_LABELS[appt.status] ?? appt.status}</span>
         </p>
@@ -907,6 +936,8 @@ function UnclosedRow({ appt, onManage, onChanged }: { appt: Appointment; onManag
         <button onClick={() => onManage(appt)} className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium">Gestionar</button>
       </div>
     </div>
+    {showClient && appt.customer?.id && <ClientInfoModal customerId={appt.customer.id} onClose={() => setShowClient(false)} />}
+    </>
   );
 }
 
@@ -1437,7 +1468,7 @@ function AppointmentsBoard() {
 
   return (
     <div className="p-6 max-w-5xl">
-      {showModal && <NewAppointmentModal onClose={() => setShowModal(false)} />}
+      {showModal && <NewAppointmentModal onClose={() => setShowModal(false)} onManageExisting={openApptById} />}
       {detailAppt && <AppointmentDetailModal key={detailAppt.id} appt={detailAppt} onClose={() => setDetailAppt(null)} onChanged={invalidateAppts} onOpenById={openApptById} />}
       {confirmData && <ConfirmRequestModal data={confirmData} onClose={() => setConfirmData(null)} />}
       {confirmErr && <div onClick={() => setConfirmErr(null)} className="fixed top-4 right-4 z-[70] bg-red-600 text-white text-sm px-4 py-2 rounded-lg shadow cursor-pointer">{confirmErr}</div>}

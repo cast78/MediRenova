@@ -7,7 +7,7 @@ import { markWorkflowConverted } from "../lib/workflow-cron.js";
 import { markCampaignConverted } from "../lib/campaign-attribution.js";
 import { buildIcs } from "../lib/ics.js";
 import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/availability.js";
-import { roomHasOverlap } from "../lib/booking.js";
+import { roomHasOverlap, enforceSingleBooking, bookingLabel, findBlockingBooking } from "../lib/booking.js";
 import { signConfirmationToken } from "../lib/jwt.js";
 import { appointmentEvents } from "../lib/appointment-timeline.js";
 
@@ -67,6 +67,16 @@ type RoomSchedule = {
 };
 
 export async function appointmentRoutes(server: FastifyInstance) {
+  // GET /appointments/active-booking — ¿el cliente ya tiene una reserva activa de este
+  // producto que bloquearía una nueva? Sirve para avisar pronto en el formulario.
+  server.get("/appointments/active-booking", { preHandler: [requireRole("RECEPTIONIST")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const q = z.object({ customerId: z.string().uuid(), productId: z.string().uuid() }).safeParse(request.query);
+      if (!q.success) return reply.status(400).send({ errors: [{ code: "VALIDATION" }] });
+      const blocking = await findBlockingBooking(request.ctx.tenantId, q.data.customerId, q.data.productId);
+      return reply.send({ data: { blocking: blocking ? { id: blocking.id, scheduledAt: blocking.scheduledAt, label: bookingLabel(blocking.scheduledAt) } : null } });
+    });
+
   // GET /appointments/slots — available slots
   server.get("/appointments/slots", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
@@ -261,6 +271,15 @@ export async function appointmentRoutes(server: FastifyInstance) {
         return reply.status(409).send({ errors: [{ code: "ROOM_OCCUPIED", message: "La sala ya tiene una cita en ese horario. Elige otro hueco." }] });
       }
 
+      // Regla: 1 reserva activa por cliente+producto (walk-in exento). Si ya tiene una
+      // futura → bloquear; si tiene una caducada (>2h) → se auto-resuelve y se permite.
+      if (body.data.source !== "WALK_IN") {
+        const single = await enforceSingleBooking(request.ctx.tenantId, body.data.customerId, body.data.productId);
+        if (single.blockedBy) {
+          return reply.status(409).send({ errors: [{ code: "CUSTOMER_HAS_ACTIVE_BOOKING", message: `El cliente ya tiene una reserva activa de este producto (${bookingLabel(single.blockedBy.scheduledAt)}). Reprográmala en vez de crear otra.` }] });
+        }
+      }
+
       try {
         const appointment = await prisma.appointment.create({
           data: {
@@ -439,6 +458,9 @@ export async function appointmentRoutes(server: FastifyInstance) {
       }
 
       const created = await prisma.$transaction(async (tx) => {
+        // Marcar la vieja como RESCHEDULED ANTES de crear la nueva: si no, ambas
+        // quedarían activas un instante y el índice de reserva única lo rechazaría.
+        await tx.appointment.update({ where: { id: existing.id }, data: { status: "RESCHEDULED" } });
         const nueva = await tx.appointment.create({
           data: {
             tenantId: existing.tenantId,
@@ -461,8 +483,6 @@ export async function appointmentRoutes(server: FastifyInstance) {
             rescheduledFrom: { select: { id: true, scheduledAt: true } },
           },
         });
-        // La cita vieja queda como fantasma en su día.
-        await tx.appointment.update({ where: { id: existing.id }, data: { status: "RESCHEDULED" } });
         return nueva;
       });
 
