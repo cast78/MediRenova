@@ -103,6 +103,11 @@ export interface FunnelResult {
   reservas: number; confirmadas: number; atendidas: number; visitasCompletadas: number;
   fugas: { canceladasCliente: number; canceladasCentro: number; canceladasOtras: number; reprogramadas: number; noShow: number; seFue: number };
   ruido: number;
+  // Episodios cerrados administrativamente (CLOSED_ADMIN): "sin resolver", aislados
+  // de las tasas clínicas pero visibles. `completadasFueraDePlazo` = revisiones
+  // completadas en un día posterior al de la cita (closedLate).
+  sinResolver: number;
+  completadasFueraDePlazo: number;
   tasas: { confirmacion: number; atencion: number; noShow: number; cancelacion: number };
 }
 
@@ -110,13 +115,14 @@ export interface StatusCount { status: string; _count: { _all: number } }
 export interface CancelCount { cancelReason: string | null; _count: { _all: number } }
 
 // NÚCLEO PURO: calcula el embudo a partir de los recuentos por estado/motivo.
-export function funnelFrom(byStatus: StatusCount[], byCancelReason: CancelCount[], visitsCompleted: number, visitsLeft: number): FunnelResult {
+export function funnelFrom(byStatus: StatusCount[], byCancelReason: CancelCount[], visitsCompleted: number, visitsLeft: number, closedLate = 0): FunnelResult {
   const cnt = (s: string) => byStatus.find((r) => r.status === s)?._count._all ?? 0;
   const cancel = (r: string | null) => byCancelReason.find((x) => x.cancelReason === r)?._count._all ?? 0;
 
   const attended = cnt("ATTENDED");
   const noShow = cnt("NO_SHOW");
   const rescheduled = cnt("RESCHEDULED");
+  const closedAdmin = cnt("CLOSED_ADMIN"); // cierres administrativos: fuera de las tasas
   const canceladasCliente = cancel("CLIENTE");
   const canceladasCentro = cancel("CENTRO");
   const canceladasOtras = cancel("OTRO") + cancel(null);
@@ -124,13 +130,17 @@ export function funnelFrom(byStatus: StatusCount[], byCancelReason: CancelCount[
 
   const canceladasTotal = canceladasCliente + canceladasCentro + canceladasOtras;
   const totalRaw = byStatus.reduce((s, r) => s + r._count._all, 0);
-  const reservas = totalRaw - ruido; // reservas reales del periodo
+  // Reservas reales del periodo: excluye el ruido y los cierres administrativos
+  // (episodios irrecuperables / demo), que no deben ensuciar el denominador.
+  const reservas = totalRaw - ruido - closedAdmin;
   const confirmadas = cnt("CONFIRMED") + attended; // confirmadas o más
 
   return {
     reservas, confirmadas, atendidas: attended, visitasCompletadas: visitsCompleted,
     fugas: { canceladasCliente, canceladasCentro, canceladasOtras, reprogramadas: rescheduled, noShow, seFue: visitsLeft },
     ruido,
+    sinResolver: closedAdmin,
+    completadasFueraDePlazo: closedLate,
     tasas: { confirmacion: rate(confirmadas, reservas), atencion: rate(attended, confirmadas), noShow: rate(noShow, reservas), cancelacion: rate(canceladasTotal, reservas) },
   };
 }
@@ -138,13 +148,14 @@ export function funnelFrom(byStatus: StatusCount[], byCancelReason: CancelCount[
 export async function computeFunnel(scope: AnalyticsScope, f: AnalyticsFilters): Promise<FunnelResult> {
   const range = { gte: dayStart(f.from), lte: dayEnd(f.to) };
   const apptW = apptScopeWhere(scope, f);
-  const [byStatus, byCancelReason, visitsCompleted, visitsLeft] = await Promise.all([
+  const [byStatus, byCancelReason, visitsCompleted, visitsLeft, closedLate] = await Promise.all([
     prisma.appointment.groupBy({ by: ["status"], where: { ...apptW, scheduledAt: range }, _count: { _all: true } }),
     prisma.appointment.groupBy({ by: ["cancelReason"], where: { ...apptW, scheduledAt: range, status: "CANCELLED" }, _count: { _all: true } }),
     prisma.visit.count({ where: { ...visitScopeWhere(scope, f), status: "COMPLETED", completedAt: range } }),
     prisma.visit.count({ where: { ...visitScopeWhere(scope, f), status: "LEFT", arrivedAt: range } }),
+    prisma.revision.count({ where: { ...revisionScopeWhere(scope, f), closedLate: true, completedAt: range } }),
   ]);
-  return funnelFrom(byStatus as StatusCount[], byCancelReason as CancelCount[], visitsCompleted, visitsLeft);
+  return funnelFrom(byStatus as StatusCount[], byCancelReason as CancelCount[], visitsCompleted, visitsLeft, closedLate);
 }
 
 // ── 2. Ocupación por sala frente a disponibilidad ────────────────────────────
@@ -192,7 +203,7 @@ async function loadRooms(scope: AnalyticsScope, f: AnalyticsFilters): Promise<Ro
 async function usedByRoomMap(scope: AnalyticsScope, f: AnalyticsFilters): Promise<Map<string, number>> {
   const used = await prisma.appointment.groupBy({
     by: ["roomId"],
-    where: { ...apptScopeWhere(scope, f), scheduledAt: { gte: dayStart(f.from), lte: dayEnd(f.to) }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
+    where: { ...apptScopeWhere(scope, f), scheduledAt: { gte: dayStart(f.from), lte: dayEnd(f.to) }, status: { notIn: ["CANCELLED", "NO_SHOW", "CLOSED_ADMIN"] } },
     _count: { _all: true },
   });
   return new Map(used.map((u) => [u.roomId, u._count._all]));
@@ -228,7 +239,7 @@ export async function computeSaturation(scope: AnalyticsScope, f: AnalyticsFilte
   const [rooms, appts] = await Promise.all([
     loadRooms(scope, f),
     prisma.appointment.findMany({
-      where: { ...apptScopeWhere(scope, f), scheduledAt: { gte: dayStart(f.from), lte: dayEnd(f.to) }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
+      where: { ...apptScopeWhere(scope, f), scheduledAt: { gte: dayStart(f.from), lte: dayEnd(f.to) }, status: { notIn: ["CANCELLED", "NO_SHOW", "CLOSED_ADMIN"] } },
       select: { scheduledAt: true },
     }),
   ]);
@@ -343,7 +354,7 @@ export function volumeFrom(apptDates: string[], visitDates: string[], granularit
 export async function computeVolume(scope: AnalyticsScope, f: AnalyticsFilters, granularity: Granularity): Promise<VolumeBucket[]> {
   const range = { gte: dayStart(f.from), lte: dayEnd(f.to) };
   const [appts, visits] = await Promise.all([
-    prisma.appointment.findMany({ where: { ...apptScopeWhere(scope, f), scheduledAt: range, status: { notIn: ["CANCELLED"] } }, select: { scheduledAt: true } }),
+    prisma.appointment.findMany({ where: { ...apptScopeWhere(scope, f), scheduledAt: range, status: { notIn: ["CANCELLED", "CLOSED_ADMIN"] } }, select: { scheduledAt: true } }),
     prisma.visit.findMany({ where: { ...visitScopeWhere(scope, f), status: "COMPLETED", completedAt: range }, select: { completedAt: true } }),
   ]);
   return volumeFrom(
