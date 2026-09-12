@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { signMagicLinkToken, verifyMagicLinkToken } from "../lib/jwt.js";
 import { requireRole } from "../lib/authorization.js";
 import { markWorkflowConverted } from "../lib/workflow-cron.js";
+import { markCampaignConverted } from "../lib/campaign-attribution.js";
 import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/availability.js";
 import { roomHasOverlap } from "../lib/booking.js";
 
@@ -151,6 +152,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
             },
           });
           await markWorkflowConverted(payload.tid, payload.cid, payload.pid).catch(() => {});
+          await markCampaignConverted(payload.tid, payload.cid, appointment.id, appointment.createdAt).catch(() => {});
           return reply.status(201).send({ data: { appointmentId: appointment.id, scheduledAt: appointment.scheduledAt }, errors: null });
         } catch (err: unknown) {
           if (err instanceof Error && err.message.includes("unique constraint")) {
@@ -318,6 +320,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
             },
           });
           await markWorkflowConverted(payload.tid, payload.cid, payload.pid).catch(() => {});
+          await markCampaignConverted(payload.tid, payload.cid, appointment.id, appointment.createdAt).catch(() => {});
           return reply.status(201).send({ data: { appointmentId: appointment.id, scheduledAt: appointment.scheduledAt }, errors: null });
         } catch (err: unknown) {
           if (err instanceof Error && err.message.includes("unique constraint")) {

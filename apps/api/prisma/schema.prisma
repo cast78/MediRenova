@@ -635,6 +635,11 @@ model CampaignRecipient {
   error      String?
   sentAt     DateTime?               @map("sent_at")
   createdAt  DateTime                @default(now()) @map("created_at")
+  // Atribución persistida (crm-captacion fase 2): sellada al crear la reserva
+  // que el cliente hizo tras recibir la campaña (last-touch). convertedAppointmentId
+  // enlaza la cita para poder ver su desenlace (cancelada/no-show/visita).
+  convertedAt            DateTime? @map("converted_at")
+  convertedAppointmentId String?   @map("converted_appointment_id")
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   customer Customer @relation(fields: [customerId], references: [id])

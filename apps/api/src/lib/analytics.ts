@@ -387,24 +387,37 @@ export function newVsReturningFrom(active: CustomerTenure[], from: string, to: s
   return { nuevos, recurrentes };
 }
 
-// 9. Efectividad de campañas por atribución de ventana (last-touch, sin doble conteo).
+// 9. Efectividad de campañas (crm-captacion). Atribución STORED (fase 2): usa el
+// `convertedAt` sellado al reservar (última campaña antes de la cita), aplicando en
+// LECTURA la ventana pedida. Para destinatarios sin `convertedAt` (histórico previo al
+// backfill) cae al FALLBACK heurístico por ventana (last-touch), sin recontar los pares
+// (campaña, cliente) ni las citas ya contados por la vía stored.
 export interface EffCampaign { id: string; name: string; sentAt: Date | null }
-export interface EffRecipient { campaignId: string; customerId: string }
-export interface EffAppointment { customerId: string; createdAt: Date; completedVisit: boolean }
+export interface EffRecipient { campaignId: string; customerId: string; convertedAt: Date | null; convertedAppointmentId: string | null }
+export interface EffAppointment { id: string; customerId: string; createdAt: Date; completedVisit: boolean }
 export interface CampaignEffRow { campaignId: string; name: string; enviados: number; convertidos: number; tasaConversion: number; reservasAtribuidas: number; visitasAtribuidas: number }
 
-// NÚCLEO PURO: atribuye cada cita a la campaña más reciente enviada al cliente dentro
-// de la ventana (last-touch). `convertidos` cuenta clientes distintos (sin doble conteo);
-// `reservasAtribuidas` cuenta todas las citas atribuidas.
 export function campaignEffectivenessFrom(campaigns: EffCampaign[], recipients: EffRecipient[], appointments: EffAppointment[], windowDays: number): CampaignEffRow[] {
   const windowMs = windowDays * 86_400_000;
-  // Solo campañas enviadas (con sentAt).
   const campById = new Map<string, { name: string; sentAt: Date }>();
   for (const c of campaigns) if (c.sentAt) campById.set(c.id, { name: c.name, sentAt: c.sentAt });
 
-  // Envíos por campaña y por cliente.
+  const apptById = new Map<string, EffAppointment>();
+  for (const a of appointments) apptById.set(a.id, a);
+
   const enviados = new Map<string, number>();
   const sentToCustomer = new Map<string, { campaignId: string; sentAt: Date }[]>();
+  interface Agg { reservas: number; visitas: number; convertidos: Set<string> }
+  const byCamp = new Map<string, Agg>();
+  const agg = (id: string): Agg => {
+    let a = byCamp.get(id);
+    if (!a) { a = { reservas: 0, visitas: 0, convertidos: new Set() }; byCamp.set(id, a); }
+    return a;
+  };
+  const claimedAppts = new Set<string>();  // citas ya atribuidas por la vía stored
+  const storedPair = new Set<string>();    // `${campaignId}|${customerId}` ya convertidos por stored
+
+  // 1) Envíos + conversiones STORED (convertedAt dentro de la ventana pedida).
   for (const r of recipients) {
     const camp = campById.get(r.campaignId);
     if (!camp) continue;
@@ -412,34 +425,48 @@ export function campaignEffectivenessFrom(campaigns: EffCampaign[], recipients: 
     const arr = sentToCustomer.get(r.customerId) ?? [];
     arr.push({ campaignId: r.campaignId, sentAt: camp.sentAt });
     sentToCustomer.set(r.customerId, arr);
+
+    if (r.convertedAt) {
+      const sentMs = camp.sentAt.getTime(), convMs = r.convertedAt.getTime();
+      if (sentMs <= convMs && convMs - sentMs <= windowMs) {
+        const a = agg(r.campaignId);
+        a.convertidos.add(r.customerId);
+        a.reservas++;
+        storedPair.add(`${r.campaignId}|${r.customerId}`);
+        if (r.convertedAppointmentId) {
+          claimedAppts.add(r.convertedAppointmentId);
+          if (apptById.get(r.convertedAppointmentId)?.completedVisit) a.visitas++;
+        }
+      }
+    }
   }
 
-  // Atribución de cada cita a la campaña last-touch dentro de la ventana.
-  interface Agg { reservas: number; visitas: number; convertidos: Set<string> }
-  const byCamp = new Map<string, Agg>();
-  for (const a of appointments) {
-    const sent = sentToCustomer.get(a.customerId);
+  // 2) FALLBACK heurístico para lo no sellado: cada cita no reclamada se atribuye a la
+  // campaña last-touch dentro de ventana, salvo pares ya contados por stored.
+  for (const appt of appointments) {
+    if (claimedAppts.has(appt.id)) continue;
+    const sent = sentToCustomer.get(appt.customerId);
     if (!sent) continue;
-    const t = a.createdAt.getTime();
-    let best: { campaignId: string; sentAt: number } | null = null;
+    const t = appt.createdAt.getTime();
+    let best: { campaignId: string; sentMs: number } | null = null;
     for (const s of sent) {
-      const st = s.sentAt.getTime();
-      if (st <= t && t - st <= windowMs && (!best || st > best.sentAt)) best = { campaignId: s.campaignId, sentAt: st };
+      const sm = s.sentAt.getTime();
+      if (sm <= t && t - sm <= windowMs && (!best || sm > best.sentMs)) best = { campaignId: s.campaignId, sentMs: sm };
     }
     if (!best) continue;
-    const agg = byCamp.get(best.campaignId) ?? { reservas: 0, visitas: 0, convertidos: new Set() };
-    agg.reservas++;
-    if (a.completedVisit) agg.visitas++;
-    agg.convertidos.add(a.customerId);
-    byCamp.set(best.campaignId, agg);
+    if (storedPair.has(`${best.campaignId}|${appt.customerId}`)) continue;
+    const a = agg(best.campaignId);
+    a.convertidos.add(appt.customerId);
+    a.reservas++;
+    if (appt.completedVisit) a.visitas++;
   }
 
   return [...campById.entries()].map(([id, c]) => {
-    const agg = byCamp.get(id);
+    const a = byCamp.get(id);
     const env = enviados.get(id) ?? 0;
-    const conv = agg?.convertidos.size ?? 0;
-    return { campaignId: id, name: c.name, enviados: env, convertidos: conv, tasaConversion: rate(conv, env), reservasAtribuidas: agg?.reservas ?? 0, visitasAtribuidas: agg?.visitas ?? 0 };
-  }).sort((a, b) => b.convertidos - a.convertidos);
+    const conv = a?.convertidos.size ?? 0;
+    return { campaignId: id, name: c.name, enviados: env, convertidos: conv, tasaConversion: rate(conv, env), reservasAtribuidas: a?.reservas ?? 0, visitasAtribuidas: a?.visitas ?? 0 };
+  }).sort((x, y) => y.convertidos - x.convertidos);
 }
 
 // Consultas Prisma que alimentan los núcleos de captación (solo lectura).
@@ -477,7 +504,7 @@ export async function computeCampaignEffectiveness(scope: AnalyticsScope, f: Ana
   const campaigns = await prisma.campaign.findMany({ where: { ...scope.tenantWhere, sentAt: range }, select: { id: true, name: true, sentAt: true } });
   if (campaigns.length === 0) return [];
   const campIds = campaigns.map((c) => c.id);
-  const recipients = await prisma.campaignRecipient.findMany({ where: { campaignId: { in: campIds }, status: "SENT" }, select: { campaignId: true, customerId: true } });
+  const recipients = await prisma.campaignRecipient.findMany({ where: { campaignId: { in: campIds }, status: "SENT" }, select: { campaignId: true, customerId: true, convertedAt: true, convertedAppointmentId: true } });
   const custIds = [...new Set(recipients.map((r) => r.customerId))];
 
   // Citas de esos clientes en la ventana global [primer envío, último envío + N días].
@@ -487,10 +514,10 @@ export async function computeCampaignEffectiveness(scope: AnalyticsScope, f: Ana
   const appts = custIds.length
     ? await prisma.appointment.findMany({
         where: { ...scope.tenantWhere, customerId: { in: custIds }, createdAt: { gte: minSent, lte: maxSentPlusWindow } },
-        select: { customerId: true, createdAt: true, visit: { select: { status: true } } },
+        select: { id: true, customerId: true, createdAt: true, visit: { select: { status: true } } },
       })
     : [];
-  const effAppts: EffAppointment[] = appts.map((a) => ({ customerId: a.customerId, createdAt: a.createdAt, completedVisit: a.visit?.status === "COMPLETED" }));
+  const effAppts: EffAppointment[] = appts.map((a) => ({ id: a.id, customerId: a.customerId, createdAt: a.createdAt, completedVisit: a.visit?.status === "COMPLETED" }));
   return campaignEffectivenessFrom(campaigns as EffCampaign[], recipients, effAppts, windowDays);
 }
 

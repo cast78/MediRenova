@@ -44,16 +44,20 @@ describe("campaignEffectivenessFrom — atribución por ventana (tarea 1.3)", ()
     { id: "c2", name: "Camp 2", sentAt: d("2026-07-10") },
     { id: "c3", name: "Sin enviar", sentAt: null }, // se excluye
   ];
+  // Sin convertedAt → toda la atribución va por el FALLBACK heurístico (equivalente al
+  // comportamiento previo a fase 2). Las conversiones STORED se prueban en campaign-attribution.test.ts.
   const recipients: EffRecipient[] = [
-    { campaignId: "c1", customerId: "A" }, { campaignId: "c1", customerId: "B" }, { campaignId: "c1", customerId: "C" },
-    { campaignId: "c2", customerId: "A" },
-    { campaignId: "c3", customerId: "D" },
+    { campaignId: "c1", customerId: "A", convertedAt: null, convertedAppointmentId: null },
+    { campaignId: "c1", customerId: "B", convertedAt: null, convertedAppointmentId: null },
+    { campaignId: "c1", customerId: "C", convertedAt: null, convertedAppointmentId: null },
+    { campaignId: "c2", customerId: "A", convertedAt: null, convertedAppointmentId: null },
+    { campaignId: "c3", customerId: "D", convertedAt: null, convertedAppointmentId: null },
   ];
   const appointments: EffAppointment[] = [
-    { customerId: "A", createdAt: d("2026-07-12"), completedVisit: true }, // ventana de c1 y c2 → last-touch c2
-    { customerId: "A", createdAt: d("2026-07-15"), completedVisit: false }, // otra vez A → c2 (no doble conteo en convertidos)
-    { customerId: "B", createdAt: d("2026-07-05"), completedVisit: false }, // solo c1
-    { customerId: "C", createdAt: d("2026-09-01"), completedVisit: true }, // fuera de ventana (30d) → no cuenta
+    { id: "a1", customerId: "A", createdAt: d("2026-07-12"), completedVisit: true }, // ventana de c1 y c2 → last-touch c2
+    { id: "a2", customerId: "A", createdAt: d("2026-07-15"), completedVisit: false }, // otra vez A → c2 (no doble conteo en convertidos)
+    { id: "a3", customerId: "B", createdAt: d("2026-07-05"), completedVisit: false }, // solo c1
+    { id: "a4", customerId: "C", createdAt: d("2026-09-01"), completedVisit: true }, // fuera de ventana (30d) → no cuenta
   ];
   const rows = campaignEffectivenessFrom(campaigns, recipients, appointments, 30);
   const byId = (id: string) => rows.find((r) => r.campaignId === id)!;
