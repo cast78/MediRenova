@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
 import { auditLog } from "../lib/audit.js";
 import { markWorkflowConverted } from "../lib/workflow-cron.js";
+import { markCampaignConverted } from "../lib/campaign-attribution.js";
 import { buildIcs } from "../lib/ics.js";
 import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/availability.js";
 import { roomHasOverlap } from "../lib/booking.js";
@@ -293,6 +294,11 @@ export async function appointmentRoutes(server: FastifyInstance) {
         // 12.7: la reserva detiene los avisos de renovación pendientes del cliente
         await markWorkflowConverted(request.ctx.tenantId, body.data.customerId, body.data.productId).catch((err) => {
           request.log.error(err, "[workflow] markWorkflowConverted failed");
+        });
+
+        // fase 2: sella la atribución campaña→visita (last-touch) para esta reserva
+        await markCampaignConverted(request.ctx.tenantId, body.data.customerId, appointment.id, appointment.createdAt).catch((err) => {
+          request.log.error(err, "[captacion] markCampaignConverted failed");
         });
 
         return reply.status(201).send({ data: appointment, errors: null });
