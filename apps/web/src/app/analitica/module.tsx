@@ -800,24 +800,49 @@ function LeakDrawer({ f, leak, onClose }: { f: Filters; leak: { type: LeakType; 
 }
 
 // ── Vista: Ocupación ─────────────────────────────────────────────────────────
+// Color de un valor de ocupación por tramo: <50 infrautilizado (ámbar),
+// 50–90 ok (azul), ≥90 saturado (rojo).
+const occTier = (v: number) => v >= 90 ? { bar: "bg-red-500", text: "text-red-600" } : v >= 50 ? { bar: "bg-blue-500", text: "text-blue-700" } : { bar: "bg-amber-400", text: "text-amber-700" };
+
 function OcupacionView({ f }: { f: Filters }) {
   const { data } = useReport<Occupancy>("occupancy", f);
-  const rows = (data?.salas ?? []).map((s) => ({ ...s, label: s.roomName }));
+  const salas = [...(data?.salas ?? [])].sort((a, b) => b.ocupacion - a.ocupacion);
+  const libres = (data?.total.disponibles ?? 0) - (data?.total.usados ?? 0);
+  const saturadas = salas.filter((s) => s.ocupacion >= 90).length;
+  const infra = salas.filter((s) => s.ocupacion < 50).length;
+
   return (
-    <Card title={`Ocupación por sala · total ${data?.total.ocupacion ?? 0}%`} action={<CsvButton ep="occupancy" f={f} />}>
-      {rows.length === 0 ? empty : (
-        <ResponsiveContainer width="100%" height={Math.max(200, rows.length * 40)}>
-          <BarChart data={rows} layout="vertical" margin={{ top: 0, right: 24, left: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
-            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} unit="%" />
-            <YAxis type="category" dataKey="label" width={120} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }}
-              formatter={(v: number, _n, p) => [`${v}% (${p.payload.usados}/${p.payload.disponibles})`, "Ocupación"]} />
-            <Bar dataKey="ocupacion" radius={[0, 4, 4, 0]} maxBarSize={24}>
-              {rows.map((r) => <Cell key={r.roomId} fill={r.ocupacion >= 90 ? "#ef4444" : "#3b82f6"} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+    <Card title="Ocupación por sala" action={<CsvButton ep="occupancy" f={f} />}>
+      {salas.length === 0 ? empty : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <Kpi icon={Gauge} label="Ocupación total" value={data?.total.ocupacion ?? 0} suffix="%" tone="accent" />
+            <Kpi icon={DoorOpen} label="Slots libres" value={libres} tone="plain" />
+            <Kpi icon={AlertTriangle} label="Salas saturadas" value={saturadas} tone={saturadas > 0 ? "danger" : "plain"} />
+            <Kpi icon={TrendingDown} label="Salas infrautilizadas" value={infra} tone={infra > 0 ? "warning" : "plain"} />
+          </div>
+
+          <div className="overflow-x-auto">
+            <div className="min-w-[520px] divide-y divide-gray-50">
+              {salas.map((s) => {
+                const tier = occTier(s.ocupacion);
+                return (
+                  <div key={s.roomId} className="flex items-center gap-3 py-1.5 text-sm">
+                    <DoorOpen className="w-4 h-4 text-gray-400 shrink-0" />
+                    <span className="w-40 shrink-0 truncate text-gray-700">{s.roomName}{s.centerName ? <span className="text-[10px] text-gray-400 ml-1">· {s.centerName}</span> : null}</span>
+                    <span className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden"><span className={`block h-full rounded-full ${tier.bar}`} style={{ width: `${Math.min(100, s.ocupacion)}%` }} /></span>
+                    <span className={`w-10 text-right tabular-nums font-medium ${tier.text}`}>{s.ocupacion}%</span>
+                    <span className="w-28 text-right text-[11px] text-gray-400 tabular-nums shrink-0">{s.usados}/{s.disponibles} · {s.disponibles - s.usados} libres</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <p className="text-[11px] text-gray-400 mt-3">
+            <span className="text-amber-600">&lt;50% infrautilizado</span> · <span className="text-blue-600">50–90% ok</span> · <span className="text-red-600">≥90% saturado</span>. Cifras: usados/disponibles (slots) del periodo.
+          </p>
+        </>
       )}
     </Card>
   );
