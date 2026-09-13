@@ -498,7 +498,7 @@ function Resumen({ f, onDrillCenter, onGoTo }: { f: Filters; onDrillCenter: (id:
   const aptCur = aptitudFrom(doctors.data), aptPre = aptitudFrom(doctorsPrev.data);
   const noAptoCur = (doctors.data ?? []).reduce((s, r) => s + r.noApto, 0);
   const revisadasCur = (doctors.data ?? []).reduce((s, r) => s + r.apto + r.noApto, 0);
-  const aptNote = revisadasCur > 0 ? `${noAptoCur} no apto${noAptoCur !== 1 ? "s" : ""}` : undefined;
+  const aptNote = revisadasCur > 0 ? `${noAptoCur} no apto${noAptoCur !== 1 ? "s" : ""}` : "";
   const sinResolver = cur?.sinResolver ?? 0;
 
   // Top-2 fugas del periodo (para el mini "Dónde se pierde").
