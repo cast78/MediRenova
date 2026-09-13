@@ -944,39 +944,74 @@ function MedicosView({ f }: { f: Filters }) {
 }
 
 // ── Vista: Comparativa (con drill-down por centro) ───────────────────────────
+// Badge de tasa con mini-barra y color por umbral. `kind` decide la semántica:
+// conversión (más=mejor) vs ocupación (≥90 = saturado en rojo, <50 = infrautilizado).
+function RateBar({ v, kind }: { v: number; kind: "conv" | "occ" }) {
+  const c = kind === "conv"
+    ? (v >= 70 ? { bar: "bg-emerald-500", text: "text-emerald-700" } : v >= 40 ? { bar: "bg-amber-400", text: "text-amber-700" } : { bar: "bg-red-500", text: "text-red-600" })
+    : (v >= 90 ? { bar: "bg-red-500", text: "text-red-600" } : v >= 50 ? { bar: "bg-blue-500", text: "text-blue-700" } : { bar: "bg-amber-400", text: "text-amber-700" });
+  return (
+    <span className="flex items-center gap-2 justify-end">
+      <span className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden"><span className={`block h-full rounded-full ${c.bar}`} style={{ width: `${Math.min(100, v)}%` }} /></span>
+      <span className={`w-9 text-right tabular-nums font-medium ${c.text}`}>{v}%</span>
+    </span>
+  );
+}
+
 function ComparativaView({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id: string) => void }) {
   const { data } = useReport<Comparison>("comparison", f);
-  const table = (rows: CompRow[], drill?: boolean) => (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead><tr className="text-left text-xs text-gray-400 border-b border-gray-100">
-          <th className="py-2 font-medium">Nombre</th><th className="py-2 font-medium text-right">Reservas</th>
-          <th className="py-2 font-medium text-right">Atendidas</th><th className="py-2 font-medium text-right">Conversión</th>
-          <th className="py-2 font-medium text-right">Ocupación</th>{drill && <th />}
-        </tr></thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className={`border-b border-gray-50 ${drill ? "cursor-pointer hover:bg-blue-50/50" : ""}`} onClick={drill ? () => onDrillCenter(r.id) : undefined}>
-              <td className="py-2 text-gray-700">{r.name}{r.centerName ? <span className="text-[10px] text-gray-400 ml-1.5">· {r.centerName}</span> : null}</td>
-              <td className="py-2 text-right tabular-nums">{r.reservas}</td>
-              <td className="py-2 text-right tabular-nums">{r.atendidas}</td>
-              <td className="py-2 text-right tabular-nums">{r.conversion}%</td>
-              <td className="py-2 text-right tabular-nums">{r.ocupacion}%</td>
-              {drill && <td className="py-2 text-right"><ChevronRight className="w-4 h-4 text-gray-300 inline" /></td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  const table = (rows: CompRow[], Icon: typeof Building2, drill?: boolean) => {
+    const maxRes = Math.max(1, ...rows.map((r) => r.reservas));
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
+          <thead><tr className="text-xs text-gray-400 border-b border-gray-100">
+            <th className="py-2 font-medium text-left">Nombre</th><th className="py-2 font-medium text-right">Reservas</th>
+            <th className="py-2 font-medium text-right">Atendidas</th><th className="py-2 font-medium text-right">Conversión</th>
+            <th className="py-2 font-medium text-right">Ocupación</th>{drill && <th />}
+          </tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className={`border-b border-gray-50 ${drill ? "cursor-pointer hover:bg-blue-50/60" : ""}`} onClick={drill ? () => onDrillCenter(r.id) : undefined}>
+                <td className="py-2 pr-2">
+                  <span className="inline-flex items-center gap-2 text-gray-800"><Icon className="w-4 h-4 text-gray-400 shrink-0" />{r.name}{r.centerName ? <span className="text-[10px] text-gray-400">· {r.centerName}</span> : null}</span>
+                </td>
+                <td className="py-2 px-2">
+                  <span className="flex items-center gap-2 justify-end">
+                    <span className="w-12 h-1.5 bg-gray-100 rounded-full overflow-hidden"><span className="block h-full rounded-full bg-gray-300" style={{ width: `${(r.reservas / maxRes) * 100}%` }} /></span>
+                    <span className="w-8 text-right tabular-nums text-gray-700">{r.reservas}</span>
+                  </span>
+                </td>
+                <td className="py-2 px-2 text-right tabular-nums text-gray-600">{r.atendidas}</td>
+                <td className="py-2 px-2"><RateBar v={r.conversion} kind="conv" /></td>
+                <td className="py-2 px-2"><RateBar v={r.ocupacion} kind="occ" /></td>
+                {drill && <td className="py-2 pl-1 text-right"><ChevronRight className="w-4 h-4 text-gray-300 inline" /></td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
   return (
     <div className="space-y-4">
       <Card title="Comparativa entre centros" action={<CsvButton ep="comparison" f={f} />}>
-        {(data?.porCentro.length ?? 0) === 0 ? empty : table(data!.porCentro, true)}
+        {(data?.porCentro.length ?? 0) === 0 ? empty : (
+          <>
+            {table(data!.porCentro, Building2, true)}
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5">
+              <MousePointerClick className="w-3.5 h-3.5 shrink-0" /> Clic en un centro para verlo en detalle
+            </div>
+          </>
+        )}
       </Card>
       <Card title="Comparativa entre salas">
-        {(data?.porSala.length ?? 0) === 0 ? empty : table(data!.porSala)}
+        {(data?.porSala.length ?? 0) === 0 ? empty : table(data!.porSala, DoorOpen)}
       </Card>
+      <p className="text-[11px] text-gray-400 -mt-1">
+        Conversión: <span className="text-emerald-600">≥70% bien</span> · <span className="text-amber-600">40–70% flojo</span> · <span className="text-red-600">&lt;40% malo</span>.
+        Ocupación: <span className="text-amber-600">&lt;50% infrautilizado</span> · <span className="text-blue-600">50–90% ok</span> · <span className="text-red-600">≥90% saturado</span>.
+      </p>
     </div>
   );
 }
