@@ -22,6 +22,8 @@ interface Funnel {
   reservas: number; confirmadas: number; atendidas: number; visitasCompletadas: number;
   fugas: { canceladasCliente: number; canceladasCentro: number; canceladasOtras: number; reprogramadas: number; noShow: number; seFue: number };
   ruido: number; tasas: { confirmacion: number; atencion: number; noShow: number; cancelacion: number };
+  // Episodios sin cerrar: aislados de las tasas clínicas pero visibles.
+  sinResolver?: number; completadasFueraDePlazo?: number;
 }
 interface OccRow { roomId: string; roomName: string; centerId: string; centerName: string; disponibles: number; usados: number; ocupacion: number }
 interface Occupancy { salas: OccRow[]; total: { disponibles: number; usados: number; ocupacion: number } }
@@ -524,6 +526,19 @@ function EmbudoView({ f }: { f: Filters }) {
               </div>
             ))}
             {data.ruido > 0 && <p className="text-[11px] text-gray-400 pt-1">Excluidas de las tasas: {data.ruido} canceladas por duplicado/error (ruido).</p>}
+            {((data.sinResolver ?? 0) > 0 || (data.completadasFueraDePlazo ?? 0) > 0) && (
+              <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Episodios sin cerrar · aislados de las tasas</p>
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-gray-600">Sin resolver <span className="text-[10px] text-gray-400 ml-1.5">· cierre administrativo</span></span>
+                  <span className="font-medium tabular-nums text-gray-800">{data.sinResolver ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-gray-600">Completadas fuera de plazo <span className="text-[10px] text-gray-400 ml-1.5">· revisión tardía</span></span>
+                  <span className="font-medium tabular-nums text-gray-800">{data.completadasFueraDePlazo ?? 0}</span>
+                </div>
+              </div>
+            )}
           </div>
         ) : empty}
       </Card>

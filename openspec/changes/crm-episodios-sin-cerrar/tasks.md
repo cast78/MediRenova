@@ -30,7 +30,7 @@
 
 - [x] 5.1 Bucket "sin resolver" (cierres administrativos) + métrica "cerradas fuera de plazo", **aislados** de tasas clínicas
 - [x] 5.2 Excluir ③ (anuladas) y ④ (administrativas) de embudo/aptitud/no-show (como `DUPLICADA/ERROR`)
-- [~] 5.3 Auditoría por caso (actor/fecha/nota) para ③ y ④ — **se graba** en `audit_logs`; falta un visor por caso en la UI (pendiente)
+- [x] 5.3 Auditoría por caso para ③ y ④ — se graba en `audit_logs` (actor/fecha/nota); la nota y la fecha del cierre administrativo, y el "fuera de plazo", se ven en el flujo de la cita (timeline). (Visor dedicado de `audit_logs` con el actor: futuro)
 
 ## 6. Prevención — avisos (fase posterior)
 

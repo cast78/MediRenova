@@ -962,7 +962,7 @@ function UnclosedRow({ appt, onManage, onChanged }: { appt: Appointment; onManag
 // Fila del panel "Episodios sin cerrar": cita pasada con visita cuyo episodio no
 // cerró. Acciones por rol: ① Se fue, ② Ver revisión (médico), ③ Anular, ④ Cierre
 // administrativo (admin). Las destructivas piden confirmación.
-function EpisodeRow({ ep, role, onChanged }: { ep: Episode; role: string; onChanged: () => void }) {
+function EpisodeRow({ ep, role, onOpen, onChanged }: { ep: Episode; role: string; onOpen: (a: Appointment) => void; onChanged: () => void }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -1013,6 +1013,7 @@ function EpisodeRow({ ep, role, onChanged }: { ep: Episode; role: string; onChan
         </div>
       </div>
       <div className="shrink-0 flex items-center gap-2">
+        <button onClick={() => onOpen(ep)} title="Ver el flujo de la cita" className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">Ver flujo</button>
         {hasRevision && (
           <button onClick={() => router.push(`/revisions/${ep.revision!.id}`)} className="text-xs px-2.5 py-1.5 rounded-lg border border-violet-200 text-violet-700 hover:bg-violet-50 font-medium">Ver revisión</button>
         )}
@@ -1808,7 +1809,7 @@ function AppointmentsBoard() {
               </p>
               <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
                 {(episodesData?.data ?? []).map((ep) => (
-                  <EpisodeRow key={ep.id} ep={ep} role={user?.role ?? ""} onChanged={invalidateAppts} />
+                  <EpisodeRow key={ep.id} ep={ep} role={user?.role ?? ""} onOpen={setDetailAppt} onChanged={invalidateAppts} />
                 ))}
               </div>
             </>

@@ -686,10 +686,11 @@ export async function appointmentRoutes(server: FastifyInstance) {
         where: { id: request.params.id, tenantId: request.ctx.tenantId },
         select: {
           id: true, scheduledAt: true, status: true, source: true, cancelReason: true, createdAt: true, updatedAt: true,
+          adminClosedAt: true, adminClosureNote: true,
           product: { select: { name: true } },
           room: { select: { name: true } },
           visit: { select: { arrivedAt: true, calledAt: true, startedAt: true, status: true, updatedAt: true, currentRoom: { select: { name: true } } } },
-          revision: { select: { outcome: true, completedAt: true, expiryDate: true, startedAt: true } },
+          revision: { select: { outcome: true, completedAt: true, expiryDate: true, startedAt: true, closedLate: true } },
         },
       });
       if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
