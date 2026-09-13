@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Percent, DoorOpen, Gauge, UserX, Download, AlertTriangle, ChevronRight, Stethoscope,
-  UserPlus, Users, Send, CheckCircle, Building2, Package, ChevronDown, X, Calendar,
+  UserPlus, Users, Send, CheckCircle, Building2, Package, ChevronDown, X, Calendar, Info, MousePointerClick,
 } from "lucide-react";
 
 // ── Tipos que devuelve la API ────────────────────────────────────────────────
@@ -662,15 +662,18 @@ function FunnelBars({ f }: { f: Funnel }) {
 // Fila de fuga: clicable si tiene casos (val>0) → abre el detalle (drill-down). Los
 // valores y la flecha van en columnas de ancho fijo para que queden alineados en
 // todas las filas (tengan acción o no).
-function LeakRow({ label, val, note, onOpen }: { label: string; val: number; note?: string; onOpen?: () => void }) {
+function LeakRow({ label, val, note, dot, onOpen }: { label: string; val: number; note?: string; dot?: string; onOpen?: () => void }) {
   const actionable = !!onOpen && val > 0;
   const inner = (
     <>
-      <span className="flex-1 text-left text-gray-600">
-        <span className={actionable ? "underline decoration-dotted decoration-gray-300 underline-offset-2 group-hover:decoration-blue-400 group-hover:text-blue-700" : ""}>{label}</span>
-        {note ? <span className="text-[10px] text-gray-400 ml-1.5">· {note}</span> : null}
+      <span className="flex-1 min-w-0 text-left text-gray-600 inline-flex items-center gap-2">
+        {dot && <span className={`w-2 h-2 rounded-full shrink-0 ${val > 0 ? dot : "bg-gray-200"}`} />}
+        <span className="truncate">
+          <span className={actionable ? "underline decoration-dotted decoration-gray-300 underline-offset-2 group-hover:decoration-blue-400 group-hover:text-blue-700" : ""}>{label}</span>
+          {note ? <span className="text-[10px] text-gray-400 ml-1.5">· {note}</span> : null}
+        </span>
       </span>
-      <span className="w-10 text-right tabular-nums font-medium text-gray-800">{val}</span>
+      <span className={`w-10 text-right tabular-nums font-bold ${val > 0 ? "text-gray-900" : "text-gray-300"}`}>{val}</span>
       <span className="w-4 flex justify-center text-gray-300 group-hover:text-blue-400">
         {actionable && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>}
       </span>
@@ -690,26 +693,36 @@ function EmbudoView({ f }: { f: Filters }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card title="Embudo de conversión" action={<CsvButton ep="funnel" f={f} />}>
-        {data ? <FunnelBars f={data} /> : empty}
+        {data ? (
+          <>
+            <FunnelBars f={data} />
+            <div className="mt-3 flex gap-2 text-[11px] leading-relaxed text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-2">
+              <Info className="w-3.5 h-3.5 shrink-0 mt-px text-gray-400" />
+              <span>Cómo leerlo: cada barra es un <span className="text-gray-700">subconjunto</span> de la de arriba (51 reservas → 6 confirmadas → …). La <span className="text-red-500 font-medium">↓</span> entre barras marca <span className="text-gray-700">cuántas reservas se pierden</span> en ese paso, con el desglose de motivos en el primero. Las tasas de abajo resumen la conversión del periodo.</span>
+            </div>
+          </>
+        ) : empty}
       </Card>
       <Card title="Fugas del periodo">
         {data ? (
           <div className="text-sm divide-y divide-gray-50">
-            <LeakRow label="Canceladas · cliente" note="recaptura" val={data.fugas.canceladasCliente} onOpen={() => open("cancel_cliente", "Canceladas · cliente")} />
-            <LeakRow label="Canceladas · centro" note="operativo" val={data.fugas.canceladasCentro} onOpen={() => open("cancel_centro", "Canceladas · centro")} />
-            <LeakRow label="Canceladas · otras" val={data.fugas.canceladasOtras} onOpen={() => open("cancel_otras", "Canceladas · otras")} />
-            <LeakRow label="Reprogramadas" val={data.fugas.reprogramadas} onOpen={() => open("reprogramada", "Reprogramadas")} />
-            <LeakRow label="No-show" val={data.fugas.noShow} onOpen={() => open("no_show", "No-show")} />
-            <LeakRow label="Se fue (sin atender)" val={data.fugas.seFue} onOpen={() => open("se_fue", "Se fue (sin atender)")} />
+            <LeakRow label="Canceladas · cliente" note="recaptura" dot="bg-amber-400" val={data.fugas.canceladasCliente} onOpen={() => open("cancel_cliente", "Canceladas · cliente")} />
+            <LeakRow label="Canceladas · centro" note="operativo" dot="bg-slate-400" val={data.fugas.canceladasCentro} onOpen={() => open("cancel_centro", "Canceladas · centro")} />
+            <LeakRow label="Canceladas · otras" dot="bg-gray-300" val={data.fugas.canceladasOtras} onOpen={() => open("cancel_otras", "Canceladas · otras")} />
+            <LeakRow label="Reprogramadas" dot="bg-blue-400" val={data.fugas.reprogramadas} onOpen={() => open("reprogramada", "Reprogramadas")} />
+            <LeakRow label="No-show" dot="bg-red-500" val={data.fugas.noShow} onOpen={() => open("no_show", "No-show")} />
+            <LeakRow label="Se fue (sin atender)" dot="bg-orange-500" val={data.fugas.seFue} onOpen={() => open("se_fue", "Se fue (sin atender)")} />
             {data.ruido > 0 && <p className="text-[11px] text-gray-400 pt-1">Excluidas de las tasas: {data.ruido} canceladas por duplicado/error (ruido).</p>}
             {((data.sinResolver ?? 0) > 0 || (data.completadasFueraDePlazo ?? 0) > 0) && (
               <div className="mt-1 pt-2 space-y-0.5">
                 <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold pb-0.5">Episodios sin cerrar · aislados de las tasas</p>
-                <LeakRow label="Sin resolver" note="cierre administrativo" val={data.sinResolver ?? 0} onOpen={() => open("sin_resolver", "Sin resolver")} />
-                <LeakRow label="Completadas fuera de plazo" note="revisión tardía" val={data.completadasFueraDePlazo ?? 0} onOpen={() => open("fuera_de_plazo", "Completadas fuera de plazo")} />
+                <LeakRow label="Sin resolver" note="cierre administrativo" dot="bg-violet-400" val={data.sinResolver ?? 0} onOpen={() => open("sin_resolver", "Sin resolver")} />
+                <LeakRow label="Completadas fuera de plazo" note="revisión tardía" dot="bg-fuchsia-400" val={data.completadasFueraDePlazo ?? 0} onOpen={() => open("fuera_de_plazo", "Completadas fuera de plazo")} />
               </div>
             )}
-            <p className="text-[11px] text-gray-300 pt-2 border-t-0">Pulsa una fuga con casos para ver el detalle.</p>
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5">
+              <MousePointerClick className="w-3.5 h-3.5 shrink-0" /> Pulsa una fuga con casos para ver el detalle.
+            </div>
           </div>
         ) : empty}
       </Card>
