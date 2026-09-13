@@ -1283,6 +1283,19 @@ function AltasView({ f }: { f: Filters }) {
 function CampanasView({ f }: { f: Filters }) {
   const [win, setWin] = useState("30");
   const eff = useReport<CampaignEffRow[]>("campaign-effectiveness", f, { attributionWindowDays: win });
+
+  // Efectividad por canal: agrega las campañas por su canal (conversión del canal).
+  const byChannel = (() => {
+    const m = new Map<string, { enviados: number; convertidos: number }>();
+    for (const c of eff.data ?? []) {
+      const a = m.get(c.channel) ?? { enviados: 0, convertidos: 0 };
+      a.enviados += c.enviados; a.convertidos += c.convertidos; m.set(c.channel, a);
+    }
+    return [...m.entries()].map(([ch, a]) => ({ ch, ...a, tasa: a.enviados > 0 ? Math.round((a.convertidos / a.enviados) * 1000) / 10 : 0 }))
+      .sort((x, y) => y.tasa - x.tasa);
+  })();
+  const maxTasa = Math.max(1, ...byChannel.map((x) => x.tasa));
+
   return (
     <Card title="Efectividad de campañas"
       action={
@@ -1296,6 +1309,27 @@ function CampanasView({ f }: { f: Filters }) {
           <CsvButton ep="campaign-effectiveness" f={f} extra={{ attributionWindowDays: win }} />
         </div>
       }>
+      {byChannel.length >= 2 && (
+        <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50/50 p-3">
+          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Efectividad por canal · qué canal convierte mejor</p>
+          <div className="space-y-1.5">
+            {byChannel.map(({ ch, enviados, convertidos, tasa }) => {
+              const meta = CAMPAIGN_CH[ch];
+              const Icon = meta?.icon ?? Send;
+              const txt = tasa >= 8 ? "text-emerald-600" : tasa >= 4 ? "text-amber-600" : "text-red-600";
+              const bar = tasa >= 8 ? "bg-emerald-500" : tasa >= 4 ? "bg-amber-400" : "bg-red-500";
+              return (
+                <div key={ch} className="flex items-center gap-2 text-sm">
+                  <span className="w-24 shrink-0 inline-flex items-center gap-1.5 text-gray-600"><Icon className={`w-3.5 h-3.5 shrink-0 ${meta?.color ?? "text-gray-400"}`} />{meta?.label ?? ch}</span>
+                  <span className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><span className={`block h-full rounded-full ${bar}`} style={{ width: `${(tasa / maxTasa) * 100}%` }} /></span>
+                  <span className={`w-10 text-right tabular-nums font-medium ${txt}`}>{tasa}%</span>
+                  <span className="w-24 text-right text-[11px] text-gray-400 tabular-nums shrink-0">{convertidos}/{enviados} envíos</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {(() => {
         const rows = eff.data ?? [];
         if (rows.length === 0) return empty;
