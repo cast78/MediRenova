@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Percent, DoorOpen, Gauge, UserX, Download, AlertTriangle, ChevronRight, Stethoscope,
-  UserPlus, Users, Send, CheckCircle, Building2, Package, ChevronDown, X, Calendar, UserCircle,
+  UserPlus, Users, Send, CheckCircle, Building2, Package, ChevronDown, X, Calendar,
 } from "lucide-react";
 
 // ── Tipos que devuelve la API ────────────────────────────────────────────────
@@ -34,6 +34,30 @@ type LeakType =
 interface LeakCase {
   id: string; appointmentId: string | null; customerId: string | null; customer: string; date: string;
   product: string | null; room: string | null; center: string | null; note: string | null;
+}
+
+// Avatar de iniciales con color estable por nombre (mismo estilo que la lista de clientes).
+const AVATAR_COLORS = [
+  "bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500",
+  "bg-rose-500", "bg-cyan-500", "bg-fuchsia-500", "bg-teal-500",
+];
+function avatarColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]!;
+}
+function nameInitials(full: string): string {
+  const p = full.trim().split(/\s+/).filter(Boolean);
+  const a = p[0]?.[0] ?? "";
+  const b = p[1]?.[0] ?? "";
+  return ((a + b) || p[0]?.slice(0, 2) || "?").toUpperCase();
+}
+function Avatar({ name, muted }: { name: string; muted?: boolean }) {
+  return (
+    <span className={`w-6 h-6 rounded-full ${muted ? "bg-gray-300" : avatarColor(name)} flex items-center justify-center text-white text-[10px] font-bold shrink-0`}>
+      {nameInitials(name)}
+    </span>
+  );
 }
 interface OccRow { roomId: string; roomName: string; centerId: string; centerName: string; disponibles: number; usados: number; ocupacion: number }
 interface Occupancy { salas: OccRow[]; total: { disponibles: number; usados: number; ocupacion: number } }
@@ -638,13 +662,13 @@ function LeakDrawer({ f, leak, onClose }: { f: Filters; leak: { type: LeakType; 
                   <div key={c.id} className="px-5 py-3">
                     <div className="flex items-center justify-between gap-2">
                       {c.customerId ? (
-                        <button onClick={() => setClient(c.customerId)} title="Ver ficha del cliente" className="group/name inline-flex items-center gap-1.5 min-w-0 text-left">
-                          <UserCircle className="w-4 h-4 text-blue-600 shrink-0" />
+                        <button onClick={() => setClient(c.customerId)} title="Ver ficha del cliente" className="group/name inline-flex items-center gap-2 min-w-0 text-left">
+                          <Avatar name={c.customer} />
                           <span className="text-sm font-semibold text-gray-900 group-hover/name:text-blue-700 group-hover/name:underline underline-offset-2 truncate">{c.customer}</span>
                         </button>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 min-w-0">
-                          <UserCircle className="w-4 h-4 text-gray-300 shrink-0" />
+                        <span className="inline-flex items-center gap-2 min-w-0">
+                          <Avatar name={c.customer} muted />
                           <span className="text-sm font-semibold text-gray-900 truncate">{c.customer}</span>
                         </span>
                       )}
