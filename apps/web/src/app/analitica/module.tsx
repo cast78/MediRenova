@@ -420,7 +420,7 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
 
       {view === "resumen" && (mod === "captacion"
         ? <ResumenCaptacion f={f} onGoTo={setView} />
-        : <Resumen f={f} onDrillCenter={(id) => { setCenterId(id); setView("comparativa"); }} />)}
+        : <Resumen f={f} onDrillCenter={(id) => { setCenterId(id); setView("comparativa"); }} onGoTo={setView} />)}
       {view === "embudo" && <EmbudoView f={f} />}
       {view === "ocupacion" && <OcupacionView f={f} />}
       {view === "saturacion" && <SaturacionView f={f} />}
@@ -439,8 +439,43 @@ function useReport<T>(ep: string, f: Filters, extra?: Record<string, string>) {
   return useQuery<T>({ queryKey: [ep, qs], queryFn: () => apiFetch<T>(`/analytics/${ep}?${qs}`) });
 }
 
-// ── Vista: Resumen (KPIs + alertas + comparación) ────────────────────────────
-function Resumen({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id: string) => void }) {
+// Aptitud global del periodo = aptos / (aptos + no aptos), agregando por médico.
+function aptitudFrom(rows?: DoctorRow[]): number | null {
+  if (!rows) return null;
+  let apto = 0, tot = 0;
+  for (const r of rows) { apto += r.apto; tot += r.apto + r.noApto; }
+  return tot > 0 ? Math.round((apto / tot) * 1000) / 10 : null;
+}
+
+// Sparkline de reservas vs visitas (tendencia del periodo).
+function Sparkline({ data }: { data: VolBucket[] }) {
+  if (data.length < 2) return <p className="text-xs text-gray-400 py-6 text-center">Datos insuficientes para la tendencia.</p>;
+  const w = 300, h = 72, pad = 6;
+  const max = Math.max(1, ...data.flatMap((d) => [d.reservas, d.visitas]));
+  const x = (i: number) => pad + (i * (w - 2 * pad)) / (data.length - 1);
+  const y = (v: number) => h - pad - (v / max) * (h - 2 * pad);
+  const line = (key: "reservas" | "visitas") => data.map((d, i) => `${Math.round(x(i))},${Math.round(y(d[key]))}`).join(" ");
+  const last = data[data.length - 1]!;
+  return (
+    <div>
+      <div className="flex gap-4 text-xs text-gray-500 mb-1">
+        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: "#85B7EB" }} /> Reservas</span>
+        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: "#185FA5" }} /> Visitas</span>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" role="img" aria-label="Tendencia de reservas y visitas en el periodo">
+        <polyline fill="none" stroke="#85B7EB" strokeWidth="2" points={line("reservas")} />
+        <polyline fill="none" stroke="#185FA5" strokeWidth="2" points={line("visitas")} />
+        <circle cx={Math.round(x(data.length - 1))} cy={Math.round(y(last.reservas))} r="3" fill="#85B7EB" />
+        <circle cx={Math.round(x(data.length - 1))} cy={Math.round(y(last.visitas))} r="3" fill="#185FA5" />
+      </svg>
+      <div className="flex justify-between text-[11px] text-gray-400 mt-0.5"><span>{f0(data[0]!.bucket)}</span><span>{f0(last.bucket)}</span></div>
+    </div>
+  );
+}
+const f0 = (b: string) => b.length >= 10 ? `${b.slice(8, 10)}/${b.slice(5, 7)}` : b;
+
+// ── Vista: Resumen (cockpit: constantes vitales + avisos + tendencia + ranking) ──
+function Resumen({ f, onDrillCenter, onGoTo }: { f: Filters; onDrillCenter: (id: string) => void; onGoTo?: (v: string) => void }) {
   const prev = prevPeriod(f);
   const prevF: Filters = { ...f, from: prev.from, to: prev.to };
   const funnel = useReport<Funnel>("funnel", f);
@@ -448,6 +483,11 @@ function Resumen({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id: string)
   const occ = useReport<Occupancy>("occupancy", f);
   const occPrev = useReport<Occupancy>("occupancy", prevF);
   const sat = useReport<SatBucket[]>("saturation", f, { granularity: "day" });
+  const doctors = useReport<DoctorRow[]>("doctors", f);
+  const doctorsPrev = useReport<DoctorRow[]>("doctors", prevF);
+  const volume = useReport<VolBucket[]>("volume", f, { granularity: "week" });
+
+  const [leak, setLeak] = useState<{ type: LeakType; label: string } | null>(null);
 
   const cur = funnel.data, pre = funnelPrev.data;
   const conv = (x?: Funnel) => (x && x.reservas > 0 ? Math.round((x.atendidas / x.reservas) * 1000) / 10 : 0);
@@ -455,21 +495,37 @@ function Resumen({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id: string)
   const occCur = occ.data?.total.ocupacion ?? 0, occPre = occPrev.data?.total.ocupacion ?? 0;
   const satDays = (sat.data ?? []).filter((b) => b.saturado).length;
   const satPeak = (sat.data ?? []).reduce((m, b) => Math.max(m, b.saturacion), 0);
+  const aptCur = aptitudFrom(doctors.data), aptPre = aptitudFrom(doctorsPrev.data);
+  const sinResolver = cur?.sinResolver ?? 0;
+
+  // Top-2 fugas del periodo (para el mini "Dónde se pierde").
+  const leakList = cur ? ([
+    ["no_show", "No-show", cur.fugas.noShow],
+    ["cancel_cliente", "Canceladas · cliente", cur.fugas.canceladasCliente],
+    ["cancel_centro", "Canceladas · centro", cur.fugas.canceladasCentro],
+    ["cancel_otras", "Canceladas · otras", cur.fugas.canceladasOtras],
+    ["reprogramada", "Reprogramadas", cur.fugas.reprogramadas],
+    ["se_fue", "Se fue", cur.fugas.seFue],
+  ] as [LeakType, string, number][]).filter((x) => x[2] > 0).sort((a, b) => b[2] - a[2]).slice(0, 2) : [];
 
   // Alertas orientadas a decisión.
   const alerts: { text: string; tone: "danger" | "warning" }[] = [];
   if (satDays > 0) alerts.push({ text: `${satDays} día(s) saturado(s) (pico ${satPeak}%) — considera ampliar disponibilidad`, tone: "danger" });
   if (cur && convCur < 60 && cur.reservas >= 5) alerts.push({ text: `Conversión ${convCur}% por debajo del objetivo (60%)`, tone: "warning" });
   if (cur && cur.tasas.noShow > 10) alerts.push({ text: `No-show ${cur.tasas.noShow}% por encima del umbral (10%)`, tone: "warning" });
+  if (aptCur != null && aptCur < 80) alerts.push({ text: `Aptitud ${aptCur}% por debajo del 80% — revisa los no aptos`, tone: "warning" });
+  if (sinResolver > 0) alerts.push({ text: `${sinResolver} episodio(s) sin resolver (cierre administrativo) — revisa su origen`, tone: "warning" });
   if (cur && cur.fugas.canceladasCliente > 0) alerts.push({ text: `${cur.fugas.canceladasCliente} cancelación(es) de cliente — oportunidad de recaptura`, tone: "warning" });
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi icon={Percent} label="Conversión (atendidas/reservas)" value={convCur} suffix="%" delta={convCur - convPre} goodWhenUp tone="success" />
-        <Kpi icon={DoorOpen} label="Ocupación media" value={occCur} suffix="%" delta={occCur - occPre} goodWhenUp tone="accent" />
-        <Kpi icon={Gauge} label="Saturación pico" value={satPeak} suffix="%" tone={satDays > 0 ? "danger" : "plain"} />
+      {/* Constantes vitales */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <Kpi icon={CheckCircle} label="Atendidas" value={cur?.atendidas ?? 0} delta={cur && pre ? cur.atendidas - pre.atendidas : null} goodWhenUp tone="success" />
+        <Kpi icon={Percent} label="Conversión" value={convCur} suffix="%" delta={convCur - convPre} goodWhenUp tone="accent" />
         <Kpi icon={UserX} label="No-show" value={cur?.tasas.noShow ?? 0} suffix="%" delta={cur && pre ? cur.tasas.noShow - pre.tasas.noShow : null} goodWhenUp={false} tone="warning" />
+        <Kpi icon={DoorOpen} label="Ocupación" value={occCur} suffix="%" delta={occCur - occPre} goodWhenUp tone="plain" />
+        <Kpi icon={Stethoscope} label="Aptitud" value={aptCur ?? "—"} suffix={aptCur != null ? "%" : ""} delta={aptCur != null && aptPre != null ? aptCur - aptPre : null} goodWhenUp tone="plain" />
       </div>
 
       {alerts.length > 0 && (
@@ -482,12 +538,12 @@ function Resumen({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id: string)
         </div>
       )}
 
-      {/* Mini embudo + salas top */}
+      {/* Tendencia + ranking de salas */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Embudo del periodo">
-          {cur ? <FunnelBars f={cur} /> : empty}
+        <Card title="Tendencia" action={onGoTo && <button onClick={() => onGoTo("volumen")} className="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-0.5">Ver volumen <ChevronRight className="w-3.5 h-3.5" /></button>}>
+          {volume.data ? <Sparkline data={volume.data} /> : empty}
         </Card>
-        <Card title="Ocupación por sala">
+        <Card title="Rendimiento por sala" action={onGoTo && <button onClick={() => onGoTo("comparativa")} className="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-0.5">Comparativa <ChevronRight className="w-3.5 h-3.5" /></button>}>
           {(occ.data?.salas.length ?? 0) === 0 ? empty : (
             <div className="space-y-1.5">
               {occ.data!.salas.slice(0, 6).map((s) => (
@@ -503,6 +559,29 @@ function Resumen({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id: string)
           )}
         </Card>
       </div>
+
+      {/* Mini "Dónde se pierde" → drill-down de fugas */}
+      {cur && (
+        <Card title="Dónde se pierde" action={onGoTo && <button onClick={() => onGoTo("embudo")} className="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-0.5">Embudo <ChevronRight className="w-3.5 h-3.5" /></button>}>
+          {leakList.length === 0 ? (
+            <p className="text-sm text-gray-400">Sin fugas relevantes en el periodo.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {leakList.map(([type, label, val]) => (
+                <button key={type} onClick={() => setLeak({ type, label })}
+                  className="inline-flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:border-blue-300 hover:text-blue-700 group">
+                  <span className="text-gray-600 group-hover:text-blue-700">{label}</span>
+                  <span className="font-bold tabular-nums text-gray-800 group-hover:text-blue-700">{val}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-400" />
+                </button>
+              ))}
+              <span className="text-[11px] text-gray-400 self-center">Pulsa para ver los casos detrás</span>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {leak && <LeakDrawer f={f} leak={leak} onClose={() => setLeak(null)} />}
     </div>
   );
 }

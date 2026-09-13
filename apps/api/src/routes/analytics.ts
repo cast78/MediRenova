@@ -181,7 +181,7 @@ export async function analyticsRoutes(server: FastifyInstance) {
   // GET /analytics/volume — series de volumen (visitas/reservas)
   server.get("/analytics/volume", { ...guard, ...doc("Volumen de reservas y visitas") }, async (req, reply) =>
     handle(req, reply, "volume", async (scope, f, q) => {
-      const r = await computeVolume(scope, f, gran(q, "month", ["month", "year"]));
+      const r = await computeVolume(scope, f, gran(q, "month", ["week", "month", "year"]));
       return { data: r, rows: r as unknown as Record<string, unknown>[] };
     }));
 
