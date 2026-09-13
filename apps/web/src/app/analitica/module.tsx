@@ -146,9 +146,9 @@ const TONE: Record<string, string> = {
   danger: "bg-red-50 border-red-100 text-red-700",
 };
 
-function Kpi({ icon: Icon, label, value, delta, goodWhenUp, tone = "plain", suffix }: {
+function Kpi({ icon: Icon, label, value, delta, goodWhenUp, tone = "plain", suffix, note }: {
   icon: typeof Percent; label: string; value: string | number; delta?: number | null;
-  goodWhenUp?: boolean; tone?: keyof typeof TONE; suffix?: string;
+  goodWhenUp?: boolean; tone?: keyof typeof TONE; suffix?: string; note?: string;
 }) {
   const showDelta = delta != null && Number.isFinite(delta) && Math.abs(delta) >= 0.05;
   const up = (delta ?? 0) > 0;
@@ -158,7 +158,7 @@ function Kpi({ icon: Icon, label, value, delta, goodWhenUp, tone = "plain", suff
       <p className={`text-xs font-medium mb-0.5 flex items-center gap-1.5 ${tone === "plain" ? "text-gray-500" : ""}`}>
         <Icon className="w-3.5 h-3.5" /> {label}
       </p>
-      <p className="text-2xl font-bold">{value}{suffix}</p>
+      <p className="text-2xl font-bold">{value}{suffix}{note && <span className="text-xs font-normal text-gray-400 ml-1.5">· {note}</span>}</p>
       {showDelta && (
         <p className={`text-[11px] mt-0.5 flex items-center gap-1 ${good ? "text-emerald-600" : "text-red-600"}`}>
           {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -496,6 +496,9 @@ function Resumen({ f, onDrillCenter, onGoTo }: { f: Filters; onDrillCenter: (id:
   const satDays = (sat.data ?? []).filter((b) => b.saturado).length;
   const satPeak = (sat.data ?? []).reduce((m, b) => Math.max(m, b.saturacion), 0);
   const aptCur = aptitudFrom(doctors.data), aptPre = aptitudFrom(doctorsPrev.data);
+  const noAptoCur = (doctors.data ?? []).reduce((s, r) => s + r.noApto, 0);
+  const revisadasCur = (doctors.data ?? []).reduce((s, r) => s + r.apto + r.noApto, 0);
+  const aptNote = revisadasCur > 0 ? `${noAptoCur} no apto${noAptoCur !== 1 ? "s" : ""}` : undefined;
   const sinResolver = cur?.sinResolver ?? 0;
 
   // Top-2 fugas del periodo (para el mini "Dónde se pierde").
@@ -525,7 +528,7 @@ function Resumen({ f, onDrillCenter, onGoTo }: { f: Filters; onDrillCenter: (id:
         <Kpi icon={Percent} label="Conversión" value={convCur} suffix="%" delta={convCur - convPre} goodWhenUp tone="accent" />
         <Kpi icon={UserX} label="No-show" value={cur?.tasas.noShow ?? 0} suffix="%" delta={cur && pre ? cur.tasas.noShow - pre.tasas.noShow : null} goodWhenUp={false} tone="warning" />
         <Kpi icon={DoorOpen} label="Ocupación" value={occCur} suffix="%" delta={occCur - occPre} goodWhenUp tone="plain" />
-        <Kpi icon={Stethoscope} label="Aptitud" value={aptCur ?? "—"} suffix={aptCur != null ? "%" : ""} delta={aptCur != null && aptPre != null ? aptCur - aptPre : null} goodWhenUp tone="plain" />
+        <Kpi icon={Stethoscope} label="Aptitud" value={aptCur ?? "—"} suffix={aptCur != null ? "%" : ""} note={aptNote} delta={aptCur != null && aptPre != null ? aptCur - aptPre : null} goodWhenUp tone="plain" />
       </div>
 
       {alerts.length > 0 && (
