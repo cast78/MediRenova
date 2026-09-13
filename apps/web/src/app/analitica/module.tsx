@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth-context";
 import { ClientInfoModal } from "@/components/client-info-modal";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend,
+  ComposedChart, Area,
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Percent, DoorOpen, Gauge, UserX, Download, AlertTriangle, ChevronRight, Stethoscope,
@@ -1043,31 +1044,50 @@ function ComparativaView({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id:
 
 // ── Vista: Volumen ───────────────────────────────────────────────────────────
 function VolumenView({ f }: { f: Filters }) {
-  const [g, setG] = useState("month");
+  const [g, setG] = useState("week");
   const { data } = useReport<VolBucket[]>("volume", f, { granularity: g });
-  const rows = (data ?? []).map((b) => ({ ...b, label: bucketLabel(b.bucket) }));
+  const prev = prevPeriod(f);
+  const { data: dataPrev } = useReport<VolBucket[]>("volume", { ...f, from: prev.from, to: prev.to }, { granularity: g });
+
+  // "gap" = demanda no realizada (reservas − visitas) para el área apilada.
+  const rows = (data ?? []).map((b) => ({ ...b, label: bucketLabel(b.bucket), gap: Math.max(0, b.reservas - b.visitas) }));
+  const sum = (arr: VolBucket[] | undefined, key: "reservas" | "visitas") => (arr ?? []).reduce((s, b) => s + b[key], 0);
+  const resCur = sum(data, "reservas"), visCur = sum(data, "visitas");
+  const resPre = sum(dataPrev, "reservas"), visPre = sum(dataPrev, "visitas");
+  const realCur = resCur > 0 ? Math.round((visCur / resCur) * 1000) / 10 : 0;
+  const realPre = resPre > 0 ? Math.round((visPre / resPre) * 1000) / 10 : 0;
+
   return (
     <Card title="Volumen de reservas y visitas"
       action={
         <div className="flex items-center gap-2">
           <select value={g} onChange={(e) => setG(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white">
-            <option value="month">Mes</option><option value="year">Año</option>
+            <option value="week">Semana</option><option value="month">Mes</option><option value="year">Año</option>
           </select>
           <CsvButton ep="volume" f={f} extra={{ granularity: g }} />
         </div>
       }>
       {rows.length === 0 ? empty : (
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} allowDecimals={false} width={32} />
-            <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line type="monotone" dataKey="reservas" name="Reservas" stroke="#3b82f6" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="visitas" name="Visitas" stroke="#10b981" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+        <>
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <Kpi icon={Calendar} label="Reservas" value={resCur} delta={dataPrev ? resCur - resPre : null} goodWhenUp tone="accent" />
+            <Kpi icon={CheckCircle} label="Visitas" value={visCur} delta={dataPrev ? visCur - visPre : null} goodWhenUp tone="success" />
+            <Kpi icon={Percent} label="Realización" value={realCur} suffix="%" delta={dataPrev ? realCur - realPre : null} goodWhenUp tone="plain" />
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} allowDecimals={false} width={32} />
+              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Area type="monotone" dataKey="visitas" name="Visitas" stackId="v" stroke="#10b981" strokeWidth={2} fill="#10b981" fillOpacity={0.18} />
+              <Area type="monotone" dataKey="gap" name="No realizada" stackId="v" stroke="none" fill="#f59e0b" fillOpacity={0.18} />
+              <Line type="monotone" dataKey="reservas" name="Reservas" stroke="#3b82f6" strokeWidth={2} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <p className="text-[11px] text-gray-400 mt-2">Área verde = visitas realizadas · banda ámbar = demanda no realizada (reservas − visitas). Realización = visitas / reservas del periodo.</p>
+        </>
       )}
     </Card>
   );
