@@ -840,10 +840,10 @@ function SaturacionView({ f }: { f: Filters }) {
       }>
       {rows.length === 0 ? empty : (
         <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={rows} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+          <BarChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} unit="%" width={40} />
+            <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} unit="%" width={44} />
             <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }}
               formatter={(v: number, _n, p) => [`${v}% (${p.payload.demanda}/${p.payload.capacidad})`, "Saturación"]} />
             <Bar dataKey="saturacion" radius={[4, 4, 0, 0]} maxBarSize={40}>
@@ -943,7 +943,7 @@ function VolumenView({ f }: { f: Filters }) {
       }>
       {rows.length === 0 ? empty : (
         <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={rows} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
+          <LineChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} allowDecimals={false} width={32} />
@@ -1069,7 +1069,7 @@ function AltasView({ f }: { f: Filters }) {
       )}
       {series.length === 0 ? empty : (
         <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+          <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} allowDecimals={false} width={28} />
