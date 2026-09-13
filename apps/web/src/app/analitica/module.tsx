@@ -529,10 +529,10 @@ function Resumen({ f, onDrillCenter, onGoTo }: { f: Filters; onDrillCenter: (id:
       </div>
 
       {alerts.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {alerts.map((a, i) => (
-            <div key={i} className={`rounded-lg border px-3 py-2 text-sm flex items-center gap-2 ${a.tone === "danger" ? "bg-red-50 border-red-100 text-red-700" : "bg-amber-50 border-amber-100 text-amber-700"}`}>
-              <AlertTriangle className="w-4 h-4 shrink-0" /> {a.text}
+            <div key={i} className={`rounded-md border px-2.5 py-1 text-xs flex items-center gap-1.5 ${a.tone === "danger" ? "bg-red-50 border-red-100 text-red-700" : "bg-amber-50 border-amber-100 text-amber-700"}`}>
+              <AlertTriangle className="w-3 h-3 shrink-0" /> {a.text}
             </div>
           ))}
         </div>
@@ -545,17 +545,22 @@ function Resumen({ f, onDrillCenter, onGoTo }: { f: Filters; onDrillCenter: (id:
         </Card>
         <Card title="Rendimiento por sala" action={onGoTo && <button onClick={() => onGoTo("comparativa")} className="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-0.5">Comparativa <ChevronRight className="w-3.5 h-3.5" /></button>}>
           {(occ.data?.salas.length ?? 0) === 0 ? empty : (
-            <div className="space-y-1.5">
-              {occ.data!.salas.slice(0, 6).map((s) => (
-                <button key={s.roomId} onClick={() => onDrillCenter(s.centerId)} className="w-full flex items-center gap-2 text-sm group">
-                  <span className="w-28 truncate text-left text-gray-600 group-hover:text-blue-600">{s.roomName}</span>
-                  <span className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                    <span className="block h-full rounded-full" style={{ width: `${Math.min(100, s.ocupacion)}%`, backgroundColor: s.ocupacion >= 90 ? "#ef4444" : "#3b82f6" }} />
-                  </span>
-                  <span className="w-12 text-right tabular-nums text-gray-700">{s.ocupacion}%</span>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="space-y-0.5">
+                {occ.data!.salas.slice(0, 6).map((s) => (
+                  <button key={s.roomId} onClick={() => onDrillCenter(s.centerId)} title={`Ver ${s.centerName} en Comparativa`}
+                    className="w-full flex items-center gap-2 text-sm group px-1.5 py-1 -mx-1.5 rounded-lg hover:bg-blue-50/60 cursor-pointer transition-colors">
+                    <span className="w-24 truncate text-left text-gray-600 group-hover:text-blue-700 group-hover:underline underline-offset-2">{s.roomName}</span>
+                    <span className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                      <span className="block h-full rounded-full" style={{ width: `${Math.min(100, s.ocupacion)}%`, backgroundColor: s.ocupacion >= 90 ? "#ef4444" : "#3b82f6" }} />
+                    </span>
+                    <span className="w-11 text-right tabular-nums text-gray-700">{s.ocupacion}%</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-2">Clic en una sala → su centro en Comparativa</p>
+            </>
           )}
         </Card>
       </div>
