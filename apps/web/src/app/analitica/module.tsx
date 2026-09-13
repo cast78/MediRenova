@@ -12,7 +12,7 @@ import { useAuth } from "@/lib/auth-context";
 import { ClientInfoModal } from "@/components/client-info-modal";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend,
-  ComposedChart, Area,
+  ComposedChart, Area, ReferenceLine,
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Percent, DoorOpen, Gauge, UserX, Download, AlertTriangle, ChevronRight, Stethoscope,
@@ -850,10 +850,18 @@ function OcupacionView({ f }: { f: Filters }) {
 }
 
 // ── Vista: Saturación ────────────────────────────────────────────────────────
+// Color de saturación por tramo: <50 holgura (ámbar), 50–90 ok (azul), ≥90 saturado (rojo).
+const satColor = (v: number) => v >= 90 ? "#ef4444" : v >= 50 ? "#3b82f6" : "#f59e0b";
+
 function SaturacionView({ f }: { f: Filters }) {
   const [g, setG] = useState("day");
   const { data } = useReport<SatBucket[]>("saturation", f, { granularity: g });
   const rows = (data ?? []).map((b) => ({ ...b, label: bucketLabel(b.bucket) }));
+  const saturados = (data ?? []).filter((b) => b.saturado);
+  const pico = (data ?? []).reduce((m, b) => (b.saturacion > m.saturacion ? b : m), { saturacion: 0, bucket: "" } as SatBucket);
+  const media = (data ?? []).length ? Math.round((data!.reduce((s, b) => s + b.saturacion, 0) / data!.length)) : 0;
+  const capacidadLibre = (data ?? []).reduce((s, b) => s + Math.max(0, b.capacidad - b.demanda), 0);
+
   return (
     <Card title="Saturación de la demanda"
       action={
@@ -865,20 +873,31 @@ function SaturacionView({ f }: { f: Filters }) {
         </div>
       }>
       {rows.length === 0 ? empty : (
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} unit="%" width={44} />
-            <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }}
-              formatter={(v: number, _n, p) => [`${v}% (${p.payload.demanda}/${p.payload.capacidad})`, "Saturación"]} />
-            <Bar dataKey="saturacion" radius={[4, 4, 0, 0]} maxBarSize={40}>
-              {rows.map((r) => <Cell key={r.bucket} fill={r.saturado ? "#ef4444" : "#3b82f6"} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <Kpi icon={AlertTriangle} label="Días saturados" value={saturados.length} tone={saturados.length > 0 ? "danger" : "plain"} />
+            <Kpi icon={Gauge} label="Saturación pico" value={pico.saturacion} suffix="%" tone={pico.saturacion >= 90 ? "danger" : "plain"} />
+            <Kpi icon={Percent} label="Saturación media" value={media} suffix="%" tone="plain" />
+            <Kpi icon={DoorOpen} label="Capacidad libre" value={capacidadLibre} tone="plain" />
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} unit="%" width={44} />
+              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }}
+                formatter={(v: number, _n, p) => [`${v}% (${p.payload.demanda}/${p.payload.capacidad})`, "Saturación"]} />
+              <ReferenceLine y={90} stroke="#ef4444" strokeDasharray="5 3" label={{ value: "umbral 90%", position: "right", fontSize: 10, fill: "#ef4444" }} />
+              <Bar dataKey="saturacion" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                {rows.map((r) => <Cell key={r.bucket} fill={satColor(r.saturacion)} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+          <p className="text-[11px] text-gray-400 mt-2">
+            Demanda (reservas) frente a capacidad (slots ofertados). <span className="text-amber-600">&lt;50% holgura</span> · <span className="text-blue-600">50–90% ok</span> · <span className="text-red-600">≥90% saturado</span>.
+          </p>
+        </>
       )}
-      <p className="text-[11px] text-gray-400 mt-2">Demanda (reservas) frente a capacidad (slots ofertados). Rojo = ≥ 90% (saturado).</p>
     </Card>
   );
 }
