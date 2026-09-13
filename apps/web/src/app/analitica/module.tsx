@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch, authHeaders } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { ClientInfoModal } from "@/components/client-info-modal";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend,
 } from "recharts";
@@ -24,6 +25,15 @@ interface Funnel {
   ruido: number; tasas: { confirmacion: number; atencion: number; noShow: number; cancelacion: number };
   // Episodios sin cerrar: aislados de las tasas clínicas pero visibles.
   sinResolver?: number; completadasFueraDePlazo?: number;
+}
+
+// Drill-down de fugas: tipos y caso individual (endpoint /analytics/funnel/leaks).
+type LeakType =
+  | "no_show" | "cancel_cliente" | "cancel_centro" | "cancel_otras"
+  | "reprogramada" | "se_fue" | "sin_resolver" | "fuera_de_plazo";
+interface LeakCase {
+  id: string; customerId: string | null; customer: string; date: string;
+  product: string | null; room: string | null; center: string | null; note: string | null;
 }
 interface OccRow { roomId: string; roomName: string; centerId: string; centerName: string; disponibles: number; usados: number; ocupacion: number }
 interface Occupancy { salas: OccRow[]; total: { disponibles: number; usados: number; ocupacion: number } }
@@ -536,8 +546,28 @@ function FunnelBars({ f }: { f: Funnel }) {
 }
 
 // ── Vista: Embudo ────────────────────────────────────────────────────────────
+// Fila de fuga: clicable si tiene casos (val>0) → abre el detalle (drill-down).
+function LeakRow({ label, val, note, onOpen }: { label: string; val: number; note?: string; onOpen?: () => void }) {
+  const inner = (
+    <>
+      <span className="text-gray-600 text-left">{label}{note ? <span className="text-[10px] text-gray-400 ml-1.5">· {note}</span> : null}</span>
+      <span className="inline-flex items-center gap-1">
+        <span className="font-medium tabular-nums text-gray-800">{val}</span>
+        {onOpen && val > 0 && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300"><path d="M9 18l6-6-6-6" /></svg>}
+      </span>
+    </>
+  );
+  return onOpen && val > 0 ? (
+    <button onClick={onOpen} className="w-full flex items-center justify-between py-1 group hover:text-blue-700">{inner}</button>
+  ) : (
+    <div className="flex items-center justify-between py-1">{inner}</div>
+  );
+}
+
 function EmbudoView({ f }: { f: Filters }) {
   const { data } = useReport<Funnel>("funnel", f);
+  const [leak, setLeak] = useState<{ type: LeakType; label: string } | null>(null);
+  const open = (type: LeakType, label: string) => setLeak({ type, label });
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card title="Embudo de conversión" action={<CsvButton ep="funnel" f={f} />}>
@@ -545,38 +575,80 @@ function EmbudoView({ f }: { f: Filters }) {
       </Card>
       <Card title="Fugas del periodo">
         {data ? (
-          <div className="space-y-1.5 text-sm">
-            {[
-              ["Canceladas · cliente", data.fugas.canceladasCliente, "recaptura"],
-              ["Canceladas · centro", data.fugas.canceladasCentro, "operativo"],
-              ["Canceladas · otras", data.fugas.canceladasOtras, ""],
-              ["Reprogramadas", data.fugas.reprogramadas, ""],
-              ["No-show", data.fugas.noShow, ""],
-              ["Se fue (sin atender)", data.fugas.seFue, ""],
-            ].map(([label, val, note]) => (
-              <div key={label as string} className="flex items-center justify-between border-b border-gray-50 py-1">
-                <span className="text-gray-600">{label}{note ? <span className="text-[10px] text-gray-400 ml-1.5">· {note}</span> : null}</span>
-                <span className="font-medium tabular-nums text-gray-800">{val as number}</span>
-              </div>
-            ))}
+          <div className="text-sm divide-y divide-gray-50">
+            <LeakRow label="Canceladas · cliente" note="recaptura" val={data.fugas.canceladasCliente} onOpen={() => open("cancel_cliente", "Canceladas · cliente")} />
+            <LeakRow label="Canceladas · centro" note="operativo" val={data.fugas.canceladasCentro} onOpen={() => open("cancel_centro", "Canceladas · centro")} />
+            <LeakRow label="Canceladas · otras" val={data.fugas.canceladasOtras} onOpen={() => open("cancel_otras", "Canceladas · otras")} />
+            <LeakRow label="Reprogramadas" val={data.fugas.reprogramadas} onOpen={() => open("reprogramada", "Reprogramadas")} />
+            <LeakRow label="No-show" val={data.fugas.noShow} onOpen={() => open("no_show", "No-show")} />
+            <LeakRow label="Se fue (sin atender)" val={data.fugas.seFue} onOpen={() => open("se_fue", "Se fue (sin atender)")} />
             {data.ruido > 0 && <p className="text-[11px] text-gray-400 pt-1">Excluidas de las tasas: {data.ruido} canceladas por duplicado/error (ruido).</p>}
             {((data.sinResolver ?? 0) > 0 || (data.completadasFueraDePlazo ?? 0) > 0) && (
-              <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
-                <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Episodios sin cerrar · aislados de las tasas</p>
-                <div className="flex items-center justify-between py-0.5">
-                  <span className="text-gray-600">Sin resolver <span className="text-[10px] text-gray-400 ml-1.5">· cierre administrativo</span></span>
-                  <span className="font-medium tabular-nums text-gray-800">{data.sinResolver ?? 0}</span>
-                </div>
-                <div className="flex items-center justify-between py-0.5">
-                  <span className="text-gray-600">Completadas fuera de plazo <span className="text-[10px] text-gray-400 ml-1.5">· revisión tardía</span></span>
-                  <span className="font-medium tabular-nums text-gray-800">{data.completadasFueraDePlazo ?? 0}</span>
-                </div>
+              <div className="mt-1 pt-2 space-y-0.5">
+                <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold pb-0.5">Episodios sin cerrar · aislados de las tasas</p>
+                <LeakRow label="Sin resolver" note="cierre administrativo" val={data.sinResolver ?? 0} onOpen={() => open("sin_resolver", "Sin resolver")} />
+                <LeakRow label="Completadas fuera de plazo" note="revisión tardía" val={data.completadasFueraDePlazo ?? 0} onOpen={() => open("fuera_de_plazo", "Completadas fuera de plazo")} />
               </div>
             )}
+            <p className="text-[11px] text-gray-300 pt-2 border-t-0">Pulsa una fuga con casos para ver el detalle.</p>
           </div>
         ) : empty}
       </Card>
+      {leak && <LeakDrawer f={f} leak={leak} onClose={() => setLeak(null)} />}
     </div>
+  );
+}
+
+// Panel lateral con el detalle (lista de casos) de una fuga, respetando los filtros.
+function LeakDrawer({ f, leak, onClose }: { f: Filters; leak: { type: LeakType; label: string }; onClose: () => void }) {
+  const qs = buildQs(f, { type: leak.type });
+  const { data: cases = [], isLoading, isError } = useQuery<LeakCase[]>({
+    queryKey: ["funnel-leaks", qs],
+    queryFn: () => apiFetch<LeakCase[]>(`/analytics/funnel/leaks?${qs}`),
+  });
+  const [client, setClient] = useState<string | null>(null);
+  return (
+    <>
+      <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
+        <div className="w-full max-w-md h-full bg-white shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div>
+              <h3 className="font-bold text-gray-900">{leak.label}</h3>
+              <p className="text-xs text-gray-500">{isLoading ? "Cargando…" : `${cases.length} caso${cases.length !== 1 ? "s" : ""}`} · {f.from} → {f.to}</p>
+            </div>
+            <button onClick={onClose} aria-label="Cerrar" className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {isLoading ? (
+              <p className="p-8 text-sm text-gray-400 text-center">Cargando…</p>
+            ) : isError ? (
+              <p className="p-8 text-sm text-red-500 text-center">No se pudo cargar el detalle.</p>
+            ) : cases.length === 0 ? (
+              <p className="p-8 text-sm text-gray-400 text-center">Sin casos en este periodo/filtros.</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {cases.map((c) => (
+                  <div key={c.id} className="px-5 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      {c.customerId ? (
+                        <button onClick={() => setClient(c.customerId)} className="text-sm font-semibold text-gray-900 hover:text-blue-700 hover:underline truncate text-left">{c.customer}</button>
+                      ) : (
+                        <span className="text-sm font-semibold text-gray-900 truncate">{c.customer}</span>
+                      )}
+                      <span className="text-xs text-gray-400 shrink-0 tabular-nums">{new Date(c.date).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 truncate">{[c.product, c.room, c.center].filter(Boolean).join(" · ") || "—"}</p>
+                    {c.note && <p className="text-[11px] text-gray-400 truncate mt-0.5">{c.note}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {cases.length >= 500 && <p className="px-5 py-2 text-[11px] text-gray-400 border-t border-gray-100">Mostrando los primeros 500 casos.</p>}
+        </div>
+      </div>
+      {client && <ClientInfoModal customerId={client} onClose={() => setClient(null)} />}
+    </>
   );
 }
 
