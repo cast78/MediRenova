@@ -69,7 +69,7 @@ describe("resolveScope — aislamiento por tenant", () => {
 
 // ── Tarea 3.2: consistencia JSON ↔ CSV ───────────────────────────────────────
 describe("efectividad de campañas: el CSV refleja el mismo JSON (tarea 3.2)", () => {
-  const campaigns: EffCampaign[] = [{ id: "c1", name: "Renovaciones Junio", sentAt: d("2026-06-01") }];
+  const campaigns: EffCampaign[] = [{ id: "c1", name: "Renovaciones Junio", channel: "EMAIL", sentAt: d("2026-06-01") }];
   const recipients: EffRecipient[] = [
     { campaignId: "c1", customerId: "u1", convertedAt: null, convertedAppointmentId: null },
     { campaignId: "c1", customerId: "u2", convertedAt: null, convertedAppointmentId: null },

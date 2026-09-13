@@ -7,9 +7,9 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
 import {
-  type AnalyticsScope, type AnalyticsFilters, type Granularity,
-  MAX_RANGE_DAYS, rangeDays, toCsv,
-  computeFunnel, computeOccupancy, computeSaturation, computeDoctors, computeComparison, computeVolume,
+  type AnalyticsScope, type AnalyticsFilters, type Granularity, type LeakType,
+  MAX_RANGE_DAYS, rangeDays, toCsv, LEAK_TYPES,
+  computeFunnel, computeFunnelLeaks, computeOccupancy, computeSaturation, computeDoctors, computeComparison, computeVolume,
   computeAcquisition, computeCampaignEffectiveness,
 } from "../lib/analytics.js";
 
@@ -27,6 +27,8 @@ export const filtersSchema = z.object({
   scope: z.enum(["all"]).optional(),
   tenantId: z.string().uuid().optional(),
   attributionWindowDays: z.coerce.number().int().min(1).max(365).optional(),
+  // Tipo de fuga para el drill-down (solo /analytics/funnel/leaks).
+  type: z.enum(LEAK_TYPES as [LeakType, ...LeakType[]]).optional(),
   format: z.enum(["csv"]).optional(),
 }).refine((v) => v.from <= v.to, { message: "El rango de fechas es inválido (from > to)" });
 
@@ -134,6 +136,16 @@ export async function analyticsRoutes(server: FastifyInstance) {
       return { data: r, rows };
     }));
 
+  // GET /analytics/funnel/leaks?type=… — detalle (drill-down) de una fuga del
+  // embudo: lista los casos concretos detrás del recuento, con los mismos filtros.
+  server.get("/analytics/funnel/leaks", { ...guard, ...doc("Detalle de casos detrás de una fuga del embudo") }, async (req, reply) =>
+    handle(req, reply, "funnel_leaks", async (scope, f, q) => {
+      // `type` es obligatorio aquí (Fastify serializa el statusCode del error a 400).
+      if (!q.type) throw Object.assign(new Error("Falta el parámetro 'type'"), { statusCode: 400 });
+      const cases = await computeFunnelLeaks(scope, f, q.type as LeakType);
+      return { data: cases, rows: cases as unknown as Record<string, unknown>[] };
+    }));
+
   // GET /analytics/occupancy — ocupación por sala vs disponibilidad
   server.get("/analytics/occupancy", { ...guard, ...doc("Ocupación por sala frente a disponibilidad") }, async (req, reply) =>
     handle(req, reply, "occupancy", async (scope, f) => {
@@ -169,7 +181,7 @@ export async function analyticsRoutes(server: FastifyInstance) {
   // GET /analytics/volume — series de volumen (visitas/reservas)
   server.get("/analytics/volume", { ...guard, ...doc("Volumen de reservas y visitas") }, async (req, reply) =>
     handle(req, reply, "volume", async (scope, f, q) => {
-      const r = await computeVolume(scope, f, gran(q, "month", ["month", "year"]));
+      const r = await computeVolume(scope, f, gran(q, "month", ["week", "month", "year"]));
       return { data: r, rows: r as unknown as Record<string, unknown>[] };
     }));
 

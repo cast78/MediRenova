@@ -12,6 +12,7 @@
 // natural del centro. Por eso se bucketiza con getUTC* y se acotan rangos con
 // límites UTC del día.
 import { prisma } from "./prisma.js";
+import type { Prisma } from "@prisma/client";
 
 // ── Tipos de alcance y filtros ───────────────────────────────────────────────
 
@@ -158,6 +159,124 @@ export async function computeFunnel(scope: AnalyticsScope, f: AnalyticsFilters):
   return funnelFrom(byStatus as StatusCount[], byCancelReason as CancelCount[], visitsCompleted, visitsLeft, closedLate);
 }
 
+// ── Detalle (drill-down) de las fugas del embudo ─────────────────────────────
+// Lista los casos concretos detrás de cada recuento de fuga, con LOS MISMOS
+// criterios (where + campo de rango) que usa `computeFunnel`, para que el detalle
+// cuadre con el agregado. Ver openspec/changes/analitica-drill-down-fugas.
+
+export type LeakType =
+  | "no_show" | "cancel_cliente" | "cancel_centro" | "cancel_otras"
+  | "reprogramada" | "se_fue" | "sin_resolver" | "fuera_de_plazo";
+
+export const LEAK_TYPES: LeakType[] = [
+  "no_show", "cancel_cliente", "cancel_centro", "cancel_otras",
+  "reprogramada", "se_fue", "sin_resolver", "fuera_de_plazo",
+];
+
+export interface LeakCase {
+  id: string;
+  appointmentId: string | null; // cita para "Ver reserva" (null en walk-in "se fue")
+  customerId: string | null;
+  customer: string;
+  date: string;            // ISO del campo de rango relevante (cita / llegada / cierre de revisión)
+  product: string | null;
+  room: string | null;
+  center: string | null;
+  note: string | null;     // dato propio del motivo (motivo de cancelación, nota del cierre admin., etc.)
+}
+
+const CANCEL_LABEL: Record<string, string> = { CLIENTE: "el cliente canceló", CENTRO: "el centro canceló", OTRO: "otro", DUPLICADA: "duplicada", ERROR: "error de registro" };
+
+function fullName(c: { firstName: string | null; lastName: string | null } | null): string {
+  if (!c) return "Sin nombre";
+  return `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || "Sin nombre";
+}
+
+export async function computeFunnelLeaks(scope: AnalyticsScope, f: AnalyticsFilters, type: LeakType): Promise<LeakCase[]> {
+  const range = { gte: dayStart(f.from), lte: dayEnd(f.to) };
+  const apptW = apptScopeWhere(scope, f);
+
+  // Selección común para casos basados en cita.
+  const apptSelect = {
+    id: true, scheduledAt: true, cancelReason: true, adminClosureNote: true, adminClosedAt: true, adminClosedById: true,
+    customer: { select: { id: true, firstName: true, lastName: true } },
+    product: { select: { name: true } },
+    room: { select: { name: true, center: { select: { name: true } } } },
+  } satisfies Prisma.AppointmentSelect;
+  type ApptLeakRow = Prisma.AppointmentGetPayload<{ select: typeof apptSelect }>;
+
+  const fromAppt = (a: ApptLeakRow, date: Date, note: string | null): LeakCase => ({
+    id: a.id, appointmentId: a.id, customerId: a.customer?.id ?? null, customer: fullName(a.customer),
+    date: date.toISOString(), product: a.product?.name ?? null,
+    room: a.room?.name ?? null, center: a.room?.center?.name ?? null, note,
+  });
+
+  if (type === "no_show" || type === "reprogramada") {
+    const status = type === "no_show" ? "NO_SHOW" : "RESCHEDULED";
+    const rows = await prisma.appointment.findMany({ where: { ...apptW, status, scheduledAt: range }, select: apptSelect, orderBy: { scheduledAt: "desc" }, take: 500 });
+    return rows.map((a) => fromAppt(a, a.scheduledAt, null));
+  }
+
+  if (type === "cancel_cliente" || type === "cancel_centro" || type === "cancel_otras") {
+    const reasonWhere: Prisma.AppointmentWhereInput =
+      type === "cancel_cliente" ? { cancelReason: "CLIENTE" }
+      : type === "cancel_centro" ? { cancelReason: "CENTRO" }
+      : { OR: [{ cancelReason: "OTRO" }, { cancelReason: null }] }; // "otras" = OTRO o sin especificar
+    const rows = await prisma.appointment.findMany({ where: { ...apptW, status: "CANCELLED", scheduledAt: range, ...reasonWhere }, select: apptSelect, orderBy: { scheduledAt: "desc" }, take: 500 });
+    return rows.map((a) => fromAppt(a, a.scheduledAt, a.cancelReason ? (CANCEL_LABEL[a.cancelReason] ?? a.cancelReason) : "sin especificar"));
+  }
+
+  if (type === "sin_resolver") {
+    const rows = await prisma.appointment.findMany({ where: { ...apptW, status: "CLOSED_ADMIN", scheduledAt: range }, select: apptSelect, orderBy: { scheduledAt: "desc" }, take: 500 });
+    // Actor del cierre (adminClosedById es escalar, sin relación): lookup en lote.
+    const ids = [...new Set(rows.map((a) => a.adminClosedById).filter((x): x is string => !!x))];
+    const users = ids.length ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, firstName: true, lastName: true } }) : [];
+    const byId = new Map(users.map((u) => [u.id, fullName(u)]));
+    return rows.map((a) => {
+      const actor = a.adminClosedById ? byId.get(a.adminClosedById) : null;
+      const when = a.adminClosedAt ? a.adminClosedAt.toISOString().slice(0, 10) : null;
+      const parts = [a.adminClosureNote ?? "sin nota", actor ? `por ${actor}` : null, when].filter(Boolean);
+      return fromAppt(a, a.scheduledAt, parts.join(" · "));
+    });
+  }
+
+  if (type === "se_fue") {
+    const rows = await prisma.visit.findMany({
+      where: { ...visitScopeWhere(scope, f), status: "LEFT", arrivedAt: range },
+      select: {
+        id: true, arrivedAt: true, cancelReason: true, appointmentId: true,
+        customer: { select: { id: true, firstName: true, lastName: true } },
+        appointment: { select: { scheduledAt: true, product: { select: { name: true } }, room: { select: { name: true, center: { select: { name: true } } } } } },
+      },
+      orderBy: { arrivedAt: "desc" }, take: 500,
+    });
+    return rows.map((v) => ({
+      id: v.id, appointmentId: v.appointmentId, customerId: v.customer?.id ?? null, customer: fullName(v.customer),
+      date: v.arrivedAt.toISOString(), product: v.appointment?.product?.name ?? null,
+      room: v.appointment?.room?.name ?? null, center: v.appointment?.room?.center?.name ?? null,
+      note: "se marchó sin ser atendido",
+    }));
+  }
+
+  // fuera_de_plazo: revisiones completadas después del día de la cita.
+  const rows = await prisma.revision.findMany({
+    where: { ...revisionScopeWhere(scope, f), closedLate: true, completedAt: range },
+    select: {
+      id: true, completedAt: true, outcome: true, appointmentId: true,
+      customer: { select: { id: true, firstName: true, lastName: true } },
+      appointment: { select: { scheduledAt: true, product: { select: { name: true } }, room: { select: { name: true, center: { select: { name: true } } } } } },
+    },
+    orderBy: { completedAt: "desc" }, take: 500,
+  });
+  return rows.map((r) => ({
+    id: r.id, appointmentId: r.appointmentId, customerId: r.customer?.id ?? null, customer: fullName(r.customer),
+    date: (r.completedAt ?? r.appointment?.scheduledAt ?? new Date()).toISOString(),
+    product: r.appointment?.product?.name ?? null,
+    room: r.appointment?.room?.name ?? null, center: r.appointment?.room?.center?.name ?? null,
+    note: r.appointment?.scheduledAt ? `cita ${r.appointment.scheduledAt.toISOString().slice(0, 10)} · ${r.outcome === "APTO" ? "Apto" : r.outcome === "NO_APTO" ? "No apto" : "—"}` : null,
+  }));
+}
+
 // ── 2. Ocupación por sala frente a disponibilidad ────────────────────────────
 
 export interface RoomInfo {
@@ -255,18 +374,21 @@ export async function computeSaturation(scope: AnalyticsScope, f: AnalyticsFilte
 export interface DoctorRow {
   doctorId: string; doctorName: string; visitasAtendidas: number; pacientesDistintos: number;
   apto: number; noApto: number; tasaAptitud: number | null; tiempoMedioMin: number | null;
+  // Revisiones completadas fuera del día de la cita (closedLate): señal de cierre tardío.
+  fueraDePlazo: number;
 }
-export interface RevInput { doctorId: string; customerId: string; outcome: string; startedAt: Date | null; completedAt: Date | null }
+export interface RevInput { doctorId: string; customerId: string; outcome: string; startedAt: Date | null; completedAt: Date | null; closedLate?: boolean }
 
 // NÚCLEO PURO: agrega revisiones por médico. `ids` incluye médicos con actividad
 // cero; `nameOf` resuelve el nombre de cualquier firmante (evita UUIDs crudos).
 export function doctorRowsFrom(ids: string[], revs: RevInput[], nameOf: Map<string, string>): DoctorRow[] {
-  interface Agg { visitas: number; pacientes: Set<string>; apto: number; noApto: number; durSum: number; durN: number }
+  interface Agg { visitas: number; pacientes: Set<string>; apto: number; noApto: number; durSum: number; durN: number; fueraDePlazo: number }
   const byDoc = new Map<string, Agg>();
   for (const r of revs) {
-    const a = byDoc.get(r.doctorId) ?? { visitas: 0, pacientes: new Set(), apto: 0, noApto: 0, durSum: 0, durN: 0 };
+    const a = byDoc.get(r.doctorId) ?? { visitas: 0, pacientes: new Set(), apto: 0, noApto: 0, durSum: 0, durN: 0, fueraDePlazo: 0 };
     a.visitas++; a.pacientes.add(r.customerId);
     if (r.outcome === "APTO") a.apto++; else if (r.outcome === "NO_APTO") a.noApto++;
+    if (r.closedLate) a.fueraDePlazo++;
     if (r.startedAt && r.completedAt) { a.durSum += (r.completedAt.getTime() - r.startedAt.getTime()) / 60_000; a.durN++; }
     byDoc.set(r.doctorId, a);
   }
@@ -280,6 +402,7 @@ export function doctorRowsFrom(ids: string[], revs: RevInput[], nameOf: Map<stri
       apto: a?.apto ?? 0, noApto: a?.noApto ?? 0,
       tasaAptitud: total > 0 ? Math.round(((a!.apto) / total) * 1000) / 10 : null,
       tiempoMedioMin: a && a.durN > 0 ? Math.round((a.durSum / a.durN) * 10) / 10 : null,
+      fueraDePlazo: a?.fueraDePlazo ?? 0,
     };
   }).sort((x, y) => y.visitasAtendidas - x.visitasAtendidas);
 }
@@ -290,7 +413,7 @@ export async function computeDoctors(scope: AnalyticsScope, f: AnalyticsFilters)
     prisma.user.findMany({ where: { ...scope.tenantWhere, role: "DOCTOR" }, select: { id: true } }),
     prisma.revision.findMany({
       where: { ...revisionScopeWhere(scope, f), outcome: { in: ["APTO", "NO_APTO"] }, completedAt: range },
-      select: { doctorId: true, customerId: true, outcome: true, startedAt: true, completedAt: true },
+      select: { doctorId: true, customerId: true, outcome: true, startedAt: true, completedAt: true, closedLate: true },
     }),
   ]);
   const ids = [...new Set<string>([...doctors.map((d) => d.id), ...revs.map((r) => r.doctorId)])];
@@ -403,15 +526,15 @@ export function newVsReturningFrom(active: CustomerTenure[], from: string, to: s
 // LECTURA la ventana pedida. Para destinatarios sin `convertedAt` (histórico previo al
 // backfill) cae al FALLBACK heurístico por ventana (last-touch), sin recontar los pares
 // (campaña, cliente) ni las citas ya contados por la vía stored.
-export interface EffCampaign { id: string; name: string; sentAt: Date | null }
+export interface EffCampaign { id: string; name: string; channel: string; sentAt: Date | null }
 export interface EffRecipient { campaignId: string; customerId: string; convertedAt: Date | null; convertedAppointmentId: string | null }
 export interface EffAppointment { id: string; customerId: string; createdAt: Date; completedVisit: boolean }
-export interface CampaignEffRow { campaignId: string; name: string; enviados: number; convertidos: number; tasaConversion: number; reservasAtribuidas: number; visitasAtribuidas: number }
+export interface CampaignEffRow { campaignId: string; name: string; channel: string; enviados: number; convertidos: number; tasaConversion: number; reservasAtribuidas: number; visitasAtribuidas: number }
 
 export function campaignEffectivenessFrom(campaigns: EffCampaign[], recipients: EffRecipient[], appointments: EffAppointment[], windowDays: number): CampaignEffRow[] {
   const windowMs = windowDays * 86_400_000;
-  const campById = new Map<string, { name: string; sentAt: Date }>();
-  for (const c of campaigns) if (c.sentAt) campById.set(c.id, { name: c.name, sentAt: c.sentAt });
+  const campById = new Map<string, { name: string; channel: string; sentAt: Date }>();
+  for (const c of campaigns) if (c.sentAt) campById.set(c.id, { name: c.name, channel: c.channel, sentAt: c.sentAt });
 
   const apptById = new Map<string, EffAppointment>();
   for (const a of appointments) apptById.set(a.id, a);
@@ -476,7 +599,7 @@ export function campaignEffectivenessFrom(campaigns: EffCampaign[], recipients: 
     const a = byCamp.get(id);
     const env = enviados.get(id) ?? 0;
     const conv = a?.convertidos.size ?? 0;
-    return { campaignId: id, name: c.name, enviados: env, convertidos: conv, tasaConversion: rate(conv, env), reservasAtribuidas: a?.reservas ?? 0, visitasAtribuidas: a?.visitas ?? 0 };
+    return { campaignId: id, name: c.name, channel: c.channel, enviados: env, convertidos: conv, tasaConversion: rate(conv, env), reservasAtribuidas: a?.reservas ?? 0, visitasAtribuidas: a?.visitas ?? 0 };
   }).sort((x, y) => y.convertidos - x.convertidos);
 }
 
@@ -512,7 +635,7 @@ export async function computeAcquisition(scope: AnalyticsScope, f: AnalyticsFilt
 
 export async function computeCampaignEffectiveness(scope: AnalyticsScope, f: AnalyticsFilters, windowDays: number): Promise<CampaignEffRow[]> {
   const range = { gte: dayStart(f.from), lte: dayEnd(f.to) };
-  const campaigns = await prisma.campaign.findMany({ where: { ...scope.tenantWhere, sentAt: range }, select: { id: true, name: true, sentAt: true } });
+  const campaigns = await prisma.campaign.findMany({ where: { ...scope.tenantWhere, sentAt: range }, select: { id: true, name: true, channel: true, sentAt: true } });
   if (campaigns.length === 0) return [];
   const campIds = campaigns.map((c) => c.id);
   const recipients = await prisma.campaignRecipient.findMany({ where: { campaignId: { in: campIds }, status: "SENT" }, select: { campaignId: true, customerId: true, convertedAt: true, convertedAppointmentId: true } });

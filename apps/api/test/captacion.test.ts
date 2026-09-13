@@ -40,9 +40,9 @@ describe("newVsReturningFrom — nuevos vs recurrentes", () => {
 
 describe("campaignEffectivenessFrom — atribución por ventana (tarea 1.3)", () => {
   const campaigns: EffCampaign[] = [
-    { id: "c1", name: "Camp 1", sentAt: d("2026-07-01") },
-    { id: "c2", name: "Camp 2", sentAt: d("2026-07-10") },
-    { id: "c3", name: "Sin enviar", sentAt: null }, // se excluye
+    { id: "c1", name: "Camp 1", channel: "EMAIL", sentAt: d("2026-07-01") },
+    { id: "c2", name: "Camp 2", channel: "WHATSAPP", sentAt: d("2026-07-10") },
+    { id: "c3", name: "Sin enviar", channel: "EMAIL", sentAt: null }, // se excluye
   ];
   // Sin convertedAt → toda la atribución va por el FALLBACK heurístico (equivalente al
   // comportamiento previo a fase 2). Las conversiones STORED se prueban en campaign-attribution.test.ts.

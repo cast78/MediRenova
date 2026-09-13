@@ -9,12 +9,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch, authHeaders } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { ClientInfoModal } from "@/components/client-info-modal";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend,
+  ComposedChart, Area, ReferenceLine,
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Percent, DoorOpen, Gauge, UserX, Download, AlertTriangle, ChevronRight, Stethoscope,
-  UserPlus, Users, Send, CheckCircle, Building2, Package, ChevronDown, X, Calendar,
+  UserPlus, Users, Send, CheckCircle, Building2, Package, ChevronDown, X, Calendar, Info, MousePointerClick,
+  Mail, MessageCircle, MessageSquare,
 } from "lucide-react";
 
 // ── Tipos que devuelve la API ────────────────────────────────────────────────
@@ -25,15 +28,55 @@ interface Funnel {
   // Episodios sin cerrar: aislados de las tasas clínicas pero visibles.
   sinResolver?: number; completadasFueraDePlazo?: number;
 }
+
+// Drill-down de fugas: tipos y caso individual (endpoint /analytics/funnel/leaks).
+type LeakType =
+  | "no_show" | "cancel_cliente" | "cancel_centro" | "cancel_otras"
+  | "reprogramada" | "se_fue" | "sin_resolver" | "fuera_de_plazo";
+interface LeakCase {
+  id: string; appointmentId: string | null; customerId: string | null; customer: string; date: string;
+  product: string | null; room: string | null; center: string | null; note: string | null;
+}
+
+// Avatar de iniciales con color estable por nombre (mismo estilo que la lista de clientes).
+const AVATAR_COLORS = [
+  "bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500",
+  "bg-rose-500", "bg-cyan-500", "bg-fuchsia-500", "bg-teal-500",
+];
+function avatarColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]!;
+}
+function nameInitials(full: string): string {
+  const p = full.trim().split(/\s+/).filter(Boolean);
+  const a = p[0]?.[0] ?? "";
+  const b = p[1]?.[0] ?? "";
+  return ((a + b) || p[0]?.slice(0, 2) || "?").toUpperCase();
+}
+function Avatar({ name, muted }: { name: string; muted?: boolean }) {
+  return (
+    <span className={`w-6 h-6 rounded-full ${muted ? "bg-gray-300" : avatarColor(name)} flex items-center justify-center text-white text-[10px] font-bold shrink-0`}>
+      {nameInitials(name)}
+    </span>
+  );
+}
 interface OccRow { roomId: string; roomName: string; centerId: string; centerName: string; disponibles: number; usados: number; ocupacion: number }
 interface Occupancy { salas: OccRow[]; total: { disponibles: number; usados: number; ocupacion: number } }
 interface SatBucket { bucket: string; demanda: number; capacidad: number; saturacion: number; saturado: boolean }
-interface DoctorRow { doctorId: string; doctorName: string; visitasAtendidas: number; pacientesDistintos: number; apto: number; noApto: number; tasaAptitud: number | null; tiempoMedioMin: number | null }
+interface DoctorRow { doctorId: string; doctorName: string; visitasAtendidas: number; pacientesDistintos: number; apto: number; noApto: number; tasaAptitud: number | null; tiempoMedioMin: number | null; fueraDePlazo: number }
 interface CompRow { id: string; name: string; centerName?: string; reservas: number; atendidas: number; conversion: number; ocupacion: number }
 interface Comparison { porCentro: CompRow[]; porSala: CompRow[] }
 interface VolBucket { bucket: string; reservas: number; visitas: number }
 interface AcquisitionResult { series: { bucket: string; total: number; canales: Record<string, number> }[]; nuevosVsRecurrentes: { nuevos: number; recurrentes: number } }
-interface CampaignEffRow { campaignId: string; name: string; enviados: number; convertidos: number; tasaConversion: number; reservasAtribuidas: number; visitasAtribuidas: number }
+interface CampaignEffRow { campaignId: string; name: string; channel: string; enviados: number; convertidos: number; tasaConversion: number; reservasAtribuidas: number; visitasAtribuidas: number }
+
+// Canal de comunicación de una campaña (icono + color).
+const CAMPAIGN_CH: Record<string, { icon: typeof Mail; color: string; label: string }> = {
+  EMAIL: { icon: Mail, color: "text-blue-600", label: "Email" },
+  WHATSAPP: { icon: MessageCircle, color: "text-emerald-600", label: "WhatsApp" },
+  SMS: { icon: MessageSquare, color: "text-violet-600", label: "SMS" },
+};
 
 interface Filters { from: string; to: string; centerId: string; roomId: string; doctorId: string; productId: string; scope: string }
 
@@ -112,9 +155,9 @@ const TONE: Record<string, string> = {
   danger: "bg-red-50 border-red-100 text-red-700",
 };
 
-function Kpi({ icon: Icon, label, value, delta, goodWhenUp, tone = "plain", suffix }: {
+function Kpi({ icon: Icon, label, value, delta, goodWhenUp, tone = "plain", suffix, note }: {
   icon: typeof Percent; label: string; value: string | number; delta?: number | null;
-  goodWhenUp?: boolean; tone?: keyof typeof TONE; suffix?: string;
+  goodWhenUp?: boolean; tone?: keyof typeof TONE; suffix?: string; note?: string;
 }) {
   const showDelta = delta != null && Number.isFinite(delta) && Math.abs(delta) >= 0.05;
   const up = (delta ?? 0) > 0;
@@ -124,7 +167,7 @@ function Kpi({ icon: Icon, label, value, delta, goodWhenUp, tone = "plain", suff
       <p className={`text-xs font-medium mb-0.5 flex items-center gap-1.5 ${tone === "plain" ? "text-gray-500" : ""}`}>
         <Icon className="w-3.5 h-3.5" /> {label}
       </p>
-      <p className="text-2xl font-bold">{value}{suffix}</p>
+      <p className="text-2xl font-bold">{value}{suffix}{note && <span className="text-xs font-normal text-gray-400 ml-1.5">· {note}</span>}</p>
       {showDelta && (
         <p className={`text-[11px] mt-0.5 flex items-center gap-1 ${good ? "text-emerald-600" : "text-red-600"}`}>
           {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -372,8 +415,10 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
         )}
       </div>
 
-      {/* Pestañas de vista */}
-      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+      {/* Pestañas de vista. overflow-y-hidden evita la barra de scroll vertical
+          fantasma que Windows dibuja (overflow-x:auto fuerza overflow-y:auto y las
+          pestañas sobresalen ~1px por el subrayado). */}
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto overflow-y-hidden">
         {views.map((v) => (
           <button key={v.id} onClick={() => setView(v.id)}
             className={`px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors ${view === v.id ? "border-blue-600 text-blue-700 font-medium" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
@@ -384,7 +429,7 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
 
       {view === "resumen" && (mod === "captacion"
         ? <ResumenCaptacion f={f} onGoTo={setView} />
-        : <Resumen f={f} onDrillCenter={(id) => { setCenterId(id); setView("comparativa"); }} />)}
+        : <Resumen f={f} onDrillCenter={(id) => { setCenterId(id); setView("comparativa"); }} onGoTo={setView} />)}
       {view === "embudo" && <EmbudoView f={f} />}
       {view === "ocupacion" && <OcupacionView f={f} />}
       {view === "saturacion" && <SaturacionView f={f} />}
@@ -403,8 +448,43 @@ function useReport<T>(ep: string, f: Filters, extra?: Record<string, string>) {
   return useQuery<T>({ queryKey: [ep, qs], queryFn: () => apiFetch<T>(`/analytics/${ep}?${qs}`) });
 }
 
-// ── Vista: Resumen (KPIs + alertas + comparación) ────────────────────────────
-function Resumen({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id: string) => void }) {
+// Aptitud global del periodo = aptos / (aptos + no aptos), agregando por médico.
+function aptitudFrom(rows?: DoctorRow[]): number | null {
+  if (!rows) return null;
+  let apto = 0, tot = 0;
+  for (const r of rows) { apto += r.apto; tot += r.apto + r.noApto; }
+  return tot > 0 ? Math.round((apto / tot) * 1000) / 10 : null;
+}
+
+// Sparkline de reservas vs visitas (tendencia del periodo).
+function Sparkline({ data }: { data: VolBucket[] }) {
+  if (data.length < 2) return <p className="text-xs text-gray-400 py-6 text-center">Datos insuficientes para la tendencia.</p>;
+  const w = 300, h = 72, pad = 6;
+  const max = Math.max(1, ...data.flatMap((d) => [d.reservas, d.visitas]));
+  const x = (i: number) => pad + (i * (w - 2 * pad)) / (data.length - 1);
+  const y = (v: number) => h - pad - (v / max) * (h - 2 * pad);
+  const line = (key: "reservas" | "visitas") => data.map((d, i) => `${Math.round(x(i))},${Math.round(y(d[key]))}`).join(" ");
+  const last = data[data.length - 1]!;
+  return (
+    <div>
+      <div className="flex gap-4 text-xs text-gray-500 mb-1">
+        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: "#85B7EB" }} /> Reservas</span>
+        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: "#185FA5" }} /> Visitas</span>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" role="img" aria-label="Tendencia de reservas y visitas en el periodo">
+        <polyline fill="none" stroke="#85B7EB" strokeWidth="2" points={line("reservas")} />
+        <polyline fill="none" stroke="#185FA5" strokeWidth="2" points={line("visitas")} />
+        <circle cx={Math.round(x(data.length - 1))} cy={Math.round(y(last.reservas))} r="3" fill="#85B7EB" />
+        <circle cx={Math.round(x(data.length - 1))} cy={Math.round(y(last.visitas))} r="3" fill="#185FA5" />
+      </svg>
+      <div className="flex justify-between text-[11px] text-gray-400 mt-0.5"><span>{f0(data[0]!.bucket)}</span><span>{f0(last.bucket)}</span></div>
+    </div>
+  );
+}
+const f0 = (b: string) => b.length >= 10 ? `${b.slice(8, 10)}/${b.slice(5, 7)}` : b;
+
+// ── Vista: Resumen (cockpit: constantes vitales + avisos + tendencia + ranking) ──
+function Resumen({ f, onDrillCenter, onGoTo }: { f: Filters; onDrillCenter: (id: string) => void; onGoTo?: (v: string) => void }) {
   const prev = prevPeriod(f);
   const prevF: Filters = { ...f, from: prev.from, to: prev.to };
   const funnel = useReport<Funnel>("funnel", f);
@@ -412,6 +492,11 @@ function Resumen({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id: string)
   const occ = useReport<Occupancy>("occupancy", f);
   const occPrev = useReport<Occupancy>("occupancy", prevF);
   const sat = useReport<SatBucket[]>("saturation", f, { granularity: "day" });
+  const doctors = useReport<DoctorRow[]>("doctors", f);
+  const doctorsPrev = useReport<DoctorRow[]>("doctors", prevF);
+  const volume = useReport<VolBucket[]>("volume", f, { granularity: "week" });
+
+  const [leak, setLeak] = useState<{ type: LeakType; label: string } | null>(null);
 
   const cur = funnel.data, pre = funnelPrev.data;
   const conv = (x?: Funnel) => (x && x.reservas > 0 ? Math.round((x.atendidas / x.reservas) * 1000) / 10 : 0);
@@ -419,54 +504,103 @@ function Resumen({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id: string)
   const occCur = occ.data?.total.ocupacion ?? 0, occPre = occPrev.data?.total.ocupacion ?? 0;
   const satDays = (sat.data ?? []).filter((b) => b.saturado).length;
   const satPeak = (sat.data ?? []).reduce((m, b) => Math.max(m, b.saturacion), 0);
+  const aptCur = aptitudFrom(doctors.data), aptPre = aptitudFrom(doctorsPrev.data);
+  const noAptoCur = (doctors.data ?? []).reduce((s, r) => s + r.noApto, 0);
+  const revisadasCur = (doctors.data ?? []).reduce((s, r) => s + r.apto + r.noApto, 0);
+  const aptNote = revisadasCur > 0 ? `${noAptoCur} no apto${noAptoCur !== 1 ? "s" : ""}` : "";
+  const sinResolver = cur?.sinResolver ?? 0;
+
+  // Top-2 fugas del periodo (para el mini "Dónde se pierde").
+  const leakList = cur ? ([
+    ["no_show", "No-show", cur.fugas.noShow],
+    ["cancel_cliente", "Canceladas · cliente", cur.fugas.canceladasCliente],
+    ["cancel_centro", "Canceladas · centro", cur.fugas.canceladasCentro],
+    ["cancel_otras", "Canceladas · otras", cur.fugas.canceladasOtras],
+    ["reprogramada", "Reprogramadas", cur.fugas.reprogramadas],
+    ["se_fue", "Se fue", cur.fugas.seFue],
+  ] as [LeakType, string, number][]).filter((x) => x[2] > 0).sort((a, b) => b[2] - a[2]).slice(0, 2) : [];
 
   // Alertas orientadas a decisión.
   const alerts: { text: string; tone: "danger" | "warning" }[] = [];
   if (satDays > 0) alerts.push({ text: `${satDays} día(s) saturado(s) (pico ${satPeak}%) — considera ampliar disponibilidad`, tone: "danger" });
   if (cur && convCur < 60 && cur.reservas >= 5) alerts.push({ text: `Conversión ${convCur}% por debajo del objetivo (60%)`, tone: "warning" });
   if (cur && cur.tasas.noShow > 10) alerts.push({ text: `No-show ${cur.tasas.noShow}% por encima del umbral (10%)`, tone: "warning" });
+  if (aptCur != null && aptCur < 80) alerts.push({ text: `Aptitud ${aptCur}% por debajo del 80% — revisa los no aptos`, tone: "warning" });
+  if (sinResolver > 0) alerts.push({ text: `${sinResolver} episodio(s) sin resolver (cierre administrativo) — revisa su origen`, tone: "warning" });
   if (cur && cur.fugas.canceladasCliente > 0) alerts.push({ text: `${cur.fugas.canceladasCliente} cancelación(es) de cliente — oportunidad de recaptura`, tone: "warning" });
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi icon={Percent} label="Conversión (atendidas/reservas)" value={convCur} suffix="%" delta={convCur - convPre} goodWhenUp tone="success" />
-        <Kpi icon={DoorOpen} label="Ocupación media" value={occCur} suffix="%" delta={occCur - occPre} goodWhenUp tone="accent" />
-        <Kpi icon={Gauge} label="Saturación pico" value={satPeak} suffix="%" tone={satDays > 0 ? "danger" : "plain"} />
+      {/* Constantes vitales */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <Kpi icon={CheckCircle} label="Atendidas" value={cur?.atendidas ?? 0} delta={cur && pre ? cur.atendidas - pre.atendidas : null} goodWhenUp tone="success" />
+        <Kpi icon={Percent} label="Conversión" value={convCur} suffix="%" delta={convCur - convPre} goodWhenUp tone="accent" />
         <Kpi icon={UserX} label="No-show" value={cur?.tasas.noShow ?? 0} suffix="%" delta={cur && pre ? cur.tasas.noShow - pre.tasas.noShow : null} goodWhenUp={false} tone="warning" />
+        <Kpi icon={DoorOpen} label="Ocupación" value={occCur} suffix="%" delta={occCur - occPre} goodWhenUp tone="plain" />
+        <Kpi icon={Stethoscope} label="Aptitud" value={aptCur ?? "—"} suffix={aptCur != null ? "%" : ""} note={aptNote} delta={aptCur != null && aptPre != null ? aptCur - aptPre : null} goodWhenUp tone="plain" />
       </div>
 
       {alerts.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {alerts.map((a, i) => (
-            <div key={i} className={`rounded-lg border px-3 py-2 text-sm flex items-center gap-2 ${a.tone === "danger" ? "bg-red-50 border-red-100 text-red-700" : "bg-amber-50 border-amber-100 text-amber-700"}`}>
-              <AlertTriangle className="w-4 h-4 shrink-0" /> {a.text}
+            <div key={i} className={`rounded-md border px-2.5 py-1 text-xs flex items-center gap-1.5 ${a.tone === "danger" ? "bg-red-50 border-red-100 text-red-700" : "bg-amber-50 border-amber-100 text-amber-700"}`}>
+              <AlertTriangle className="w-3 h-3 shrink-0" /> {a.text}
             </div>
           ))}
         </div>
       )}
 
-      {/* Mini embudo + salas top */}
+      {/* Tendencia + ranking de salas */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Embudo del periodo">
-          {cur ? <FunnelBars f={cur} /> : empty}
+        <Card title="Tendencia" action={onGoTo && <button onClick={() => onGoTo("volumen")} className="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-0.5">Ver volumen <ChevronRight className="w-3.5 h-3.5" /></button>}>
+          {volume.data ? <Sparkline data={volume.data} /> : empty}
         </Card>
-        <Card title="Ocupación por sala">
+        <Card title="Rendimiento por sala" action={onGoTo && <button onClick={() => onGoTo("comparativa")} className="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-0.5">Comparativa <ChevronRight className="w-3.5 h-3.5" /></button>}>
           {(occ.data?.salas.length ?? 0) === 0 ? empty : (
-            <div className="space-y-1.5">
-              {occ.data!.salas.slice(0, 6).map((s) => (
-                <button key={s.roomId} onClick={() => onDrillCenter(s.centerId)} className="w-full flex items-center gap-2 text-sm group">
-                  <span className="w-28 truncate text-left text-gray-600 group-hover:text-blue-600">{s.roomName}</span>
-                  <span className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                    <span className="block h-full rounded-full" style={{ width: `${Math.min(100, s.ocupacion)}%`, backgroundColor: s.ocupacion >= 90 ? "#ef4444" : "#3b82f6" }} />
-                  </span>
-                  <span className="w-12 text-right tabular-nums text-gray-700">{s.ocupacion}%</span>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="space-y-0.5">
+                {occ.data!.salas.slice(0, 6).map((s) => (
+                  <button key={s.roomId} onClick={() => onDrillCenter(s.centerId)} title={`Ver ${s.centerName} en Comparativa`}
+                    className="w-full flex items-center gap-2 text-sm group px-1.5 py-1 -mx-1.5 rounded-lg hover:bg-blue-50/60 cursor-pointer transition-colors">
+                    <span className="w-24 truncate text-left text-gray-600 group-hover:text-blue-700 group-hover:underline underline-offset-2">{s.roomName}</span>
+                    <span className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                      <span className="block h-full rounded-full" style={{ width: `${Math.min(100, s.ocupacion)}%`, backgroundColor: s.ocupacion >= 90 ? "#ef4444" : "#3b82f6" }} />
+                    </span>
+                    <span className="w-11 text-right tabular-nums text-gray-700">{s.ocupacion}%</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5">
+                <MousePointerClick className="w-3.5 h-3.5 shrink-0" /> Clic en una sala → su centro en Comparativa
+              </div>
+            </>
           )}
         </Card>
       </div>
+
+      {/* Mini "Dónde se pierde" → drill-down de fugas */}
+      {cur && (
+        <Card title="Dónde se pierde" action={onGoTo && <button onClick={() => onGoTo("embudo")} className="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-0.5">Embudo <ChevronRight className="w-3.5 h-3.5" /></button>}>
+          {leakList.length === 0 ? (
+            <p className="text-sm text-gray-400">Sin fugas relevantes en el periodo.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {leakList.map(([type, label, val]) => (
+                <button key={type} onClick={() => setLeak({ type, label })}
+                  className="inline-flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:border-blue-300 hover:text-blue-700 group">
+                  <span className="text-gray-600 group-hover:text-blue-700">{label}</span>
+                  <span className="font-bold tabular-nums text-gray-800 group-hover:text-blue-700">{val}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-400" />
+                </button>
+              ))}
+              <span className="text-[11px] text-gray-400 self-center">Pulsa para ver los casos detrás</span>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {leak && <LeakDrawer f={f} leak={leak} onClose={() => setLeak(null)} />}
     </div>
   );
 }
@@ -536,79 +670,206 @@ function FunnelBars({ f }: { f: Funnel }) {
 }
 
 // ── Vista: Embudo ────────────────────────────────────────────────────────────
+// Fila de fuga: clicable si tiene casos (val>0) → abre el detalle (drill-down). Los
+// valores y la flecha van en columnas de ancho fijo para que queden alineados en
+// todas las filas (tengan acción o no).
+function LeakRow({ label, val, note, dot, onOpen }: { label: string; val: number; note?: string; dot?: string; onOpen?: () => void }) {
+  const actionable = !!onOpen && val > 0;
+  const inner = (
+    <>
+      <span className="flex-1 min-w-0 text-left text-gray-600 inline-flex items-center gap-2">
+        {dot && <span className={`w-2 h-2 rounded-full shrink-0 ${val > 0 ? dot : "bg-gray-200"}`} />}
+        <span className="truncate">
+          <span className={actionable ? "underline decoration-dotted decoration-gray-300 underline-offset-2 group-hover:decoration-blue-400 group-hover:text-blue-700" : ""}>{label}</span>
+          {note ? <span className="text-[10px] text-gray-400 ml-1.5">· {note}</span> : null}
+        </span>
+      </span>
+      <span className={`w-10 text-right tabular-nums font-bold ${val > 0 ? "text-gray-900" : "text-gray-300"}`}>{val}</span>
+      <span className="w-4 flex justify-center text-gray-300 group-hover:text-blue-400">
+        {actionable && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>}
+      </span>
+    </>
+  );
+  return actionable ? (
+    <button onClick={onOpen} className="w-full flex items-center gap-2 py-1 group">{inner}</button>
+  ) : (
+    <div className="flex items-center gap-2 py-1">{inner}</div>
+  );
+}
+
 function EmbudoView({ f }: { f: Filters }) {
   const { data } = useReport<Funnel>("funnel", f);
+  const [leak, setLeak] = useState<{ type: LeakType; label: string } | null>(null);
+  const open = (type: LeakType, label: string) => setLeak({ type, label });
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card title="Embudo de conversión" action={<CsvButton ep="funnel" f={f} />}>
-        {data ? <FunnelBars f={data} /> : empty}
+        {data ? (
+          <>
+            <FunnelBars f={data} />
+            <div className="mt-3 flex gap-2 text-[11px] leading-relaxed text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-2">
+              <Info className="w-3.5 h-3.5 shrink-0 mt-px text-gray-400" />
+              <span>Cómo leerlo: cada barra es un <span className="text-gray-700">subconjunto</span> de la de arriba (51 reservas → 6 confirmadas → …). La <span className="text-red-500 font-medium">↓</span> entre barras marca <span className="text-gray-700">cuántas reservas se pierden</span> en ese paso, con el desglose de motivos en el primero. Las tasas de abajo resumen la conversión del periodo.</span>
+            </div>
+          </>
+        ) : empty}
       </Card>
       <Card title="Fugas del periodo">
         {data ? (
-          <div className="space-y-1.5 text-sm">
-            {[
-              ["Canceladas · cliente", data.fugas.canceladasCliente, "recaptura"],
-              ["Canceladas · centro", data.fugas.canceladasCentro, "operativo"],
-              ["Canceladas · otras", data.fugas.canceladasOtras, ""],
-              ["Reprogramadas", data.fugas.reprogramadas, ""],
-              ["No-show", data.fugas.noShow, ""],
-              ["Se fue (sin atender)", data.fugas.seFue, ""],
-            ].map(([label, val, note]) => (
-              <div key={label as string} className="flex items-center justify-between border-b border-gray-50 py-1">
-                <span className="text-gray-600">{label}{note ? <span className="text-[10px] text-gray-400 ml-1.5">· {note}</span> : null}</span>
-                <span className="font-medium tabular-nums text-gray-800">{val as number}</span>
-              </div>
-            ))}
+          <div className="text-sm divide-y divide-gray-50">
+            <LeakRow label="Canceladas · cliente" note="recaptura" dot="bg-amber-400" val={data.fugas.canceladasCliente} onOpen={() => open("cancel_cliente", "Canceladas · cliente")} />
+            <LeakRow label="Canceladas · centro" note="operativo" dot="bg-slate-400" val={data.fugas.canceladasCentro} onOpen={() => open("cancel_centro", "Canceladas · centro")} />
+            <LeakRow label="Canceladas · otras" dot="bg-gray-300" val={data.fugas.canceladasOtras} onOpen={() => open("cancel_otras", "Canceladas · otras")} />
+            <LeakRow label="Reprogramadas" dot="bg-blue-400" val={data.fugas.reprogramadas} onOpen={() => open("reprogramada", "Reprogramadas")} />
+            <LeakRow label="No-show" dot="bg-red-500" val={data.fugas.noShow} onOpen={() => open("no_show", "No-show")} />
+            <LeakRow label="Se fue (sin atender)" dot="bg-orange-500" val={data.fugas.seFue} onOpen={() => open("se_fue", "Se fue (sin atender)")} />
             {data.ruido > 0 && <p className="text-[11px] text-gray-400 pt-1">Excluidas de las tasas: {data.ruido} canceladas por duplicado/error (ruido).</p>}
             {((data.sinResolver ?? 0) > 0 || (data.completadasFueraDePlazo ?? 0) > 0) && (
-              <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
-                <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Episodios sin cerrar · aislados de las tasas</p>
-                <div className="flex items-center justify-between py-0.5">
-                  <span className="text-gray-600">Sin resolver <span className="text-[10px] text-gray-400 ml-1.5">· cierre administrativo</span></span>
-                  <span className="font-medium tabular-nums text-gray-800">{data.sinResolver ?? 0}</span>
-                </div>
-                <div className="flex items-center justify-between py-0.5">
-                  <span className="text-gray-600">Completadas fuera de plazo <span className="text-[10px] text-gray-400 ml-1.5">· revisión tardía</span></span>
-                  <span className="font-medium tabular-nums text-gray-800">{data.completadasFueraDePlazo ?? 0}</span>
-                </div>
+              <div className="mt-1 pt-2 space-y-0.5">
+                <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold pb-0.5">Episodios sin cerrar · aislados de las tasas</p>
+                <LeakRow label="Sin resolver" note="cierre administrativo" dot="bg-violet-400" val={data.sinResolver ?? 0} onOpen={() => open("sin_resolver", "Sin resolver")} />
+                <LeakRow label="Completadas fuera de plazo" note="revisión tardía" dot="bg-fuchsia-400" val={data.completadasFueraDePlazo ?? 0} onOpen={() => open("fuera_de_plazo", "Completadas fuera de plazo")} />
               </div>
             )}
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5">
+              <MousePointerClick className="w-3.5 h-3.5 shrink-0" /> Pulsa una fuga con casos para ver el detalle.
+            </div>
           </div>
         ) : empty}
       </Card>
+      {leak && <LeakDrawer f={f} leak={leak} onClose={() => setLeak(null)} />}
     </div>
   );
 }
 
+// Panel lateral con el detalle (lista de casos) de una fuga, respetando los filtros.
+function LeakDrawer({ f, leak, onClose }: { f: Filters; leak: { type: LeakType; label: string }; onClose: () => void }) {
+  const router = useRouter();
+  const qs = buildQs(f, { type: leak.type });
+  const { data: cases = [], isLoading, isError } = useQuery<LeakCase[]>({
+    queryKey: ["funnel-leaks", qs],
+    queryFn: () => apiFetch<LeakCase[]>(`/analytics/funnel/leaks?${qs}`),
+  });
+  const [client, setClient] = useState<string | null>(null);
+  return (
+    <>
+      <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
+        <div className="w-full max-w-md h-full bg-white shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div>
+              <h3 className="font-bold text-gray-900">{leak.label}</h3>
+              <p className="text-xs text-gray-500">{isLoading ? "Cargando…" : `${cases.length} caso${cases.length !== 1 ? "s" : ""}`} · {f.from} → {f.to}</p>
+            </div>
+            <button onClick={onClose} aria-label="Cerrar" className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {isLoading ? (
+              <p className="p-8 text-sm text-gray-400 text-center">Cargando…</p>
+            ) : isError ? (
+              <p className="p-8 text-sm text-red-500 text-center">No se pudo cargar el detalle.</p>
+            ) : cases.length === 0 ? (
+              <p className="p-8 text-sm text-gray-400 text-center">Sin casos en este periodo/filtros.</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {cases.map((c) => (
+                  <div key={c.id} className="px-5 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      {c.customerId ? (
+                        <button onClick={() => setClient(c.customerId)} title="Ver ficha del cliente" className="group/name inline-flex items-center gap-2 min-w-0 text-left">
+                          <Avatar name={c.customer} />
+                          <span className="text-sm font-semibold text-gray-900 group-hover/name:text-blue-700 group-hover/name:underline underline-offset-2 truncate">{c.customer}</span>
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 min-w-0">
+                          <Avatar name={c.customer} muted />
+                          <span className="text-sm font-semibold text-gray-900 truncate">{c.customer}</span>
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400 shrink-0 tabular-nums">{new Date(c.date).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 truncate">{[c.product, c.room, c.center].filter(Boolean).join(" · ") || "—"}</p>
+                    {c.note && <p className="text-[11px] text-gray-400 truncate mt-0.5">{c.note}</p>}
+                    {c.appointmentId && (
+                      <button onClick={() => router.push(`/appointments?appt=${c.appointmentId}`)} className="mt-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1">
+                        Ver reserva
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 5l7 7-7 7" /></svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {cases.length >= 500 && <p className="px-5 py-2 text-[11px] text-gray-400 border-t border-gray-100">Mostrando los primeros 500 casos.</p>}
+        </div>
+      </div>
+      {client && <ClientInfoModal customerId={client} onClose={() => setClient(null)} />}
+    </>
+  );
+}
+
 // ── Vista: Ocupación ─────────────────────────────────────────────────────────
+// Color de un valor de ocupación por tramo: <50 infrautilizado (ámbar),
+// 50–90 ok (azul), ≥90 saturado (rojo).
+const occTier = (v: number) => v >= 90 ? { bar: "bg-red-500", text: "text-red-600" } : v >= 50 ? { bar: "bg-blue-500", text: "text-blue-700" } : { bar: "bg-amber-400", text: "text-amber-700" };
+
 function OcupacionView({ f }: { f: Filters }) {
   const { data } = useReport<Occupancy>("occupancy", f);
-  const rows = (data?.salas ?? []).map((s) => ({ ...s, label: s.roomName }));
+  const salas = [...(data?.salas ?? [])].sort((a, b) => b.ocupacion - a.ocupacion);
+  const libres = (data?.total.disponibles ?? 0) - (data?.total.usados ?? 0);
+  const saturadas = salas.filter((s) => s.ocupacion >= 90).length;
+  const infra = salas.filter((s) => s.ocupacion < 50).length;
+
   return (
-    <Card title={`Ocupación por sala · total ${data?.total.ocupacion ?? 0}%`} action={<CsvButton ep="occupancy" f={f} />}>
-      {rows.length === 0 ? empty : (
-        <ResponsiveContainer width="100%" height={Math.max(200, rows.length * 40)}>
-          <BarChart data={rows} layout="vertical" margin={{ top: 0, right: 24, left: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
-            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} unit="%" />
-            <YAxis type="category" dataKey="label" width={120} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }}
-              formatter={(v: number, _n, p) => [`${v}% (${p.payload.usados}/${p.payload.disponibles})`, "Ocupación"]} />
-            <Bar dataKey="ocupacion" radius={[0, 4, 4, 0]} maxBarSize={24}>
-              {rows.map((r) => <Cell key={r.roomId} fill={r.ocupacion >= 90 ? "#ef4444" : "#3b82f6"} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+    <Card title="Ocupación por sala" action={<CsvButton ep="occupancy" f={f} />}>
+      {salas.length === 0 ? empty : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <Kpi icon={Gauge} label="Ocupación total" value={data?.total.ocupacion ?? 0} suffix="%" tone="accent" />
+            <Kpi icon={DoorOpen} label="Slots libres" value={libres} tone="plain" />
+            <Kpi icon={AlertTriangle} label="Salas saturadas" value={saturadas} tone={saturadas > 0 ? "danger" : "plain"} />
+            <Kpi icon={TrendingDown} label="Salas infrautilizadas" value={infra} tone={infra > 0 ? "warning" : "plain"} />
+          </div>
+
+          <div className="overflow-x-auto">
+            <div className="min-w-[520px] divide-y divide-gray-50">
+              {salas.map((s) => {
+                const tier = occTier(s.ocupacion);
+                return (
+                  <div key={s.roomId} className="flex items-center gap-3 py-1.5 text-sm">
+                    <DoorOpen className="w-4 h-4 text-gray-400 shrink-0" />
+                    <span className="w-40 shrink-0 truncate text-gray-700">{s.roomName}{s.centerName ? <span className="text-[10px] text-gray-400 ml-1">· {s.centerName}</span> : null}</span>
+                    <span className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden"><span className={`block h-full rounded-full ${tier.bar}`} style={{ width: `${Math.min(100, s.ocupacion)}%` }} /></span>
+                    <span className={`w-10 text-right tabular-nums font-medium ${tier.text}`}>{s.ocupacion}%</span>
+                    <span className="w-28 text-right text-[11px] text-gray-400 tabular-nums shrink-0">{s.usados}/{s.disponibles} · {s.disponibles - s.usados} libres</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <p className="text-[11px] text-gray-400 mt-3">
+            <span className="text-amber-600">&lt;50% infrautilizado</span> · <span className="text-blue-600">50–90% ok</span> · <span className="text-red-600">≥90% saturado</span>. Cifras: usados/disponibles (slots) del periodo.
+          </p>
+        </>
       )}
     </Card>
   );
 }
 
 // ── Vista: Saturación ────────────────────────────────────────────────────────
+// Color de saturación por tramo: <50 holgura (ámbar), 50–90 ok (azul), ≥90 saturado (rojo).
+const satColor = (v: number) => v >= 90 ? "#ef4444" : v >= 50 ? "#3b82f6" : "#f59e0b";
+
 function SaturacionView({ f }: { f: Filters }) {
   const [g, setG] = useState("day");
   const { data } = useReport<SatBucket[]>("saturation", f, { granularity: g });
   const rows = (data ?? []).map((b) => ({ ...b, label: bucketLabel(b.bucket) }));
+  const saturados = (data ?? []).filter((b) => b.saturado);
+  const pico = (data ?? []).reduce((m, b) => (b.saturacion > m.saturacion ? b : m), { saturacion: 0, bucket: "" } as SatBucket);
+  const media = (data ?? []).length ? Math.round((data!.reduce((s, b) => s + b.saturacion, 0) / data!.length)) : 0;
+  const capacidadLibre = (data ?? []).reduce((s, b) => s + Math.max(0, b.capacidad - b.demanda), 0);
+
   return (
     <Card title="Saturación de la demanda"
       action={
@@ -620,120 +881,240 @@ function SaturacionView({ f }: { f: Filters }) {
         </div>
       }>
       {rows.length === 0 ? empty : (
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={rows} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} unit="%" width={40} />
-            <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }}
-              formatter={(v: number, _n, p) => [`${v}% (${p.payload.demanda}/${p.payload.capacidad})`, "Saturación"]} />
-            <Bar dataKey="saturacion" radius={[4, 4, 0, 0]} maxBarSize={40}>
-              {rows.map((r) => <Cell key={r.bucket} fill={r.saturado ? "#ef4444" : "#3b82f6"} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <Kpi icon={AlertTriangle} label="Días saturados" value={saturados.length} tone={saturados.length > 0 ? "danger" : "plain"} />
+            <Kpi icon={Gauge} label="Saturación pico" value={pico.saturacion} suffix="%" tone={pico.saturacion >= 90 ? "danger" : "plain"} />
+            <Kpi icon={Percent} label="Saturación media" value={media} suffix="%" tone="plain" />
+            <Kpi icon={DoorOpen} label="Capacidad libre" value={capacidadLibre} tone="plain" />
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} unit="%" width={44} />
+              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }}
+                formatter={(v: number, _n, p) => [`${v}% (${p.payload.demanda}/${p.payload.capacidad})`, "Saturación"]} />
+              <ReferenceLine y={90} stroke="#ef4444" strokeDasharray="5 3" label={{ value: "umbral 90%", position: "right", fontSize: 10, fill: "#ef4444" }} />
+              <Bar dataKey="saturacion" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                {rows.map((r) => <Cell key={r.bucket} fill={satColor(r.saturacion)} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+          <p className="text-[11px] text-gray-400 mt-2">
+            Demanda (reservas) frente a capacidad (slots ofertados). <span className="text-amber-600">&lt;50% holgura</span> · <span className="text-blue-600">50–90% ok</span> · <span className="text-red-600">≥90% saturado</span>.
+          </p>
+        </>
       )}
-      <p className="text-[11px] text-gray-400 mt-2">Demanda (reservas) frente a capacidad (slots ofertados). Rojo = ≥ 90% (saturado).</p>
     </Card>
   );
 }
 
 // ── Vista: Médicos ───────────────────────────────────────────────────────────
+const APT_LOW = 80, TIME_HIGH = 22; // umbrales de realce (aptitud baja / tiempo alto)
+
 function MedicosView({ f }: { f: Filters }) {
   const { data } = useReport<DoctorRow[]>("doctors", f);
+  const rows = data ?? [];
+  const maxVis = Math.max(1, ...rows.map((r) => r.visitasAtendidas));
+  // Totales / medias para el pie.
+  const totVis = rows.reduce((s, r) => s + r.visitasAtendidas, 0);
+  const totPac = rows.reduce((s, r) => s + r.pacientesDistintos, 0);
+  const totApto = rows.reduce((s, r) => s + r.apto, 0);
+  const totNoApto = rows.reduce((s, r) => s + r.noApto, 0);
+  const totFuera = rows.reduce((s, r) => s + r.fueraDePlazo, 0);
+  const aptGlobal = totApto + totNoApto > 0 ? Math.round((totApto / (totApto + totNoApto)) * 1000) / 10 : null;
+  const tiempos = rows.map((r) => r.tiempoMedioMin).filter((t): t is number => t != null);
+  const tiempoGlobal = tiempos.length ? Math.round(tiempos.reduce((s, t) => s + t, 0) / tiempos.length) : null;
+
   return (
     <Card title="Rendimiento por médico" action={<CsvButton ep="doctors" f={f} />}>
-      {(data?.length ?? 0) === 0 ? empty : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs text-gray-400 border-b border-gray-100">
-              <th className="py-2 font-medium">Médico</th><th className="py-2 font-medium text-right">Visitas</th>
-              <th className="py-2 font-medium text-right">Pacientes</th><th className="py-2 font-medium text-right">Aptitud</th>
-              <th className="py-2 font-medium text-right">Tiempo medio</th>
-            </tr></thead>
-            <tbody>
-              {data!.map((d) => (
-                <tr key={d.doctorId} className="border-b border-gray-50">
-                  <td className="py-2 flex items-center gap-1.5 text-gray-700"><Stethoscope className="w-3.5 h-3.5 text-gray-400" />{d.doctorName}</td>
-                  <td className="py-2 text-right tabular-nums">{d.visitasAtendidas}</td>
-                  <td className="py-2 text-right tabular-nums">{d.pacientesDistintos}</td>
-                  <td className="py-2 text-right tabular-nums">{d.tasaAptitud == null ? "—" : `${d.tasaAptitud}%`}</td>
-                  <td className="py-2 text-right tabular-nums">{d.tiempoMedioMin == null ? "—" : `${d.tiempoMedioMin} min`}</td>
+      {rows.length === 0 ? empty : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead><tr className="text-xs text-gray-400 border-b border-gray-100">
+                <th className="py-2 font-medium text-left">Médico</th>
+                <th className="py-2 font-medium text-right">Carga (visitas)</th>
+                <th className="py-2 font-medium text-right">Pacientes</th>
+                <th className="py-2 font-medium text-right">Aptitud</th>
+                <th className="py-2 font-medium text-right">Fuera de plazo</th>
+                <th className="py-2 font-medium text-right">Tiempo medio</th>
+              </tr></thead>
+              <tbody>
+                {rows.map((d) => {
+                  const revisadas = d.apto + d.noApto;
+                  const aptLow = d.tasaAptitud != null && d.tasaAptitud < APT_LOW;
+                  const timeHigh = d.tiempoMedioMin != null && d.tiempoMedioMin > TIME_HIGH;
+                  const out = aptLow || timeHigh;
+                  return (
+                    <tr key={d.doctorId} className={`border-b border-gray-50 ${out ? "bg-amber-50/60" : ""}`}>
+                      <td className="py-2 pr-2">
+                        <span className="inline-flex items-center gap-2"><Avatar name={d.doctorName} muted={d.visitasAtendidas === 0} /><span className="text-gray-800">{d.doctorName}</span></span>
+                      </td>
+                      <td className="py-2 px-2">
+                        <span className="flex items-center gap-2 justify-end">
+                          <span className="w-20 h-2 bg-gray-100 rounded-full overflow-hidden"><span className="block h-full rounded-full bg-blue-500" style={{ width: `${(d.visitasAtendidas / maxVis) * 100}%` }} /></span>
+                          <span className="w-6 text-right tabular-nums text-gray-800">{d.visitasAtendidas}</span>
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-600">{d.pacientesDistintos}</td>
+                      <td className="py-2 px-2 text-right tabular-nums">
+                        {d.tasaAptitud == null ? <span className="text-gray-300">—</span> : (
+                          <><span className={aptLow ? "text-red-600 font-semibold" : "text-emerald-600"}>{d.tasaAptitud}%</span>
+                          {revisadas > 0 && <span className="text-[11px] text-gray-400 ml-1">· {d.noApto} no apto{d.noApto !== 1 ? "s" : ""}</span>}</>
+                        )}
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums">
+                        {d.fueraDePlazo > 0
+                          ? <span className="inline-block bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 text-xs font-medium">{d.fueraDePlazo}</span>
+                          : <span className="text-gray-300">0</span>}
+                      </td>
+                      <td className={`py-2 pl-2 text-right tabular-nums ${timeHigh ? "text-amber-600 font-medium" : "text-gray-600"}`}>{d.tiempoMedioMin == null ? <span className="text-gray-300">—</span> : `${d.tiempoMedioMin} min`}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-200 font-semibold text-gray-800">
+                  <td className="py-2 pr-2 text-gray-500 font-medium">Total · {rows.length} médico{rows.length !== 1 ? "s" : ""}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{totVis}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{totPac}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{aptGlobal == null ? "—" : <>{aptGlobal}% <span className="text-[11px] text-gray-400 font-normal">medio</span></>}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{totFuera}</td>
+                  <td className="py-2 pl-2 text-right tabular-nums">{tiempoGlobal == null ? "—" : <>{tiempoGlobal} min <span className="text-[11px] text-gray-400 font-normal">medio</span></>}</td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </tfoot>
+            </table>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-3">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-300 align-middle mr-1" /> Fila resaltada = requiere atención · umbrales: aptitud &lt; {APT_LOW}% · tiempo medio &gt; {TIME_HIGH} min. Ordenado por carga.
+          </p>
+        </>
       )}
     </Card>
   );
 }
 
 // ── Vista: Comparativa (con drill-down por centro) ───────────────────────────
+// Badge de tasa con mini-barra y color por umbral. `kind` decide la semántica:
+// conversión (más=mejor) vs ocupación (≥90 = saturado en rojo, <50 = infrautilizado).
+function RateBar({ v, kind }: { v: number; kind: "conv" | "occ" }) {
+  const c = kind === "conv"
+    ? (v >= 70 ? { bar: "bg-emerald-500", text: "text-emerald-700" } : v >= 40 ? { bar: "bg-amber-400", text: "text-amber-700" } : { bar: "bg-red-500", text: "text-red-600" })
+    : (v >= 90 ? { bar: "bg-red-500", text: "text-red-600" } : v >= 50 ? { bar: "bg-blue-500", text: "text-blue-700" } : { bar: "bg-amber-400", text: "text-amber-700" });
+  return (
+    <span className="flex items-center gap-2 justify-end">
+      <span className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden"><span className={`block h-full rounded-full ${c.bar}`} style={{ width: `${Math.min(100, v)}%` }} /></span>
+      <span className={`w-9 text-right tabular-nums font-medium ${c.text}`}>{v}%</span>
+    </span>
+  );
+}
+
 function ComparativaView({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id: string) => void }) {
   const { data } = useReport<Comparison>("comparison", f);
-  const table = (rows: CompRow[], drill?: boolean) => (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead><tr className="text-left text-xs text-gray-400 border-b border-gray-100">
-          <th className="py-2 font-medium">Nombre</th><th className="py-2 font-medium text-right">Reservas</th>
-          <th className="py-2 font-medium text-right">Atendidas</th><th className="py-2 font-medium text-right">Conversión</th>
-          <th className="py-2 font-medium text-right">Ocupación</th>{drill && <th />}
-        </tr></thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className={`border-b border-gray-50 ${drill ? "cursor-pointer hover:bg-blue-50/50" : ""}`} onClick={drill ? () => onDrillCenter(r.id) : undefined}>
-              <td className="py-2 text-gray-700">{r.name}{r.centerName ? <span className="text-[10px] text-gray-400 ml-1.5">· {r.centerName}</span> : null}</td>
-              <td className="py-2 text-right tabular-nums">{r.reservas}</td>
-              <td className="py-2 text-right tabular-nums">{r.atendidas}</td>
-              <td className="py-2 text-right tabular-nums">{r.conversion}%</td>
-              <td className="py-2 text-right tabular-nums">{r.ocupacion}%</td>
-              {drill && <td className="py-2 text-right"><ChevronRight className="w-4 h-4 text-gray-300 inline" /></td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  const table = (rows: CompRow[], Icon: typeof Building2, drill?: boolean) => {
+    const maxRes = Math.max(1, ...rows.map((r) => r.reservas));
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
+          <thead><tr className="text-xs text-gray-400 border-b border-gray-100">
+            <th className="py-2 font-medium text-left">Nombre</th><th className="py-2 font-medium text-right">Reservas</th>
+            <th className="py-2 font-medium text-right">Atendidas</th><th className="py-2 font-medium text-right">Conversión</th>
+            <th className="py-2 font-medium text-right">Ocupación</th>{drill && <th />}
+          </tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className={`border-b border-gray-50 ${drill ? "cursor-pointer hover:bg-blue-50/60" : ""}`} onClick={drill ? () => onDrillCenter(r.id) : undefined}>
+                <td className="py-2 pr-2">
+                  <span className="inline-flex items-center gap-2 text-gray-800"><Icon className="w-4 h-4 text-gray-400 shrink-0" />{r.name}{r.centerName ? <span className="text-[10px] text-gray-400">· {r.centerName}</span> : null}</span>
+                </td>
+                <td className="py-2 px-2">
+                  <span className="flex items-center gap-2 justify-end">
+                    <span className="w-12 h-1.5 bg-gray-100 rounded-full overflow-hidden"><span className="block h-full rounded-full bg-gray-300" style={{ width: `${(r.reservas / maxRes) * 100}%` }} /></span>
+                    <span className="w-8 text-right tabular-nums text-gray-700">{r.reservas}</span>
+                  </span>
+                </td>
+                <td className="py-2 px-2 text-right tabular-nums text-gray-600">{r.atendidas}</td>
+                <td className="py-2 px-2"><RateBar v={r.conversion} kind="conv" /></td>
+                <td className="py-2 px-2"><RateBar v={r.ocupacion} kind="occ" /></td>
+                {drill && <td className="py-2 pl-1 text-right"><ChevronRight className="w-4 h-4 text-gray-300 inline" /></td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
   return (
     <div className="space-y-4">
       <Card title="Comparativa entre centros" action={<CsvButton ep="comparison" f={f} />}>
-        {(data?.porCentro.length ?? 0) === 0 ? empty : table(data!.porCentro, true)}
+        {(data?.porCentro.length ?? 0) === 0 ? empty : (
+          <>
+            {table(data!.porCentro, Building2, true)}
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5">
+              <MousePointerClick className="w-3.5 h-3.5 shrink-0" /> Clic en un centro para verlo en detalle
+            </div>
+          </>
+        )}
       </Card>
       <Card title="Comparativa entre salas">
-        {(data?.porSala.length ?? 0) === 0 ? empty : table(data!.porSala)}
+        {(data?.porSala.length ?? 0) === 0 ? empty : table(data!.porSala, DoorOpen)}
       </Card>
+      <p className="text-[11px] text-gray-400 -mt-1">
+        Conversión: <span className="text-emerald-600">≥70% bien</span> · <span className="text-amber-600">40–70% flojo</span> · <span className="text-red-600">&lt;40% malo</span>.
+        Ocupación: <span className="text-amber-600">&lt;50% infrautilizado</span> · <span className="text-blue-600">50–90% ok</span> · <span className="text-red-600">≥90% saturado</span>.
+      </p>
     </div>
   );
 }
 
 // ── Vista: Volumen ───────────────────────────────────────────────────────────
 function VolumenView({ f }: { f: Filters }) {
-  const [g, setG] = useState("month");
+  const [g, setG] = useState("week");
   const { data } = useReport<VolBucket[]>("volume", f, { granularity: g });
-  const rows = (data ?? []).map((b) => ({ ...b, label: bucketLabel(b.bucket) }));
+  const prev = prevPeriod(f);
+  const { data: dataPrev } = useReport<VolBucket[]>("volume", { ...f, from: prev.from, to: prev.to }, { granularity: g });
+
+  // "gap" = demanda no realizada (reservas − visitas) para el área apilada.
+  const rows = (data ?? []).map((b) => ({ ...b, label: bucketLabel(b.bucket), gap: Math.max(0, b.reservas - b.visitas) }));
+  const sum = (arr: VolBucket[] | undefined, key: "reservas" | "visitas") => (arr ?? []).reduce((s, b) => s + b[key], 0);
+  const resCur = sum(data, "reservas"), visCur = sum(data, "visitas");
+  const resPre = sum(dataPrev, "reservas"), visPre = sum(dataPrev, "visitas");
+  const realCur = resCur > 0 ? Math.round((visCur / resCur) * 1000) / 10 : 0;
+  const realPre = resPre > 0 ? Math.round((visPre / resPre) * 1000) / 10 : 0;
+
   return (
     <Card title="Volumen de reservas y visitas"
       action={
         <div className="flex items-center gap-2">
           <select value={g} onChange={(e) => setG(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white">
-            <option value="month">Mes</option><option value="year">Año</option>
+            <option value="week">Semana</option><option value="month">Mes</option><option value="year">Año</option>
           </select>
           <CsvButton ep="volume" f={f} extra={{ granularity: g }} />
         </div>
       }>
       {rows.length === 0 ? empty : (
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={rows} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} allowDecimals={false} width={32} />
-            <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line type="monotone" dataKey="reservas" name="Reservas" stroke="#3b82f6" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="visitas" name="Visitas" stroke="#10b981" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+        <>
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <Kpi icon={Calendar} label="Reservas" value={resCur} delta={dataPrev ? resCur - resPre : null} goodWhenUp tone="accent" />
+            <Kpi icon={CheckCircle} label="Visitas" value={visCur} delta={dataPrev ? visCur - visPre : null} goodWhenUp tone="success" />
+            <Kpi icon={Percent} label="Realización" value={realCur} suffix="%" delta={dataPrev ? realCur - realPre : null} goodWhenUp tone="plain" />
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} allowDecimals={false} width={32} />
+              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Area type="monotone" dataKey="visitas" name="Visitas" stackId="v" stroke="#10b981" strokeWidth={2} fill="#10b981" fillOpacity={0.18} />
+              <Area type="monotone" dataKey="gap" name="No realizada" stackId="v" stroke="none" fill="#f59e0b" fillOpacity={0.18} />
+              <Line type="monotone" dataKey="reservas" name="Reservas" stroke="#3b82f6" strokeWidth={2} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <p className="text-[11px] text-gray-400 mt-2">Área verde = visitas realizadas · banda ámbar = demanda no realizada (reservas − visitas). Realización = visitas / reservas del periodo.</p>
+        </>
       )}
     </Card>
   );
@@ -824,10 +1205,21 @@ function ResumenCaptacion({ f, onGoTo }: { f: Filters; onGoTo: (view: string) =>
 function AltasView({ f }: { f: Filters }) {
   const [g, setG] = useState("month");
   const acq = useReport<AcquisitionResult>("acquisition", f, { granularity: g });
+  const prev = prevPeriod(f);
+  const acqPrev = useReport<AcquisitionResult>("acquisition", { ...f, from: prev.from, to: prev.to }, { granularity: g });
   const series = acq.data?.series ?? [];
   const channels = [...new Set(series.flatMap((b) => Object.keys(b.canales)))];
   const chartData = series.map((b) => ({ label: bucketLabel(b.bucket), ...b.canales }));
   const nvr = acq.data?.nuevosVsRecurrentes;
+
+  const altas = series.reduce((s, b) => s + b.total, 0);
+  const altasPrev = (acqPrev.data?.series ?? []).reduce((s, b) => s + b.total, 0);
+  const pctNuevos = nvr && nvr.nuevos + nvr.recurrentes > 0 ? Math.round((nvr.nuevos / (nvr.nuevos + nvr.recurrentes)) * 100) : null;
+  // Ranking por canal (suma de altas por canal en todo el periodo).
+  const byChannel = channels.map((c) => ({ c, n: series.reduce((s, b) => s + (b.canales[c] ?? 0), 0) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  const maxCh = Math.max(1, ...byChannel.map((x) => x.n));
+  const topCh = byChannel[0];
+
   return (
     <Card title="Altas de clientes por periodo y canal"
       action={
@@ -838,19 +1230,40 @@ function AltasView({ f }: { f: Filters }) {
           <CsvButton ep="acquisition" f={f} extra={{ granularity: g }} />
         </div>
       }>
-      {nvr && (
-        <div className="flex gap-3 mb-4">
-          <div className="rounded-xl border bg-emerald-50 border-emerald-100 text-emerald-700 px-4 py-2 flex-1">
-            <p className="text-xs font-medium">Clientes nuevos</p><p className="text-2xl font-bold">{nvr.nuevos}</p>
-          </div>
-          <div className="rounded-xl border bg-blue-50 border-blue-100 text-blue-700 px-4 py-2 flex-1">
-            <p className="text-xs font-medium">Recurrentes</p><p className="text-2xl font-bold">{nvr.recurrentes}</p>
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <Kpi icon={UserPlus} label="Altas del periodo" value={altas} delta={acqPrev.data ? altas - altasPrev : null} goodWhenUp tone="success" />
+        <Kpi icon={Users} label="Clientes nuevos" value={pctNuevos ?? "—"} suffix={pctNuevos != null ? "%" : ""} note={nvr ? `${nvr.nuevos} de ${nvr.nuevos + nvr.recurrentes}` : ""} tone="accent" />
+        <Kpi icon={Send} label="Canal top" value={topCh ? (CHANNEL_META[topCh.c]?.label ?? topCh.c) : "—"} note={topCh ? `${topCh.n} altas` : ""} tone="plain" />
+      </div>
+
+      {nvr && (nvr.nuevos + nvr.recurrentes) > 0 && (
+        <div className="mb-4">
+          <p className="text-xs text-gray-500 mb-1">Nuevos vs recurrentes</p>
+          <div className="flex h-6 rounded-lg overflow-hidden text-[11px] text-white font-medium">
+            <div className="bg-emerald-500 flex items-center px-2" style={{ width: `${(nvr.nuevos / (nvr.nuevos + nvr.recurrentes)) * 100}%` }}>{nvr.nuevos > 0 && `Nuevos ${nvr.nuevos}`}</div>
+            <div className="bg-blue-500 flex items-center px-2" style={{ width: `${(nvr.recurrentes / (nvr.nuevos + nvr.recurrentes)) * 100}%` }}>{nvr.recurrentes > 0 && nvr.recurrentes}</div>
           </div>
         </div>
       )}
+
+      {byChannel.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs text-gray-500 mb-1.5">Reparto por canal</p>
+          <div className="space-y-1.5">
+            {byChannel.map(({ c, n }) => (
+              <div key={c} className="flex items-center gap-2 text-sm">
+                <span className="w-28 shrink-0 text-gray-600 truncate">{CHANNEL_META[c]?.label ?? c}</span>
+                <span className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><span className="block h-full rounded-full" style={{ width: `${(n / maxCh) * 100}%`, background: CHANNEL_META[c]?.color ?? "#cbd5e1" }} /></span>
+                <span className="w-8 text-right tabular-nums text-gray-700">{n}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {series.length === 0 ? empty : (
         <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+          <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} allowDecimals={false} width={28} />
@@ -870,6 +1283,19 @@ function AltasView({ f }: { f: Filters }) {
 function CampanasView({ f }: { f: Filters }) {
   const [win, setWin] = useState("30");
   const eff = useReport<CampaignEffRow[]>("campaign-effectiveness", f, { attributionWindowDays: win });
+
+  // Efectividad por canal: agrega las campañas por su canal (conversión del canal).
+  const byChannel = (() => {
+    const m = new Map<string, { enviados: number; convertidos: number }>();
+    for (const c of eff.data ?? []) {
+      const a = m.get(c.channel) ?? { enviados: 0, convertidos: 0 };
+      a.enviados += c.enviados; a.convertidos += c.convertidos; m.set(c.channel, a);
+    }
+    return [...m.entries()].map(([ch, a]) => ({ ch, ...a, tasa: a.enviados > 0 ? Math.round((a.convertidos / a.enviados) * 1000) / 10 : 0 }))
+      .sort((x, y) => y.tasa - x.tasa);
+  })();
+  const maxTasa = Math.max(1, ...byChannel.map((x) => x.tasa));
+
   return (
     <Card title="Efectividad de campañas"
       action={
@@ -883,30 +1309,85 @@ function CampanasView({ f }: { f: Filters }) {
           <CsvButton ep="campaign-effectiveness" f={f} extra={{ attributionWindowDays: win }} />
         </div>
       }>
-      {(eff.data?.length ?? 0) === 0 ? empty : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs text-gray-400 border-b border-gray-100">
-              <th className="py-2 font-medium">Campaña</th><th className="py-2 font-medium text-right">Enviados</th>
-              <th className="py-2 font-medium text-right">Convertidos</th><th className="py-2 font-medium text-right">Tasa</th>
-              <th className="py-2 font-medium text-right">Reservas atrib.</th><th className="py-2 font-medium text-right">Visitas atrib.</th>
-            </tr></thead>
-            <tbody>
-              {eff.data!.map((c) => (
-                <tr key={c.campaignId} className="border-b border-gray-50">
-                  <td className="py-2 text-gray-700">{c.name}</td>
-                  <td className="py-2 text-right tabular-nums">{c.enviados}</td>
-                  <td className="py-2 text-right tabular-nums">{c.convertidos}</td>
-                  <td className="py-2 text-right tabular-nums font-medium">{c.tasaConversion}%</td>
-                  <td className="py-2 text-right tabular-nums">{c.reservasAtribuidas}</td>
-                  <td className="py-2 text-right tabular-nums">{c.visitasAtribuidas}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {byChannel.length >= 2 && (
+        <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50/50 p-3">
+          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Efectividad por canal · qué canal convierte mejor</p>
+          <div className="space-y-1.5">
+            {byChannel.map(({ ch, enviados, convertidos, tasa }) => {
+              const meta = CAMPAIGN_CH[ch];
+              const Icon = meta?.icon ?? Send;
+              const txt = tasa >= 8 ? "text-emerald-600" : tasa >= 4 ? "text-amber-600" : "text-red-600";
+              const bar = tasa >= 8 ? "bg-emerald-500" : tasa >= 4 ? "bg-amber-400" : "bg-red-500";
+              return (
+                <div key={ch} className="flex items-center gap-2 text-sm">
+                  <span className="w-24 shrink-0 inline-flex items-center gap-1.5 text-gray-600"><Icon className={`w-3.5 h-3.5 shrink-0 ${meta?.color ?? "text-gray-400"}`} />{meta?.label ?? ch}</span>
+                  <span className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><span className={`block h-full rounded-full ${bar}`} style={{ width: `${(tasa / maxTasa) * 100}%` }} /></span>
+                  <span className={`w-10 text-right tabular-nums font-medium ${txt}`}>{tasa}%</span>
+                  <span className="w-24 text-right text-[11px] text-gray-400 tabular-nums shrink-0">{convertidos}/{enviados} envíos</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
-      <p className="text-[11px] text-gray-400 mt-2">Atribución heurística: un envío cuenta como convertido si el cliente reservó dentro de la ventana (last-touch).</p>
+      {(() => {
+        const rows = eff.data ?? [];
+        if (rows.length === 0) return empty;
+        const maxConv = Math.max(1, ...rows.map((c) => c.convertidos));
+        const tEnv = rows.reduce((s, c) => s + c.enviados, 0);
+        const tConv = rows.reduce((s, c) => s + c.convertidos, 0);
+        const tRes = rows.reduce((s, c) => s + c.reservasAtribuidas, 0);
+        const tVis = rows.reduce((s, c) => s + c.visitasAtribuidas, 0);
+        const tTasa = tEnv > 0 ? Math.round((tConv / tEnv) * 1000) / 10 : 0;
+        const tasaCol = (v: number) => v >= 8 ? "text-emerald-600" : v >= 4 ? "text-amber-600" : "text-red-600";
+        return (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead><tr className="text-xs text-gray-400 border-b border-gray-100">
+                <th className="py-2 font-medium text-left">Campaña</th><th className="py-2 font-medium text-right">Enviados</th>
+                <th className="py-2 font-medium text-right">Convertidos</th><th className="py-2 font-medium text-right">Tasa</th>
+                <th className="py-2 font-medium text-right">Reservas</th><th className="py-2 font-medium text-right">Visitas</th>
+              </tr></thead>
+              <tbody>
+                {rows.map((c, i) => {
+                  const ch = CAMPAIGN_CH[c.channel];
+                  const Icon = ch?.icon ?? Send;
+                  const best = i === 0 && c.convertidos > 0;
+                  return (
+                    <tr key={c.campaignId} className={`border-b border-gray-50 ${best ? "bg-emerald-50/60" : ""}`}>
+                      <td className="py-2 pr-2">
+                        <span className="inline-flex items-center gap-2 text-gray-800"><Icon className={`w-4 h-4 shrink-0 ${ch?.color ?? "text-gray-400"}`} />{c.name}
+                          {best && <span className="text-[10px] bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5">Mejor</span>}</span>
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-600">{c.enviados}</td>
+                      <td className="py-2 px-2">
+                        <span className="flex items-center gap-2 justify-end">
+                          <span className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden"><span className="block h-full rounded-full bg-emerald-500" style={{ width: `${(c.convertidos / maxConv) * 100}%` }} /></span>
+                          <span className="w-6 text-right tabular-nums text-gray-800">{c.convertidos}</span>
+                        </span>
+                      </td>
+                      <td className={`py-2 px-2 text-right tabular-nums font-medium ${tasaCol(c.tasaConversion)}`}>{c.tasaConversion}%</td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-600">{c.reservasAtribuidas}</td>
+                      <td className="py-2 pl-2 text-right tabular-nums text-gray-600">{c.visitasAtribuidas}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot><tr className="border-t-2 border-gray-200 font-semibold text-gray-800">
+                <td className="py-2 pr-2 text-gray-500 font-medium">Total · {rows.length} campaña{rows.length !== 1 ? "s" : ""}</td>
+                <td className="py-2 px-2 text-right tabular-nums">{tEnv}</td>
+                <td className="py-2 px-2 text-right tabular-nums">{tConv}</td>
+                <td className={`py-2 px-2 text-right tabular-nums ${tasaCol(tTasa)}`}>{tTasa}% <span className="text-[11px] text-gray-400 font-normal">media</span></td>
+                <td className="py-2 px-2 text-right tabular-nums">{tRes}</td>
+                <td className="py-2 pl-2 text-right tabular-nums">{tVis}</td>
+              </tr></tfoot>
+            </table>
+          </div>
+        );
+      })()}
+      <p className="text-[11px] text-gray-400 mt-3">
+        <span className="text-emerald-600">≥8% buena</span> · <span className="text-amber-600">4–8% floja</span> · <span className="text-red-600">&lt;4% mala</span>. Ordenado por convertidos. Atribución heurística: un envío convierte si el cliente reservó dentro de la ventana (last-touch).
+      </p>
     </Card>
   );
 }
