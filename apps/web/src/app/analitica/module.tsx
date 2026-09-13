@@ -406,8 +406,10 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
         )}
       </div>
 
-      {/* Pestañas de vista */}
-      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+      {/* Pestañas de vista. overflow-y-hidden evita la barra de scroll vertical
+          fantasma que Windows dibuja (overflow-x:auto fuerza overflow-y:auto y las
+          pestañas sobresalen ~1px por el subrayado). */}
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto overflow-y-hidden">
         {views.map((v) => (
           <button key={v.id} onClick={() => setView(v.id)}
             className={`px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors ${view === v.id ? "border-blue-600 text-blue-700 font-medium" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
