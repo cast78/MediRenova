@@ -22,6 +22,8 @@ interface Funnel {
   reservas: number; confirmadas: number; atendidas: number; visitasCompletadas: number;
   fugas: { canceladasCliente: number; canceladasCentro: number; canceladasOtras: number; reprogramadas: number; noShow: number; seFue: number };
   ruido: number; tasas: { confirmacion: number; atencion: number; noShow: number; cancelacion: number };
+  // Episodios sin cerrar: aislados de las tasas clínicas pero visibles.
+  sinResolver?: number; completadasFueraDePlazo?: number;
 }
 interface OccRow { roomId: string; roomName: string; centerId: string; centerName: string; disponibles: number; usados: number; ocupacion: number }
 interface Occupancy { salas: OccRow[]; total: { disponibles: number; usados: number; ocupacion: number } }
@@ -478,17 +480,51 @@ function FunnelBars({ f }: { f: Funnel }) {
     { label: "Visitas completadas", value: f.visitasCompletadas, color: "#2563eb" },
   ];
   const max = Math.max(1, f.reservas);
+
+  // Desglose del primer salto (Reservas→Confirmadas): las fugas terminales que
+  // explican la caída. El resto se etiqueta como "pendientes" — honestidad: parte
+  // del hueco son citas aún sin resolver, no fugas. Los saltos siguientes solo
+  // muestran el Δ (su atribución no es limpia: "se fue" reparte según el estado
+  // previo de la cita, y "visitas completadas" es a nivel de visita).
+  const canceladas = f.fugas.canceladasCliente + f.fugas.canceladasCentro + f.fugas.canceladasOtras;
+  function gapReasons(i: number, delta: number): string | null {
+    if (i !== 0) return null;
+    const parts: string[] = [];
+    if (f.fugas.noShow > 0) parts.push(`no-show ${f.fugas.noShow}`);
+    if (canceladas > 0) parts.push(`canceladas ${canceladas}`);
+    if (f.fugas.reprogramadas > 0) parts.push(`reprog. ${f.fugas.reprogramadas}`);
+    const pend = delta - (f.fugas.noShow + canceladas + f.fugas.reprogramadas);
+    if (pend > 0) parts.push(`pendientes ${pend}`);
+    return parts.length ? parts.join(" · ") : null;
+  }
+
   return (
-    <div className="space-y-2">
-      {stages.map((s) => (
-        <div key={s.label} className="flex items-center gap-2 text-sm">
-          <span className="w-36 text-gray-600">{s.label}</span>
-          <span className="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
-            <span className="block h-full rounded" style={{ width: `${(s.value / max) * 100}%`, backgroundColor: s.color }} />
-          </span>
-          <span className="w-10 text-right tabular-nums font-medium text-gray-800">{s.value}</span>
-        </div>
-      ))}
+    <div className="space-y-1">
+      {stages.map((s, i) => {
+        const next = stages[i + 1];
+        const delta = next ? s.value - next.value : 0;
+        const reasons = next && delta > 0 ? gapReasons(i, delta) : null;
+        return (
+          <div key={s.label}>
+            <div className="flex items-center gap-2 text-sm py-0.5">
+              <span className="w-36 text-gray-600">{s.label}</span>
+              <span className="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
+                <span className="block h-full rounded" style={{ width: `${(s.value / max) * 100}%`, backgroundColor: s.color }} />
+              </span>
+              <span className="w-10 text-right tabular-nums font-medium text-gray-800">{s.value}</span>
+            </div>
+            {next && delta > 0 && (
+              <div className="flex items-center gap-2 text-[11px] text-gray-400 pl-36 py-0.5">
+                <span className="inline-flex items-center gap-0.5 text-red-400 font-medium tabular-nums">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M19 12l-7 7-7-7" /></svg>
+                  {delta}
+                </span>
+                {reasons && <span className="truncate">{reasons}</span>}
+              </div>
+            )}
+          </div>
+        );
+      })}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 pt-2 border-t border-gray-100">
         <span>Confirmación <b className="text-gray-700">{f.tasas.confirmacion}%</b></span>
         <span>Atención <b className="text-gray-700">{f.tasas.atencion}%</b></span>
@@ -524,6 +560,19 @@ function EmbudoView({ f }: { f: Filters }) {
               </div>
             ))}
             {data.ruido > 0 && <p className="text-[11px] text-gray-400 pt-1">Excluidas de las tasas: {data.ruido} canceladas por duplicado/error (ruido).</p>}
+            {((data.sinResolver ?? 0) > 0 || (data.completadasFueraDePlazo ?? 0) > 0) && (
+              <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Episodios sin cerrar · aislados de las tasas</p>
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-gray-600">Sin resolver <span className="text-[10px] text-gray-400 ml-1.5">· cierre administrativo</span></span>
+                  <span className="font-medium tabular-nums text-gray-800">{data.sinResolver ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-gray-600">Completadas fuera de plazo <span className="text-[10px] text-gray-400 ml-1.5">· revisión tardía</span></span>
+                  <span className="font-medium tabular-nums text-gray-800">{data.completadasFueraDePlazo ?? 0}</span>
+                </div>
+              </div>
+            )}
           </div>
         ) : empty}
       </Card>

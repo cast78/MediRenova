@@ -7,10 +7,11 @@ export interface TimelineEvent { at: string; kind: string; title: string; detail
 export interface ApptForTimeline {
   id: string;
   scheduledAt: Date; status: string; source: string | null; cancelReason: string | null; createdAt: Date; updatedAt: Date;
+  adminClosedAt?: Date | null; adminClosureNote?: string | null;
   product: { name: string } | null;
   room: { name: string } | null; // sala reservada
   visit: { arrivedAt: Date; calledAt: Date | null; startedAt: Date | null; status: string; updatedAt: Date; currentRoom: { name: string } | null } | null;
-  revision: { outcome: string; completedAt: Date | null; expiryDate: Date | null; startedAt: Date | null } | null;
+  revision: { outcome: string; completedAt: Date | null; expiryDate: Date | null; startedAt: Date | null; closedLate?: boolean } | null;
 }
 export interface CustEv { type: string; channel: string | null; detail: string | null; createdAt: Date; appointmentId?: string | null }
 
@@ -64,10 +65,13 @@ export function appointmentEvents(a: ApptForTimeline, custEvents: CustEv[]): Tim
     ev.push({ at: iso(a.visit.calledAt), kind: "en_sala", title: "Pasó a sala", detail, tone: "arrive" });
   }
   if (a.visit?.status === "LEFT") ev.push({ at: iso(a.visit.updatedAt), kind: "se_fue", title: "Se fue del centro", detail: "Sin ser atendido", tone: "negative" });
+  // Cierre administrativo (CLOSED_ADMIN): episodio irrecuperable cerrado por un admin.
+  if (a.status === "CLOSED_ADMIN") ev.push({ at: iso(a.adminClosedAt ?? a.updatedAt), kind: "cierre_admin", title: "Cierre administrativo", detail: a.adminClosureNote ?? "Episodio cerrado sin desenlace clínico", tone: "negative" });
   if (a.revision?.startedAt && !a.revision.completedAt) ev.push({ at: iso(a.revision.startedAt), kind: "revision_ini", title: "Revisión iniciada", detail: prod, tone: "clinic" });
   if (a.revision?.completedAt) {
     const out = a.revision.outcome === "APTO" ? "Apto" : a.revision.outcome === "NO_APTO" ? "No apto" : "";
-    ev.push({ at: iso(a.revision.completedAt), kind: "revision", title: `Revisión completada · ${out}`, detail: `${prod}${a.revision.expiryDate ? ` · caduca ${a.revision.expiryDate.toISOString().slice(0, 10)}` : ""}`, tone: "clinic" });
+    const late = a.revision.closedLate ? " · fuera de plazo" : "";
+    ev.push({ at: iso(a.revision.completedAt), kind: "revision", title: `Revisión completada · ${out}${late}`, detail: `${prod}${a.revision.expiryDate ? ` · caduca ${a.revision.expiryDate.toISOString().slice(0, 10)}` : ""}`, tone: "clinic" });
   }
   ev.push(...mapCustomerEvents(custEvents));
   return ev;

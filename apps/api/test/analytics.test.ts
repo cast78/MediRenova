@@ -47,6 +47,18 @@ describe("funnelFrom — embudo + fugas (tarea 4.1)", () => {
     expect(z.reservas).toBe(0);
     expect(z.tasas).toEqual({ confirmacion: 0, atencion: 0, noShow: 0, cancelacion: 0 });
   });
+  it("aísla los cierres administrativos: fuera de reservas y en su métrica propia", () => {
+    const r2 = funnelFrom([sc("CONFIRMED", 8), sc("ATTENDED", 6), sc("NO_SHOW", 2), sc("CLOSED_ADMIN", 4)], [], 6, 0);
+    // reservas = 20 total − 0 ruido − 4 cierres administrativos = 16
+    expect(r2.reservas).toBe(16);
+    expect(r2.sinResolver).toBe(4);
+    // la tasa de no-show usa el denominador limpio (2/16), no infla con los 4
+    expect(r2.tasas.noShow).toBe(12.5);
+  });
+  it("reporta las revisiones completadas fuera de plazo", () => {
+    expect(funnelFrom([sc("ATTENDED", 5)], [], 5, 0, 3).completadasFueraDePlazo).toBe(3);
+    expect(r.completadasFueraDePlazo).toBe(0); // por defecto
+  });
 });
 
 describe("offeredSlots / occupancyFrom — ocupación (tarea 4.2)", () => {

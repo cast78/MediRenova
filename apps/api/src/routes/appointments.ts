@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireRole } from "../lib/authorization.js";
+import { requireRole, requireAnyRole, ROLES_STAFF } from "../lib/authorization.js";
 import { auditLog } from "../lib/audit.js";
 import { markWorkflowConverted } from "../lib/workflow-cron.js";
 import { markCampaignConverted } from "../lib/campaign-attribution.js";
@@ -10,6 +10,7 @@ import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/ava
 import { roomHasOverlap, enforceSingleBooking, bookingLabel, findBlockingBooking } from "../lib/booking.js";
 import { signConfirmationToken } from "../lib/jwt.js";
 import { appointmentEvents } from "../lib/appointment-timeline.js";
+import { classifyStuckEpisode, episodeAgeDays, STUCK_LABELS } from "../lib/episodes.js";
 
 const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
 
@@ -193,9 +194,12 @@ export async function appointmentRoutes(server: FastifyInstance) {
       return reply.send({ data: appointments, meta: { page: query.page, limit: query.limit, total, pages: Math.ceil(total / query.limit) }, errors: null });
     });
 
-  // GET /appointments/unclosed — citas "sin cerrar": de días pasados y aún en
-  // PENDING/CONFIRMED (nadie las cerró como atendida/no-show/cancelada). Worklist
-  // de higiene para recepción; sin ellas, el KPI de no-show queda infravalorado.
+  // GET /appointments/unclosed — citas "sin cerrar": de días pasados, en
+  // PENDING/CONFIRMED y SIN visita (el paciente no llegó). Worklist de higiene de
+  // reservas para recepción: candidatas a no-show/cancelar. Las citas CON visita
+  // (el paciente llegó pero no se cerró) NO salen aquí; viven en
+  // GET /appointments/unclosed-episodes. Sin esta worklist, el KPI de no-show
+  // queda infravalorado.
   server.get("/appointments/unclosed", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const q = z.object({
@@ -214,6 +218,9 @@ export async function appointmentRoutes(server: FastifyInstance) {
         tenantId: request.ctx.tenantId,
         status: { in: ["PENDING", "CONFIRMED"] },
         scheduledAt: { lt: todayStart },
+        // Solo citas SIN visita: si el paciente llegó (hay visita), es un episodio
+        // sin cerrar, no una reserva pendiente de resolver.
+        visit: { is: null },
       };
       if (request.ctx.centerId) where["room"] = { centerId: request.ctx.centerId };
 
@@ -234,6 +241,162 @@ export async function appointmentRoutes(server: FastifyInstance) {
         prisma.appointment.count({ where }),
       ]);
       return reply.send({ data: appointments, meta: { page, limit, total, pages: Math.ceil(total / limit) }, errors: null });
+    });
+
+  // GET /appointments/unclosed-episodes — episodios "sin cerrar": citas de días
+  // pasados CON visita cuyo episodio no alcanzó desenlace (el paciente llegó pero
+  // nadie cerró la visita/revisión). Visible para todo el personal (recepción,
+  // médico y admin), que son quienes pueden cerrarlos. Cada fila trae su estado
+  // atascado, el médico responsable y la antigüedad en días.
+  server.get("/appointments/unclosed-episodes", { preHandler: [requireAnyRole(ROLES_STAFF)] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const config = await prisma.tenantConfig.findUnique({ where: { tenantId: request.ctx.tenantId }, select: { timezone: true } });
+      const nowNaive = nowInTimezone(config?.timezone ?? "Europe/Madrid");
+      const todayStart = new Date(`${nowNaive.date}T00:00:00.000Z`);
+      // Referencia "hoy" (día natural en Z) para calcular la antigüedad en días.
+      const nowRef = todayStart;
+
+      const where: Record<string, unknown> = {
+        tenantId: request.ctx.tenantId,
+        scheduledAt: { lt: todayStart },
+        // Candidatas: tienen visita no terminal, o una revisión sin completar.
+        // La clasificación fina (y el descarte de resueltas) se hace en memoria con
+        // el núcleo puro classifyStuckEpisode. El volumen esperado es muy bajo.
+        OR: [
+          { visit: { is: { status: { in: ["WAITING", "IN_PROGRESS"] } } } },
+          { visit: { isNot: null }, revision: { is: { completedAt: null } } },
+        ],
+      };
+      if (request.ctx.centerId) where["room"] = { centerId: request.ctx.centerId };
+
+      const candidates = await prisma.appointment.findMany({
+        where,
+        take: 200,
+        include: {
+          customer: { select: { id: true, firstName: true, lastName: true, phone: true } },
+          product: { select: { id: true, name: true } },
+          room: { include: { center: { select: { id: true, name: true } } } },
+          doctor: { select: { id: true, firstName: true, lastName: true } },
+          visit: { select: { id: true, status: true, centerId: true, arrivedAt: true, startedAt: true, completedAt: true } },
+          revision: { select: { id: true, outcome: true, completedAt: true, doctorId: true } },
+        },
+        orderBy: { scheduledAt: "asc" },
+      });
+
+      const episodes = candidates
+        .map((a) => ({ appt: a, stuck: classifyStuckEpisode(a.visit, a.revision) }))
+        .filter((e): e is { appt: (typeof candidates)[number]; stuck: NonNullable<ReturnType<typeof classifyStuckEpisode>> } => e.stuck !== null)
+        .map(({ appt, stuck }) => ({
+          ...appt,
+          stuck,
+          stuckLabel: STUCK_LABELS[stuck],
+          ageDays: episodeAgeDays(appt.scheduledAt, nowRef),
+        }));
+
+      return reply.send({ data: episodes, meta: { total: episodes.length }, errors: null });
+    });
+
+  // ── Cierres de episodios sin cerrar (por rol) ─────────────────────────────
+  // Cada cierre registra el motivo/auditoría; nunca se fabrica un desenlace clínico.
+
+  // ① POST /appointments/:id/left — "Se fue" (recepción/médico/admin). El paciente
+  // llegó pero se marchó sin completar. La visita pasa a LEFT (fuga "se fue" del
+  // embudo). NO se marca la cita como NO_SHOW: sí vino. La cita queda resuelta por
+  // el estado terminal de la visita.
+  server.post<{ Params: { id: string } }>("/appointments/:id/left", { preHandler: [requireAnyRole(ROLES_STAFF)] },
+    async (request, reply: FastifyReply) => {
+      const body = z.object({ reason: z.string().max(300).optional() }).safeParse(request.body ?? {});
+      if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
+
+      const appt = await prisma.appointment.findFirst({
+        where: { id: request.params.id, tenantId: request.ctx.tenantId },
+        include: { visit: { select: { id: true, status: true } }, revision: { select: { completedAt: true } } },
+      });
+      if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      if (!classifyStuckEpisode(appt.visit, appt.revision)) {
+        return reply.status(409).send({ errors: [{ code: "NOT_STUCK", message: "El episodio no está sin cerrar (ya resuelto o sin visita)" }] });
+      }
+
+      await prisma.visit.update({
+        where: { id: appt.visit!.id },
+        data: { status: "LEFT", cancelReason: body.data.reason?.trim() || "SE_FUE" },
+      });
+      await auditLog(
+        { tenantId: request.ctx.tenantId, userId: request.ctx.userId, ip: request.ip },
+        "UPDATE", "visit", appt.visit!.id, { kind: "episode_left", reason: body.data.reason ?? null },
+      );
+      return reply.send({ data: { id: appt.id, visitStatus: "LEFT" }, errors: null });
+    });
+
+  // ③ POST /appointments/:id/void-visit — Anular por llegada errónea
+  // (recepción/admin). El check-in fue un error (paciente equivocado, duplicado o
+  // dato de prueba): se descarta la visita y la cita vuelve a "sin visita" (podrá
+  // marcarse no-show/cancelar/reprogramar). Excluida de KPIs como ruido. Solo si NO
+  // hay revisión (una revisión iniciada la gestiona el médico).
+  server.post<{ Params: { id: string } }>("/appointments/:id/void-visit", { preHandler: [requireRole("RECEPTIONIST")] },
+    async (request, reply: FastifyReply) => {
+      const body = z.object({ reason: z.string().max(300).optional() }).safeParse(request.body ?? {});
+      if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
+
+      const appt = await prisma.appointment.findFirst({
+        where: { id: request.params.id, tenantId: request.ctx.tenantId },
+        include: { visit: { select: { id: true, status: true } }, revision: { select: { id: true } } },
+      });
+      if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      if (!appt.visit) return reply.status(409).send({ errors: [{ code: "NO_VISIT", message: "La cita no tiene visita que anular" }] });
+      if (["COMPLETED", "LEFT", "CANCELLED"].includes(appt.visit.status)) {
+        return reply.status(409).send({ errors: [{ code: "VISIT_RESOLVED", message: "La visita ya está resuelta" }] });
+      }
+      if (appt.revision) {
+        return reply.status(409).send({ errors: [{ code: "HAS_REVISION", message: "El episodio tiene una revisión; complétala (médico) o gestiónala antes de anular" }] });
+      }
+
+      // Descarta la visita (CANCELLED + motivo) y la desvincula de la cita, que así
+      // vuelve a "sin visita" y a la worklist de reservas.
+      await prisma.visit.update({
+        where: { id: appt.visit.id },
+        data: { status: "CANCELLED", cancelReason: body.data.reason?.trim() || "ANULADA_ERROR", appointmentId: null },
+      });
+      await auditLog(
+        { tenantId: request.ctx.tenantId, userId: request.ctx.userId, ip: request.ip },
+        "UPDATE", "appointment", appt.id, { kind: "episode_void", visitId: appt.visit.id, reason: body.data.reason ?? null },
+      );
+      return reply.send({ data: { id: appt.id, voided: true }, errors: null });
+    });
+
+  // ④ POST /appointments/:id/admin-close — Cierre administrativo (SOLO admin) de un
+  // episodio irrecuperable (huérfano sin información, limpieza de datos demo). Estado
+  // terminal propio (CLOSED_ADMIN) + nota obligatoria + auditoría. Aislado de las
+  // tasas clínicas y visible en su propia métrica.
+  server.post<{ Params: { id: string } }>("/appointments/:id/admin-close", { preHandler: [requireRole("ADMIN")] },
+    async (request, reply: FastifyReply) => {
+      const body = z.object({ note: z.string().trim().min(1, "La nota es obligatoria").max(500) }).safeParse(request.body);
+      if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
+
+      const appt = await prisma.appointment.findFirst({
+        where: { id: request.params.id, tenantId: request.ctx.tenantId },
+        include: { visit: { select: { id: true, status: true } }, revision: { select: { completedAt: true } } },
+      });
+      if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      if (!classifyStuckEpisode(appt.visit, appt.revision)) {
+        return reply.status(409).send({ errors: [{ code: "NOT_STUCK", message: "El episodio no está sin cerrar (ya resuelto o sin visita)" }] });
+      }
+
+      const now = new Date();
+      await prisma.$transaction(async (tx) => {
+        await tx.appointment.update({
+          where: { id: appt.id },
+          data: { status: "CLOSED_ADMIN", adminClosedAt: now, adminClosedById: request.ctx.userId, adminClosureNote: body.data.note },
+        });
+        if (appt.visit) {
+          await tx.visit.update({ where: { id: appt.visit.id }, data: { status: "CANCELLED", cancelReason: "CIERRE_ADMIN" } });
+        }
+      });
+      await auditLog(
+        { tenantId: request.ctx.tenantId, userId: request.ctx.userId, ip: request.ip },
+        "UPDATE", "appointment", appt.id, { kind: "admin_close", note: body.data.note },
+      );
+      return reply.send({ data: { id: appt.id, status: "CLOSED_ADMIN" }, errors: null });
     });
 
   // POST /appointments
@@ -523,10 +686,11 @@ export async function appointmentRoutes(server: FastifyInstance) {
         where: { id: request.params.id, tenantId: request.ctx.tenantId },
         select: {
           id: true, scheduledAt: true, status: true, source: true, cancelReason: true, createdAt: true, updatedAt: true,
+          adminClosedAt: true, adminClosureNote: true,
           product: { select: { name: true } },
           room: { select: { name: true } },
           visit: { select: { arrivedAt: true, calledAt: true, startedAt: true, status: true, updatedAt: true, currentRoom: { select: { name: true } } } },
-          revision: { select: { outcome: true, completedAt: true, expiryDate: true, startedAt: true } },
+          revision: { select: { outcome: true, completedAt: true, expiryDate: true, startedAt: true, closedLate: true } },
         },
       });
       if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });

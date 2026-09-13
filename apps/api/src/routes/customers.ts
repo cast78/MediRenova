@@ -233,10 +233,11 @@ export async function customerRoutes(server: FastifyInstance) {
           where: { customerId: cid, tenantId: request.ctx.tenantId },
           select: {
             id: true, scheduledAt: true, status: true, source: true, cancelReason: true, createdAt: true, updatedAt: true,
+            adminClosedAt: true, adminClosureNote: true,
             product: { select: { name: true } },
             room: { select: { name: true } },
             visit: { select: { arrivedAt: true, calledAt: true, startedAt: true, status: true, updatedAt: true, currentRoom: { select: { name: true } } } },
-            revision: { select: { outcome: true, completedAt: true, expiryDate: true, startedAt: true } },
+            revision: { select: { outcome: true, completedAt: true, expiryDate: true, startedAt: true, closedLate: true } },
           },
         }),
         prisma.workflowExecution.findMany({ where: { customerId: cid, status: "SENT", lastAttemptAt: { not: null } }, select: { lastAttemptAt: true } }),

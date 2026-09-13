@@ -33,6 +33,24 @@ interface Appointment {
   rescheduledFrom?: { id: string; scheduledAt: string } | null;
 }
 
+// Episodio sin cerrar: cita pasada CON visita cuyo episodio no cerró. Extiende la
+// cita con el estado atascado, el médico responsable y la antigüedad (del endpoint
+// /appointments/unclosed-episodes).
+interface Episode extends Appointment {
+  stuck: "espero" | "en_sala" | "revision_a_medias";
+  stuckLabel: string;
+  ageDays: number;
+  doctor?: { id: string; firstName: string | null; lastName: string | null } | null;
+  revision?: { id: string; outcome?: string; completedAt?: string | null } | null;
+}
+
+// Color del chip por estado atascado.
+const STUCK_CHIP: Record<string, string> = {
+  espero: "bg-amber-100 text-amber-700",
+  en_sala: "bg-sky-100 text-sky-700",
+  revision_a_medias: "bg-violet-100 text-violet-700",
+};
+
 // "Otro" se omite a propósito: con motivo opcional, "Sin especificar" (null) ya
 // hace de cajón de sastre y evita la redundancia. El valor OTRO sigue en el enum
 // de BD por compatibilidad, pero no se ofrece.
@@ -941,6 +959,116 @@ function UnclosedRow({ appt, onManage, onChanged }: { appt: Appointment; onManag
   );
 }
 
+// Fila del panel "Episodios sin cerrar": cita pasada con visita cuyo episodio no
+// cerró. Acciones por rol: ① Se fue, ② Ver revisión (médico), ③ Anular, ④ Cierre
+// administrativo (admin). Las destructivas piden confirmación.
+function EpisodeRow({ ep, role, onOpen, onChanged }: { ep: Episode; role: string; onOpen: (a: Appointment) => void; onChanged: () => void }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [showClient, setShowClient] = useState(false);
+  const [confirm, setConfirm] = useState<null | "left" | "void" | "admin">(null);
+  const [adminNote, setAdminNote] = useState("");
+
+  const name = `${ep.customer?.firstName ?? ""} ${ep.customer?.lastName ?? ""}`.trim() || "Sin nombre";
+  const doctorName = ep.doctor ? `${ep.doctor.firstName ?? ""} ${ep.doctor.lastName ?? ""}`.trim() : null;
+  const dateLabel = new Date(`${ep.scheduledAt.slice(0, 10)}T00:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
+  const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+  const canReception = isAdmin || role === "RECEPTIONIST"; // recepción/admin → anular
+  const hasRevision = !!ep.revision?.id;
+
+  async function act(kind: "left" | "void" | "admin") {
+    setBusy(kind); setErr(null);
+    const path = kind === "left" ? "left" : kind === "void" ? "void-visit" : "admin-close";
+    const body = kind === "admin" ? JSON.stringify({ note: adminNote.trim() }) : undefined;
+    try {
+      await apiFetch(`/appointments/${ep.id}/${path}`, { method: "POST", ...(body ? { body } : {}) });
+      setConfirm(null); onChanged();
+    } catch (e) { setErr(apptErr(e)); setBusy(null); }
+  }
+
+  return (
+    <>
+    <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50/60">
+      <div className="w-16 shrink-0">
+        <p className="text-xs text-gray-400 capitalize leading-tight">{dateLabel}</p>
+        <p className="font-mono font-bold text-blue-700 text-sm">{ep.scheduledAt.slice(11, 16)}</p>
+      </div>
+      <div className="flex-1 min-w-0">
+        {ep.customer?.id ? (
+          <button onClick={() => setShowClient(true)} title="Ver ficha del cliente" className="group/name inline-flex items-center gap-1.5 min-w-0 text-left">
+            <UserCircle className="w-4 h-4 text-blue-600 shrink-0" />
+            <span className="text-sm font-semibold text-gray-900 group-hover/name:text-blue-700 group-hover/name:underline underline-offset-2 truncate">{name}</span>
+          </button>
+        ) : (
+          <p className="text-sm font-medium text-gray-900 truncate">{name}</p>
+        )}
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${STUCK_CHIP[ep.stuck] ?? "bg-gray-100 text-gray-600"}`}>{ep.stuckLabel}</span>
+          <span className="text-xs text-gray-500 truncate">
+            {ep.product?.name ?? "—"}{ep.room ? ` · ${ep.room.name}` : ""}
+            {doctorName ? ` · Dr. ${doctorName}` : ""}
+            {" · "}<span className="text-gray-400">hace {ep.ageDays} día{ep.ageDays !== 1 ? "s" : ""}</span>
+          </span>
+        </div>
+      </div>
+      <div className="shrink-0 flex items-center gap-2">
+        <button onClick={() => onOpen(ep)} title="Ver el flujo de la cita" className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">Ver flujo</button>
+        {hasRevision && (
+          <button onClick={() => router.push(`/revisions/${ep.revision!.id}`)} className="text-xs px-2.5 py-1.5 rounded-lg border border-violet-200 text-violet-700 hover:bg-violet-50 font-medium">Ver revisión</button>
+        )}
+        <button disabled={!!busy} onClick={() => setConfirm("left")} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 font-medium">Se fue</button>
+        {canReception && !hasRevision && (
+          <button disabled={!!busy} onClick={() => setConfirm("void")} className="text-xs px-2.5 py-1.5 rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 disabled:opacity-50 font-medium">Anular</button>
+        )}
+        {isAdmin && (
+          <button disabled={!!busy} onClick={() => setConfirm("admin")} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 font-medium">Cierre admin.</button>
+        )}
+      </div>
+    </div>
+
+    {/* Confirmaciones */}
+    {confirm && (
+      <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onClick={() => !busy && setConfirm(null)}>
+        <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+          {confirm === "left" && (
+            <>
+              <h3 className="font-bold text-gray-900 mb-1">Marcar “Se fue”</h3>
+              <p className="text-sm text-gray-600 mb-4">El paciente <b>{name}</b> llegó pero se marchó sin completar la atención. Se registra como fuga “se fue” (no cuenta como no-show).</p>
+            </>
+          )}
+          {confirm === "void" && (
+            <>
+              <h3 className="font-bold text-gray-900 mb-1">Anular por llegada errónea</h3>
+              <p className="text-sm text-gray-600 mb-4">Se descarta la visita de <b>{name}</b> (check-in equivocado, duplicado o dato de prueba). La cita volverá a “sin visita” y quedará excluida de las métricas.</p>
+            </>
+          )}
+          {confirm === "admin" && (
+            <>
+              <h3 className="font-bold text-gray-900 mb-1">Cierre administrativo</h3>
+              <p className="text-sm text-gray-600 mb-3">Cierre irrecuperable de <b>{name}</b> sin desenlace clínico. Queda auditado y aislado de las tasas clínicas. Indica el motivo:</p>
+              <textarea value={adminNote} onChange={(e) => setAdminNote(e.target.value)} rows={2} placeholder="Motivo del cierre (obligatorio)" className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-red-200" />
+            </>
+          )}
+          {err && <p className="text-xs text-red-600 mb-3">{err}</p>}
+          <div className="flex justify-end gap-2">
+            <button disabled={!!busy} onClick={() => setConfirm(null)} className="text-sm px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100 font-medium">Cancelar</button>
+            <button
+              disabled={!!busy || (confirm === "admin" && !adminNote.trim())}
+              onClick={() => act(confirm)}
+              className={`text-sm px-3 py-1.5 rounded-lg text-white font-medium disabled:opacity-50 ${confirm === "admin" ? "bg-red-600 hover:bg-red-700" : confirm === "void" ? "bg-orange-600 hover:bg-orange-700" : "bg-blue-600 hover:bg-blue-700"}`}
+            >
+              {busy ? "…" : confirm === "left" ? "Marcar se fue" : confirm === "void" ? "Anular" : "Cerrar episodio"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    {showClient && ep.customer?.id && <ClientInfoModal customerId={ep.customer.id} onClose={() => setShowClient(false)} />}
+    </>
+  );
+}
+
 // ── Pedir confirmación al cliente (WhatsApp / email con el magic link) ──────────
 interface ConfirmLinkData {
   url: string;
@@ -1260,10 +1388,10 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
               ) : null
             )}
             <div className="grid grid-cols-2 gap-2">
-              {status === "PENDING" && <button disabled={busy} onClick={() => patch({ status: "CONFIRMED" })} className={`${btn} border-emerald-200 text-emerald-700 hover:bg-emerald-50`}>Confirmar</button>}
+              {status === "PENDING" && !appt.visit && <button disabled={busy} onClick={() => patch({ status: "CONFIRMED" })} className={`${btn} border-emerald-200 text-emerald-700 hover:bg-emerald-50`}>Confirmar</button>}
               {(status === "PENDING" || status === "CONFIRMED") && !appt.visit && <button disabled={busy} onClick={() => { setRDate(appt.scheduledAt.slice(0, 10) > todayStr ? appt.scheduledAt.slice(0, 10) : todayStr); setMode("reschedule"); setError(null); }} className={`${btn} border-gray-200 text-gray-700 hover:bg-gray-50`}>Reprogramar</button>}
               {canMarkNoShow && <button disabled={busy} onClick={() => patch({ status: "NO_SHOW" })} className={`${btn} border-gray-200 text-gray-600 hover:bg-gray-50`}>No presentó</button>}
-              {status === "PENDING" && !isPast && (
+              {status === "PENDING" && !isPast && !appt.visit && (
                 <button disabled={busy} onClick={askConfirmation} className={`${btn} border-blue-200 text-blue-700 hover:bg-blue-50 col-span-2 inline-flex items-center justify-center gap-1.5`}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
                   Pedir confirmación al cliente
@@ -1337,14 +1465,15 @@ function AppointmentsBoard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { centerId } = useAppContext(); // filtro de centro global (barra superior)
+  const { user } = useAuth(); // rol → acciones disponibles en "Episodios sin cerrar"
   const today = toLocalDateString(new Date());
 
   // Estado inicial leído de la URL para poder volver justo donde estabas al
   // regresar de una revisión (y para poder compartir/enlazar la vista).
   const qView = searchParams.get("view");
   const qDay = searchParams.get("dv");
-  const [view, setView] = useState<"month" | "week" | "day" | "list" | "sincerrar">(
-    (["month", "week", "day", "list", "sincerrar"] as const).includes(qView as never) ? (qView as "month" | "week" | "day" | "list" | "sincerrar") : "month",
+  const [view, setView] = useState<"month" | "week" | "day" | "list" | "sincerrar" | "episodios">(
+    (["month", "week", "day", "list", "sincerrar", "episodios"] as const).includes(qView as never) ? (qView as "month" | "week" | "day" | "list" | "sincerrar" | "episodios") : "month",
   );
   const [dayView, setDayView] = useState<"agenda" | "timeline">(
     (["agenda", "timeline"] as const).includes(qDay as never) ? (qDay as "agenda" | "timeline") : "agenda",
@@ -1443,6 +1572,14 @@ function AppointmentsBoard() {
   });
   const unclosedCount = unclosedData?.meta.total ?? 0;
 
+  // Panel "Episodios sin cerrar": citas pasadas con visita cuyo episodio no cerró.
+  // Se consulta siempre (para el contador de la pestaña) y alimenta el panel.
+  const { data: episodesData, isLoading: episodesLoading } = useQuery<{ data: Episode[]; meta: { total: number } }>({
+    queryKey: ["appointments-unclosed-episodes"],
+    queryFn: () => apiFetch(`/appointments/unclosed-episodes`, { raw: true }),
+  });
+  const episodesCount = episodesData?.meta.total ?? 0;
+
   // ── Derived data ─────────────────────────────────────────────────────────
 
   // Filtro combinado centro (global) + sala (Reservas), aplicado a todas las vistas.
@@ -1479,8 +1616,9 @@ function AppointmentsBoard() {
           <h1 className="text-xl font-bold text-gray-900">Reservas</h1>
           {/* View tabs */}
           <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm bg-white shadow-sm">
-            {(["month", "week", "day", "list", "sincerrar"] as const).map((v) => {
-              const labels = { month: "Mes", week: "Semana", day: "Día", list: "Agenda", sincerrar: "Sin cerrar" };
+            {(["month", "week", "day", "list", "sincerrar", "episodios"] as const).map((v) => {
+              const labels = { month: "Mes", week: "Semana", day: "Día", list: "Agenda", sincerrar: "Sin cerrar", episodios: "Episodios" };
+              const badge = v === "sincerrar" ? unclosedCount : v === "episodios" ? episodesCount : 0;
               return (
                 <button
                   key={v}
@@ -1492,8 +1630,8 @@ function AppointmentsBoard() {
                   }`}
                 >
                   {labels[v]}
-                  {v === "sincerrar" && unclosedCount > 0 && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${view === v ? "bg-white/25 text-white" : "bg-amber-100 text-amber-700"}`}>{unclosedCount}</span>
+                  {badge > 0 && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${view === v ? "bg-white/25 text-white" : "bg-amber-100 text-amber-700"}`}>{badge}</span>
                   )}
                 </button>
               );
@@ -1510,7 +1648,7 @@ function AppointmentsBoard() {
 
       {/* Date nav + filters row (la vista Semana lleva su propia navegación) */}
       <div className={`flex items-center gap-3 flex-wrap ${view === "week" || view === "month" ? "" : "mb-5"}`}>
-        {view !== "week" && view !== "month" && view !== "sincerrar" && <DateNav date={dateFilter} onChange={handleDateChange} />}
+        {view !== "week" && view !== "month" && view !== "sincerrar" && view !== "episodios" && <DateNav date={dateFilter} onChange={handleDateChange} />}
         {view === "list" && (
           <div className="ml-auto flex items-center gap-3">
             {(dateFilter !== today || statusFilter) && (
@@ -1650,6 +1788,30 @@ function AppointmentsBoard() {
                 ))}
               </div>
               {unclosedCount > 50 && <p className="text-xs text-gray-400 mt-2">Mostrando las 50 más recientes de {unclosedCount}.</p>}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Episodios sin cerrar: el paciente llegó pero el episodio no cerró ──── */}
+      {view === "episodios" && (
+        <div>
+          {episodesLoading ? (
+            <p className="text-gray-400 text-sm py-8 text-center">Cargando…</p>
+          ) : episodesCount === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 py-16 text-center">
+              <p className="text-sm text-gray-500">¡Todo cerrado! No hay episodios de días pasados sin desenlace.</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-gray-500 mb-3">
+                {episodesCount} episodio{episodesCount !== 1 ? "s" : ""} de días pasados con el paciente presente pero sin cerrar. Ciérralos: <span className="text-gray-700">Se fue</span> si se marchó; <span className="text-gray-700">Ver revisión</span> para que el médico la complete; <span className="text-gray-700">Anular</span> si el check-in fue un error.
+              </p>
+              <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+                {(episodesData?.data ?? []).map((ep) => (
+                  <EpisodeRow key={ep.id} ep={ep} role={user?.role ?? ""} onOpen={setDetailAppt} onChanged={invalidateAppts} />
+                ))}
+              </div>
             </>
           )}
         </div>
