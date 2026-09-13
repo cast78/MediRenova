@@ -526,15 +526,15 @@ export function newVsReturningFrom(active: CustomerTenure[], from: string, to: s
 // LECTURA la ventana pedida. Para destinatarios sin `convertedAt` (histórico previo al
 // backfill) cae al FALLBACK heurístico por ventana (last-touch), sin recontar los pares
 // (campaña, cliente) ni las citas ya contados por la vía stored.
-export interface EffCampaign { id: string; name: string; sentAt: Date | null }
+export interface EffCampaign { id: string; name: string; channel: string; sentAt: Date | null }
 export interface EffRecipient { campaignId: string; customerId: string; convertedAt: Date | null; convertedAppointmentId: string | null }
 export interface EffAppointment { id: string; customerId: string; createdAt: Date; completedVisit: boolean }
-export interface CampaignEffRow { campaignId: string; name: string; enviados: number; convertidos: number; tasaConversion: number; reservasAtribuidas: number; visitasAtribuidas: number }
+export interface CampaignEffRow { campaignId: string; name: string; channel: string; enviados: number; convertidos: number; tasaConversion: number; reservasAtribuidas: number; visitasAtribuidas: number }
 
 export function campaignEffectivenessFrom(campaigns: EffCampaign[], recipients: EffRecipient[], appointments: EffAppointment[], windowDays: number): CampaignEffRow[] {
   const windowMs = windowDays * 86_400_000;
-  const campById = new Map<string, { name: string; sentAt: Date }>();
-  for (const c of campaigns) if (c.sentAt) campById.set(c.id, { name: c.name, sentAt: c.sentAt });
+  const campById = new Map<string, { name: string; channel: string; sentAt: Date }>();
+  for (const c of campaigns) if (c.sentAt) campById.set(c.id, { name: c.name, channel: c.channel, sentAt: c.sentAt });
 
   const apptById = new Map<string, EffAppointment>();
   for (const a of appointments) apptById.set(a.id, a);
@@ -599,7 +599,7 @@ export function campaignEffectivenessFrom(campaigns: EffCampaign[], recipients: 
     const a = byCamp.get(id);
     const env = enviados.get(id) ?? 0;
     const conv = a?.convertidos.size ?? 0;
-    return { campaignId: id, name: c.name, enviados: env, convertidos: conv, tasaConversion: rate(conv, env), reservasAtribuidas: a?.reservas ?? 0, visitasAtribuidas: a?.visitas ?? 0 };
+    return { campaignId: id, name: c.name, channel: c.channel, enviados: env, convertidos: conv, tasaConversion: rate(conv, env), reservasAtribuidas: a?.reservas ?? 0, visitasAtribuidas: a?.visitas ?? 0 };
   }).sort((x, y) => y.convertidos - x.convertidos);
 }
 
@@ -635,7 +635,7 @@ export async function computeAcquisition(scope: AnalyticsScope, f: AnalyticsFilt
 
 export async function computeCampaignEffectiveness(scope: AnalyticsScope, f: AnalyticsFilters, windowDays: number): Promise<CampaignEffRow[]> {
   const range = { gte: dayStart(f.from), lte: dayEnd(f.to) };
-  const campaigns = await prisma.campaign.findMany({ where: { ...scope.tenantWhere, sentAt: range }, select: { id: true, name: true, sentAt: true } });
+  const campaigns = await prisma.campaign.findMany({ where: { ...scope.tenantWhere, sentAt: range }, select: { id: true, name: true, channel: true, sentAt: true } });
   if (campaigns.length === 0) return [];
   const campIds = campaigns.map((c) => c.id);
   const recipients = await prisma.campaignRecipient.findMany({ where: { campaignId: { in: campIds }, status: "SENT" }, select: { campaignId: true, customerId: true, convertedAt: true, convertedAppointmentId: true } });

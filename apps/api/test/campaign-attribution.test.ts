@@ -28,7 +28,7 @@ describe("pickCampaignConversion — destinatario a convertir (last-touch en ven
 });
 
 describe("campaignEffectivenessFrom — atribución STORED (fase 2)", () => {
-  const campaigns: EffCampaign[] = [{ id: "c1", name: "Renovación", sentAt: d("2026-06-01") }];
+  const campaigns: EffCampaign[] = [{ id: "c1", name: "Renovación", channel: "EMAIL", sentAt: d("2026-06-01") }];
 
   it("cuenta la conversión sellada (convertedAt en ventana) y su visita", () => {
     const recipients: EffRecipient[] = [

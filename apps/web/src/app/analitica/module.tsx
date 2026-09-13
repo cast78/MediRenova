@@ -17,6 +17,7 @@ import {
 import {
   TrendingUp, TrendingDown, Percent, DoorOpen, Gauge, UserX, Download, AlertTriangle, ChevronRight, Stethoscope,
   UserPlus, Users, Send, CheckCircle, Building2, Package, ChevronDown, X, Calendar, Info, MousePointerClick,
+  Mail, MessageCircle, MessageSquare,
 } from "lucide-react";
 
 // ── Tipos que devuelve la API ────────────────────────────────────────────────
@@ -68,7 +69,14 @@ interface CompRow { id: string; name: string; centerName?: string; reservas: num
 interface Comparison { porCentro: CompRow[]; porSala: CompRow[] }
 interface VolBucket { bucket: string; reservas: number; visitas: number }
 interface AcquisitionResult { series: { bucket: string; total: number; canales: Record<string, number> }[]; nuevosVsRecurrentes: { nuevos: number; recurrentes: number } }
-interface CampaignEffRow { campaignId: string; name: string; enviados: number; convertidos: number; tasaConversion: number; reservasAtribuidas: number; visitasAtribuidas: number }
+interface CampaignEffRow { campaignId: string; name: string; channel: string; enviados: number; convertidos: number; tasaConversion: number; reservasAtribuidas: number; visitasAtribuidas: number }
+
+// Canal de comunicación de una campaña (icono + color).
+const CAMPAIGN_CH: Record<string, { icon: typeof Mail; color: string; label: string }> = {
+  EMAIL: { icon: Mail, color: "text-blue-600", label: "Email" },
+  WHATSAPP: { icon: MessageCircle, color: "text-emerald-600", label: "WhatsApp" },
+  SMS: { icon: MessageSquare, color: "text-violet-600", label: "SMS" },
+};
 
 interface Filters { from: string; to: string; centerId: string; roomId: string; doctorId: string; productId: string; scope: string }
 
@@ -1197,10 +1205,21 @@ function ResumenCaptacion({ f, onGoTo }: { f: Filters; onGoTo: (view: string) =>
 function AltasView({ f }: { f: Filters }) {
   const [g, setG] = useState("month");
   const acq = useReport<AcquisitionResult>("acquisition", f, { granularity: g });
+  const prev = prevPeriod(f);
+  const acqPrev = useReport<AcquisitionResult>("acquisition", { ...f, from: prev.from, to: prev.to }, { granularity: g });
   const series = acq.data?.series ?? [];
   const channels = [...new Set(series.flatMap((b) => Object.keys(b.canales)))];
   const chartData = series.map((b) => ({ label: bucketLabel(b.bucket), ...b.canales }));
   const nvr = acq.data?.nuevosVsRecurrentes;
+
+  const altas = series.reduce((s, b) => s + b.total, 0);
+  const altasPrev = (acqPrev.data?.series ?? []).reduce((s, b) => s + b.total, 0);
+  const pctNuevos = nvr && nvr.nuevos + nvr.recurrentes > 0 ? Math.round((nvr.nuevos / (nvr.nuevos + nvr.recurrentes)) * 100) : null;
+  // Ranking por canal (suma de altas por canal en todo el periodo).
+  const byChannel = channels.map((c) => ({ c, n: series.reduce((s, b) => s + (b.canales[c] ?? 0), 0) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  const maxCh = Math.max(1, ...byChannel.map((x) => x.n));
+  const topCh = byChannel[0];
+
   return (
     <Card title="Altas de clientes por periodo y canal"
       action={
@@ -1211,16 +1230,37 @@ function AltasView({ f }: { f: Filters }) {
           <CsvButton ep="acquisition" f={f} extra={{ granularity: g }} />
         </div>
       }>
-      {nvr && (
-        <div className="flex gap-3 mb-4">
-          <div className="rounded-xl border bg-emerald-50 border-emerald-100 text-emerald-700 px-4 py-2 flex-1">
-            <p className="text-xs font-medium">Clientes nuevos</p><p className="text-2xl font-bold">{nvr.nuevos}</p>
-          </div>
-          <div className="rounded-xl border bg-blue-50 border-blue-100 text-blue-700 px-4 py-2 flex-1">
-            <p className="text-xs font-medium">Recurrentes</p><p className="text-2xl font-bold">{nvr.recurrentes}</p>
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <Kpi icon={UserPlus} label="Altas del periodo" value={altas} delta={acqPrev.data ? altas - altasPrev : null} goodWhenUp tone="success" />
+        <Kpi icon={Users} label="Clientes nuevos" value={pctNuevos ?? "—"} suffix={pctNuevos != null ? "%" : ""} note={nvr ? `${nvr.nuevos} de ${nvr.nuevos + nvr.recurrentes}` : ""} tone="accent" />
+        <Kpi icon={Send} label="Canal top" value={topCh ? (CHANNEL_META[topCh.c]?.label ?? topCh.c) : "—"} note={topCh ? `${topCh.n} altas` : ""} tone="plain" />
+      </div>
+
+      {nvr && (nvr.nuevos + nvr.recurrentes) > 0 && (
+        <div className="mb-4">
+          <p className="text-xs text-gray-500 mb-1">Nuevos vs recurrentes</p>
+          <div className="flex h-6 rounded-lg overflow-hidden text-[11px] text-white font-medium">
+            <div className="bg-emerald-500 flex items-center px-2" style={{ width: `${(nvr.nuevos / (nvr.nuevos + nvr.recurrentes)) * 100}%` }}>{nvr.nuevos > 0 && `Nuevos ${nvr.nuevos}`}</div>
+            <div className="bg-blue-500 flex items-center px-2" style={{ width: `${(nvr.recurrentes / (nvr.nuevos + nvr.recurrentes)) * 100}%` }}>{nvr.recurrentes > 0 && nvr.recurrentes}</div>
           </div>
         </div>
       )}
+
+      {byChannel.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs text-gray-500 mb-1.5">Reparto por canal</p>
+          <div className="space-y-1.5">
+            {byChannel.map(({ c, n }) => (
+              <div key={c} className="flex items-center gap-2 text-sm">
+                <span className="w-28 shrink-0 text-gray-600 truncate">{CHANNEL_META[c]?.label ?? c}</span>
+                <span className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><span className="block h-full rounded-full" style={{ width: `${(n / maxCh) * 100}%`, background: CHANNEL_META[c]?.color ?? "#cbd5e1" }} /></span>
+                <span className="w-8 text-right tabular-nums text-gray-700">{n}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {series.length === 0 ? empty : (
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -1256,30 +1296,64 @@ function CampanasView({ f }: { f: Filters }) {
           <CsvButton ep="campaign-effectiveness" f={f} extra={{ attributionWindowDays: win }} />
         </div>
       }>
-      {(eff.data?.length ?? 0) === 0 ? empty : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs text-gray-400 border-b border-gray-100">
-              <th className="py-2 font-medium">Campaña</th><th className="py-2 font-medium text-right">Enviados</th>
-              <th className="py-2 font-medium text-right">Convertidos</th><th className="py-2 font-medium text-right">Tasa</th>
-              <th className="py-2 font-medium text-right">Reservas atrib.</th><th className="py-2 font-medium text-right">Visitas atrib.</th>
-            </tr></thead>
-            <tbody>
-              {eff.data!.map((c) => (
-                <tr key={c.campaignId} className="border-b border-gray-50">
-                  <td className="py-2 text-gray-700">{c.name}</td>
-                  <td className="py-2 text-right tabular-nums">{c.enviados}</td>
-                  <td className="py-2 text-right tabular-nums">{c.convertidos}</td>
-                  <td className="py-2 text-right tabular-nums font-medium">{c.tasaConversion}%</td>
-                  <td className="py-2 text-right tabular-nums">{c.reservasAtribuidas}</td>
-                  <td className="py-2 text-right tabular-nums">{c.visitasAtribuidas}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <p className="text-[11px] text-gray-400 mt-2">Atribución heurística: un envío cuenta como convertido si el cliente reservó dentro de la ventana (last-touch).</p>
+      {(() => {
+        const rows = eff.data ?? [];
+        if (rows.length === 0) return empty;
+        const maxConv = Math.max(1, ...rows.map((c) => c.convertidos));
+        const tEnv = rows.reduce((s, c) => s + c.enviados, 0);
+        const tConv = rows.reduce((s, c) => s + c.convertidos, 0);
+        const tRes = rows.reduce((s, c) => s + c.reservasAtribuidas, 0);
+        const tVis = rows.reduce((s, c) => s + c.visitasAtribuidas, 0);
+        const tTasa = tEnv > 0 ? Math.round((tConv / tEnv) * 1000) / 10 : 0;
+        const tasaCol = (v: number) => v >= 8 ? "text-emerald-600" : v >= 4 ? "text-amber-600" : "text-red-600";
+        return (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead><tr className="text-xs text-gray-400 border-b border-gray-100">
+                <th className="py-2 font-medium text-left">Campaña</th><th className="py-2 font-medium text-right">Enviados</th>
+                <th className="py-2 font-medium text-right">Convertidos</th><th className="py-2 font-medium text-right">Tasa</th>
+                <th className="py-2 font-medium text-right">Reservas</th><th className="py-2 font-medium text-right">Visitas</th>
+              </tr></thead>
+              <tbody>
+                {rows.map((c, i) => {
+                  const ch = CAMPAIGN_CH[c.channel];
+                  const Icon = ch?.icon ?? Send;
+                  const best = i === 0 && c.convertidos > 0;
+                  return (
+                    <tr key={c.campaignId} className={`border-b border-gray-50 ${best ? "bg-emerald-50/60" : ""}`}>
+                      <td className="py-2 pr-2">
+                        <span className="inline-flex items-center gap-2 text-gray-800"><Icon className={`w-4 h-4 shrink-0 ${ch?.color ?? "text-gray-400"}`} />{c.name}
+                          {best && <span className="text-[10px] bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5">Mejor</span>}</span>
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-600">{c.enviados}</td>
+                      <td className="py-2 px-2">
+                        <span className="flex items-center gap-2 justify-end">
+                          <span className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden"><span className="block h-full rounded-full bg-emerald-500" style={{ width: `${(c.convertidos / maxConv) * 100}%` }} /></span>
+                          <span className="w-6 text-right tabular-nums text-gray-800">{c.convertidos}</span>
+                        </span>
+                      </td>
+                      <td className={`py-2 px-2 text-right tabular-nums font-medium ${tasaCol(c.tasaConversion)}`}>{c.tasaConversion}%</td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-600">{c.reservasAtribuidas}</td>
+                      <td className="py-2 pl-2 text-right tabular-nums text-gray-600">{c.visitasAtribuidas}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot><tr className="border-t-2 border-gray-200 font-semibold text-gray-800">
+                <td className="py-2 pr-2 text-gray-500 font-medium">Total · {rows.length} campaña{rows.length !== 1 ? "s" : ""}</td>
+                <td className="py-2 px-2 text-right tabular-nums">{tEnv}</td>
+                <td className="py-2 px-2 text-right tabular-nums">{tConv}</td>
+                <td className={`py-2 px-2 text-right tabular-nums ${tasaCol(tTasa)}`}>{tTasa}% <span className="text-[11px] text-gray-400 font-normal">media</span></td>
+                <td className="py-2 px-2 text-right tabular-nums">{tRes}</td>
+                <td className="py-2 pl-2 text-right tabular-nums">{tVis}</td>
+              </tr></tfoot>
+            </table>
+          </div>
+        );
+      })()}
+      <p className="text-[11px] text-gray-400 mt-3">
+        <span className="text-emerald-600">≥8% buena</span> · <span className="text-amber-600">4–8% floja</span> · <span className="text-red-600">&lt;4% mala</span>. Ordenado por convertidos. Atribución heurística: un envío convierte si el cliente reservó dentro de la ventana (last-touch).
+      </p>
     </Card>
   );
 }
