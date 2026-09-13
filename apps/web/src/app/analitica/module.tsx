@@ -32,7 +32,7 @@ type LeakType =
   | "no_show" | "cancel_cliente" | "cancel_centro" | "cancel_otras"
   | "reprogramada" | "se_fue" | "sin_resolver" | "fuera_de_plazo";
 interface LeakCase {
-  id: string; customerId: string | null; customer: string; date: string;
+  id: string; appointmentId: string | null; customerId: string | null; customer: string; date: string;
   product: string | null; room: string | null; center: string | null; note: string | null;
 }
 interface OccRow { roomId: string; roomName: string; centerId: string; centerName: string; disponibles: number; usados: number; ocupacion: number }
@@ -546,21 +546,27 @@ function FunnelBars({ f }: { f: Funnel }) {
 }
 
 // ── Vista: Embudo ────────────────────────────────────────────────────────────
-// Fila de fuga: clicable si tiene casos (val>0) → abre el detalle (drill-down).
+// Fila de fuga: clicable si tiene casos (val>0) → abre el detalle (drill-down). Los
+// valores y la flecha van en columnas de ancho fijo para que queden alineados en
+// todas las filas (tengan acción o no).
 function LeakRow({ label, val, note, onOpen }: { label: string; val: number; note?: string; onOpen?: () => void }) {
+  const actionable = !!onOpen && val > 0;
   const inner = (
     <>
-      <span className="text-gray-600 text-left">{label}{note ? <span className="text-[10px] text-gray-400 ml-1.5">· {note}</span> : null}</span>
-      <span className="inline-flex items-center gap-1">
-        <span className="font-medium tabular-nums text-gray-800">{val}</span>
-        {onOpen && val > 0 && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300"><path d="M9 18l6-6-6-6" /></svg>}
+      <span className="flex-1 text-left text-gray-600">
+        <span className={actionable ? "underline decoration-dotted decoration-gray-300 underline-offset-2 group-hover:decoration-blue-400 group-hover:text-blue-700" : ""}>{label}</span>
+        {note ? <span className="text-[10px] text-gray-400 ml-1.5">· {note}</span> : null}
+      </span>
+      <span className="w-10 text-right tabular-nums font-medium text-gray-800">{val}</span>
+      <span className="w-4 flex justify-center text-gray-300 group-hover:text-blue-400">
+        {actionable && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>}
       </span>
     </>
   );
-  return onOpen && val > 0 ? (
-    <button onClick={onOpen} className="w-full flex items-center justify-between py-1 group hover:text-blue-700">{inner}</button>
+  return actionable ? (
+    <button onClick={onOpen} className="w-full flex items-center gap-2 py-1 group">{inner}</button>
   ) : (
-    <div className="flex items-center justify-between py-1">{inner}</div>
+    <div className="flex items-center gap-2 py-1">{inner}</div>
   );
 }
 
@@ -601,6 +607,7 @@ function EmbudoView({ f }: { f: Filters }) {
 
 // Panel lateral con el detalle (lista de casos) de una fuga, respetando los filtros.
 function LeakDrawer({ f, leak, onClose }: { f: Filters; leak: { type: LeakType; label: string }; onClose: () => void }) {
+  const router = useRouter();
   const qs = buildQs(f, { type: leak.type });
   const { data: cases = [], isLoading, isError } = useQuery<LeakCase[]>({
     queryKey: ["funnel-leaks", qs],
@@ -631,7 +638,7 @@ function LeakDrawer({ f, leak, onClose }: { f: Filters; leak: { type: LeakType; 
                   <div key={c.id} className="px-5 py-3">
                     <div className="flex items-center justify-between gap-2">
                       {c.customerId ? (
-                        <button onClick={() => setClient(c.customerId)} className="text-sm font-semibold text-gray-900 hover:text-blue-700 hover:underline truncate text-left">{c.customer}</button>
+                        <button onClick={() => setClient(c.customerId)} title="Ver ficha del cliente" className="text-sm font-semibold text-gray-900 hover:text-blue-700 hover:underline truncate text-left">{c.customer}</button>
                       ) : (
                         <span className="text-sm font-semibold text-gray-900 truncate">{c.customer}</span>
                       )}
@@ -639,6 +646,12 @@ function LeakDrawer({ f, leak, onClose }: { f: Filters; leak: { type: LeakType; 
                     </div>
                     <p className="text-xs text-gray-500 truncate">{[c.product, c.room, c.center].filter(Boolean).join(" · ") || "—"}</p>
                     {c.note && <p className="text-[11px] text-gray-400 truncate mt-0.5">{c.note}</p>}
+                    {c.appointmentId && (
+                      <button onClick={() => router.push(`/appointments?appt=${c.appointmentId}`)} className="mt-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1">
+                        Ver reserva
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 5l7 7-7 7" /></svg>
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

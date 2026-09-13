@@ -175,6 +175,7 @@ export const LEAK_TYPES: LeakType[] = [
 
 export interface LeakCase {
   id: string;
+  appointmentId: string | null; // cita para "Ver reserva" (null en walk-in "se fue")
   customerId: string | null;
   customer: string;
   date: string;            // ISO del campo de rango relevante (cita / llegada / cierre de revisión)
@@ -205,7 +206,7 @@ export async function computeFunnelLeaks(scope: AnalyticsScope, f: AnalyticsFilt
   type ApptLeakRow = Prisma.AppointmentGetPayload<{ select: typeof apptSelect }>;
 
   const fromAppt = (a: ApptLeakRow, date: Date, note: string | null): LeakCase => ({
-    id: a.id, customerId: a.customer?.id ?? null, customer: fullName(a.customer),
+    id: a.id, appointmentId: a.id, customerId: a.customer?.id ?? null, customer: fullName(a.customer),
     date: date.toISOString(), product: a.product?.name ?? null,
     room: a.room?.name ?? null, center: a.room?.center?.name ?? null, note,
   });
@@ -243,14 +244,14 @@ export async function computeFunnelLeaks(scope: AnalyticsScope, f: AnalyticsFilt
     const rows = await prisma.visit.findMany({
       where: { ...visitScopeWhere(scope, f), status: "LEFT", arrivedAt: range },
       select: {
-        id: true, arrivedAt: true, cancelReason: true,
+        id: true, arrivedAt: true, cancelReason: true, appointmentId: true,
         customer: { select: { id: true, firstName: true, lastName: true } },
         appointment: { select: { scheduledAt: true, product: { select: { name: true } }, room: { select: { name: true, center: { select: { name: true } } } } } },
       },
       orderBy: { arrivedAt: "desc" }, take: 500,
     });
     return rows.map((v) => ({
-      id: v.id, customerId: v.customer?.id ?? null, customer: fullName(v.customer),
+      id: v.id, appointmentId: v.appointmentId, customerId: v.customer?.id ?? null, customer: fullName(v.customer),
       date: v.arrivedAt.toISOString(), product: v.appointment?.product?.name ?? null,
       room: v.appointment?.room?.name ?? null, center: v.appointment?.room?.center?.name ?? null,
       note: "se marchó sin ser atendido",
@@ -261,14 +262,14 @@ export async function computeFunnelLeaks(scope: AnalyticsScope, f: AnalyticsFilt
   const rows = await prisma.revision.findMany({
     where: { ...revisionScopeWhere(scope, f), closedLate: true, completedAt: range },
     select: {
-      id: true, completedAt: true, outcome: true,
+      id: true, completedAt: true, outcome: true, appointmentId: true,
       customer: { select: { id: true, firstName: true, lastName: true } },
       appointment: { select: { scheduledAt: true, product: { select: { name: true } }, room: { select: { name: true, center: { select: { name: true } } } } } },
     },
     orderBy: { completedAt: "desc" }, take: 500,
   });
   return rows.map((r) => ({
-    id: r.id, customerId: r.customer?.id ?? null, customer: fullName(r.customer),
+    id: r.id, appointmentId: r.appointmentId, customerId: r.customer?.id ?? null, customer: fullName(r.customer),
     date: (r.completedAt ?? r.appointment?.scheduledAt ?? new Date()).toISOString(),
     product: r.appointment?.product?.name ?? null,
     room: r.appointment?.room?.name ?? null, center: r.appointment?.room?.center?.name ?? null,
