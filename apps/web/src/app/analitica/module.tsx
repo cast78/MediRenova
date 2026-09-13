@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Percent, DoorOpen, Gauge, UserX, Download, AlertTriangle, ChevronRight, Stethoscope,
-  UserPlus, Users, Send, CheckCircle, Building2, Package, ChevronDown, X, Calendar,
+  UserPlus, Users, Send, CheckCircle, Building2, Package, ChevronDown, X, Calendar, UserCircle,
 } from "lucide-react";
 
 // ── Tipos que devuelve la API ────────────────────────────────────────────────
@@ -638,9 +638,15 @@ function LeakDrawer({ f, leak, onClose }: { f: Filters; leak: { type: LeakType; 
                   <div key={c.id} className="px-5 py-3">
                     <div className="flex items-center justify-between gap-2">
                       {c.customerId ? (
-                        <button onClick={() => setClient(c.customerId)} title="Ver ficha del cliente" className="text-sm font-semibold text-gray-900 hover:text-blue-700 hover:underline truncate text-left">{c.customer}</button>
+                        <button onClick={() => setClient(c.customerId)} title="Ver ficha del cliente" className="group/name inline-flex items-center gap-1.5 min-w-0 text-left">
+                          <UserCircle className="w-4 h-4 text-blue-600 shrink-0" />
+                          <span className="text-sm font-semibold text-gray-900 group-hover/name:text-blue-700 group-hover/name:underline underline-offset-2 truncate">{c.customer}</span>
+                        </button>
                       ) : (
-                        <span className="text-sm font-semibold text-gray-900 truncate">{c.customer}</span>
+                        <span className="inline-flex items-center gap-1.5 min-w-0">
+                          <UserCircle className="w-4 h-4 text-gray-300 shrink-0" />
+                          <span className="text-sm font-semibold text-gray-900 truncate">{c.customer}</span>
+                        </span>
                       )}
                       <span className="text-xs text-gray-400 shrink-0 tabular-nums">{new Date(c.date).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</span>
                     </div>
