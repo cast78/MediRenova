@@ -152,6 +152,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   });
   const primary = branding?.primaryColor ?? "#2563eb";
 
+  // Aviso in-app: nº de episodios sin cerrar (badge en "Reservas"). Visible para
+  // el personal; se refresca cada minuto.
+  const { data: episodesData } = useQuery<{ meta: { total: number } }>({
+    queryKey: ["nav-unclosed-episodes"],
+    queryFn: () => apiFetch("/appointments/unclosed-episodes", { raw: true }),
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const episodesCount = episodesData?.meta?.total ?? 0;
+
   useEffect(() => {
     if (!loading && !user) {
       router.push("/login");
@@ -201,7 +211,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         style={active ? { backgroundColor: `${primary}14`, color: primary } : undefined}
                       >
                         <item.icon size={16} strokeWidth={1.75} />
-                        {item.label}
+                        <span className="flex-1">{item.label}</span>
+                        {item.href === "/appointments" && episodesCount > 0 && (
+                          <span title={`${episodesCount} episodio(s) sin cerrar`} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">{episodesCount}</span>
+                        )}
                       </Link>
                     );
                   })}

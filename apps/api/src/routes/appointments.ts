@@ -11,6 +11,7 @@ import { roomHasOverlap, enforceSingleBooking, bookingLabel, findBlockingBooking
 import { signConfirmationToken } from "../lib/jwt.js";
 import { appointmentEvents } from "../lib/appointment-timeline.js";
 import { classifyStuckEpisode, episodeAgeDays, STUCK_LABELS } from "../lib/episodes.js";
+import { buildTenantAlert, sendTenantAlert } from "../lib/episode-alerts.js";
 
 const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
 
@@ -294,6 +295,30 @@ export async function appointmentRoutes(server: FastifyInstance) {
         }));
 
       return reply.send({ data: episodes, meta: { total: episodes.length }, errors: null });
+    });
+
+  // GET /appointments/unclosed-episodes/alert-preview — vista previa del aviso de
+  // fin de día (asunto, cuerpo y destinatarios) SIN enviar. Solo ADMIN.
+  server.get("/appointments/unclosed-episodes/alert-preview", { preHandler: [requireRole("ADMIN")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const cfg = await prisma.tenantConfig.findUnique({ where: { tenantId: request.ctx.tenantId }, select: { timezone: true } });
+      const tenant = await prisma.tenant.findUnique({ where: { id: request.ctx.tenantId }, select: { name: true } });
+      const a = await buildTenantAlert(request.ctx.tenantId, cfg?.timezone ?? "Europe/Madrid", tenant?.name);
+      return reply.send({ data: { count: a.count, subject: a.subject, body: a.body, recipients: a.recipients }, errors: null });
+    });
+
+  // POST /appointments/unclosed-episodes/alert — envía el aviso AHORA al personal
+  // del tenant (bajo demanda, además del cron de las 20:00). Solo ADMIN.
+  server.post("/appointments/unclosed-episodes/alert", { preHandler: [requireRole("ADMIN")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const cfg = await prisma.tenantConfig.findUnique({ where: { tenantId: request.ctx.tenantId }, select: { timezone: true } });
+      const tenant = await prisma.tenant.findUnique({ where: { id: request.ctx.tenantId }, select: { name: true } });
+      const r = await sendTenantAlert(request.ctx.tenantId, cfg?.timezone ?? "Europe/Madrid", tenant?.name);
+      await auditLog(
+        { tenantId: request.ctx.tenantId, userId: request.ctx.userId, ip: request.ip },
+        "UPDATE", "tenant", request.ctx.tenantId, { kind: "episode_alert_sent", count: r.count, sent: r.sent },
+      );
+      return reply.send({ data: r, errors: null });
     });
 
   // ── Cierres de episodios sin cerrar (por rol) ─────────────────────────────

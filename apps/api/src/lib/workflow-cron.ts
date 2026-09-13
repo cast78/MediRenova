@@ -4,6 +4,7 @@ import { signMagicLinkToken } from "./jwt.js";
 import { whatsapp } from "./whatsapp.js";
 import { runDueCampaigns } from "./campaign-runner.js";
 import { sweepExpiredAppointments } from "./appointment-sweep.js";
+import { runEpisodeAlerts } from "./episode-alerts.js";
 
 const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
 
@@ -41,6 +42,22 @@ export function startWorkflowCron(): void {
     { timezone: "Europe/Madrid" },
   );
   console.log("[appointment-sweep] Scheduled hourly");
+
+  // Aviso de fin de día: episodios sin cerrar → email al personal (ADMIN + recepción).
+  // El aviso in-app lo cubre el contador de la pestaña "Episodios". Ver crm-episodios-sin-cerrar §6.
+  cron.schedule(
+    "0 20 * * *",
+    async () => {
+      try {
+        const r = await runEpisodeAlerts();
+        if (r.emails > 0) console.log(`[episode-alerts] ${r.emails} aviso(s) enviados en ${r.tenants} tenant(s)`);
+      } catch (err) {
+        console.error("[episode-alerts] Error:", err);
+      }
+    },
+    { timezone: "Europe/Madrid" },
+  );
+  console.log("[episode-alerts] Scheduled daily at 20:00 Europe/Madrid");
 }
 
 export async function runWorkflowJob(): Promise<void> {

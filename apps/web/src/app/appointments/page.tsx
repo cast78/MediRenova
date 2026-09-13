@@ -1069,6 +1069,68 @@ function EpisodeRow({ ep, role, onOpen, onChanged }: { ep: Episode; role: string
   );
 }
 
+// Modal "Enviar aviso ahora": previsualiza el email de episodios sin cerrar y lo
+// envía bajo demanda al personal (admin + recepción). Solo lo abre un admin.
+function EpisodeAlertModal({ onClose }: { onClose: () => void }) {
+  const { data, isLoading } = useQuery<{ count: number; subject: string; body: string; recipients: string[] }>({
+    queryKey: ["episode-alert-preview"],
+    queryFn: () => apiFetch(`/appointments/unclosed-episodes/alert-preview`),
+  });
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState<{ sent: number; recipients: string[] } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const noRecipients = (data?.recipients.length ?? 0) === 0;
+  const nothing = (data?.count ?? 0) === 0;
+
+  async function send() {
+    setSending(true); setErr(null);
+    try { setSent(await apiFetch(`/appointments/unclosed-episodes/alert`, { method: "POST" })); }
+    catch (e) { setErr(apptErr(e)); setSending(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onClick={() => !sending && onClose()}>
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-gray-900">Enviar aviso de episodios sin cerrar</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+        </div>
+
+        {isLoading ? (
+          <p className="text-sm text-gray-400 py-8 text-center">Cargando…</p>
+        ) : sent ? (
+          <>
+            <div className="rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm px-3 py-2 mb-3">
+              Aviso enviado a {sent.sent} destinatario{sent.sent !== 1 ? "s" : ""}.
+            </div>
+            <p className="text-xs text-gray-500 mb-4">{sent.recipients.join(", ")}</p>
+            <div className="flex justify-end"><button onClick={onClose} className="text-sm px-3 py-1.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700">Cerrar</button></div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-gray-600 mb-1">Se enviará por email a <b>{data?.recipients.length ?? 0}</b> destinatario(s) (admin + recepción):</p>
+            <p className="text-xs text-gray-500 mb-3">{noRecipients ? "— ningún usuario con email válido —" : data!.recipients.join(", ")}</p>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 mb-3">
+              <p className="text-xs font-semibold text-gray-700 mb-1">{data?.subject}</p>
+              <pre className="text-[11px] text-gray-600 whitespace-pre-wrap font-sans max-h-52 overflow-y-auto">{data?.body}</pre>
+            </div>
+
+            {nothing && <p className="text-xs text-amber-600 mb-3">No hay episodios abiertos ahora mismo — no se enviará nada.</p>}
+            {err && <p className="text-xs text-red-600 mb-3">{err}</p>}
+            <p className="text-[11px] text-gray-400 mb-3">El envío real requiere el email (Resend) configurado en el servidor. En local solo se registra un log.</p>
+
+            <div className="flex justify-end gap-2">
+              <button disabled={sending} onClick={onClose} className="text-sm px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100 font-medium">Cancelar</button>
+              <button disabled={sending || nothing || noRecipients} onClick={send} className="text-sm px-3 py-1.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50">{sending ? "Enviando…" : "Enviar ahora"}</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Pedir confirmación al cliente (WhatsApp / email con el magic link) ──────────
 interface ConfirmLinkData {
   url: string;
@@ -1466,6 +1528,8 @@ function AppointmentsBoard() {
   const searchParams = useSearchParams();
   const { centerId } = useAppContext(); // filtro de centro global (barra superior)
   const { user } = useAuth(); // rol → acciones disponibles en "Episodios sin cerrar"
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPERADMIN";
+  const [showAlert, setShowAlert] = useState(false); // modal "Enviar aviso ahora"
   const today = toLocalDateString(new Date());
 
   // Estado inicial leído de la URL para poder volver justo donde estabas al
@@ -1804,9 +1868,16 @@ function AppointmentsBoard() {
             </div>
           ) : (
             <>
-              <p className="text-sm text-gray-500 mb-3">
-                {episodesCount} episodio{episodesCount !== 1 ? "s" : ""} de días pasados con el paciente presente pero sin cerrar. Ciérralos: <span className="text-gray-700">Se fue</span> si se marchó; <span className="text-gray-700">Ver revisión</span> para que el médico la complete; <span className="text-gray-700">Anular</span> si el check-in fue un error.
-              </p>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <p className="text-sm text-gray-500">
+                  {episodesCount} episodio{episodesCount !== 1 ? "s" : ""} de días pasados con el paciente presente pero sin cerrar. Ciérralos: <span className="text-gray-700">Se fue</span> si se marchó; <span className="text-gray-700">Ver revisión</span> para que el médico la complete; <span className="text-gray-700">Anular</span> si el check-in fue un error.
+                </p>
+                {isAdmin && (
+                  <button onClick={() => setShowAlert(true)} className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium inline-flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5" /> Enviar aviso ahora
+                  </button>
+                )}
+              </div>
               <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
                 {(episodesData?.data ?? []).map((ep) => (
                   <EpisodeRow key={ep.id} ep={ep} role={user?.role ?? ""} onOpen={setDetailAppt} onChanged={invalidateAppts} />
@@ -1814,6 +1885,7 @@ function AppointmentsBoard() {
               </div>
             </>
           )}
+          {showAlert && <EpisodeAlertModal onClose={() => setShowAlert(false)} />}
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 // Clasificación de episodios sin cerrar (núcleo puro, sin BD).
 import { describe, it, expect } from "vitest";
 import { classifyStuckEpisode, episodeAgeDays, isClosedLate, STUCK_LABELS } from "../src/lib/episodes";
+import { episodeDigest, type OpenEpisode } from "../src/lib/episode-alerts";
 
 describe("classifyStuckEpisode — detección de episodio atascado", () => {
   it("sin visita → null (es no-show/cancelar en la worklist de reservas)", () => {
@@ -66,5 +67,27 @@ describe("isClosedLate — revisión completada fuera de plazo", () => {
   });
   it("completada varios días después → tardía", () => {
     expect(isClosedLate(new Date("2026-09-06T09:00:00Z"), new Date("2026-09-13T10:00:00Z"))).toBe(true);
+  });
+});
+
+describe("episodeDigest — email de aviso de fin de día", () => {
+  const ep = (over: Partial<OpenEpisode>): OpenEpisode => ({
+    id: "a", customerName: "Ana Ruiz", productName: "Carnet", centerName: "Madrid", doctorName: "Sol Gil", stuckLabel: "Esperó sin ser atendido", ageDays: 2, ...over,
+  });
+
+  it("asunto con recuento y pluralización", () => {
+    expect(episodeDigest([ep({})]).subject).toBe("1 episodio sin cerrar");
+    expect(episodeDigest([ep({}), ep({ customerName: "B" })], "Clínica Demo").subject).toBe("2 episodios sin cerrar · Clínica Demo");
+  });
+  it("el cuerpo lista cada episodio con sus datos", () => {
+    const { body } = episodeDigest([ep({ customerName: "Ana Ruiz", ageDays: 3 })]);
+    expect(body).toContain("• Ana Ruiz — Esperó sin ser atendido · Carnet · Madrid · Dr. Sol Gil · hace 3 días");
+  });
+  it("trunca a 30 y anota el resto", () => {
+    const many = Array.from({ length: 33 }, (_, i) => ep({ id: String(i), customerName: `C${i}` }));
+    const { body } = episodeDigest(many);
+    expect(body).toContain("…y 3 más.");
+    expect(body).toContain("C0");
+    expect(body).not.toContain("C31");
   });
 });
