@@ -32,13 +32,14 @@
 - [x] 5.2 Excluir ③ (anuladas) y ④ (administrativas) de embudo/aptitud/no-show (como `DUPLICADA/ERROR`)
 - [x] 5.3 Auditoría por caso para ③ y ④ — se graba en `audit_logs` (actor/fecha/nota); la nota y la fecha del cierre administrativo, y el "fuera de plazo", se ven en el flujo de la cita (timeline). (Visor dedicado de `audit_logs` con el actor: futuro)
 
-## 6. Prevención — avisos (fase posterior)
+## 6. Prevención — avisos
 
-- [ ] 6.1 Cron de **fin de día**: lista episodios abiertos → notifica a médico/recepción/admin
-- [ ] 6.2 (Opcional) indicador de conteo de episodios abiertos en el dashboard de admin
+- [x] 6.1 Cron de **fin de día** (20:00 Europe/Madrid): lista episodios abiertos → **email** al personal (ADMIN + recepción) con email válido. Núcleo puro `episodeDigest` testeado. (`episode-alerts.ts` + `workflow-cron.ts`)
+- [x] 6.2 Indicador in-app: **badge de conteo** en el menú "Reservas" (todo el personal), refresco cada minuto.
+- Nota: WhatsApp/SMS al **personal** queda pendiente — el modelo `User` no tiene teléfono ni preferencias de canal (los consentimientos actuales son del paciente). Requiere un mini-feature de "preferencias de notificación del personal" (migración + ajustes). Documentado para fase posterior.
 
 ## 7. Verificación
 
 - [x] 7.1 `tsc --noEmit` (api + web) y build limpios
-- [x] 7.2 Tests en verde (clasificación + aislamiento en KPIs) — 159 en verde
-- [ ] 7.3 Migración aplicada en Neon (`prisma migrate deploy`) fuera de picos de uso — **acción del usuario**
+- [x] 7.2 Tests en verde (clasificación + aislamiento en KPIs + digest de aviso) — 162 en verde
+- [x] 7.3 Migración aplicada en Neon (`prisma migrate deploy`) — hecha por el usuario ("All migrations have been successfully applied")
