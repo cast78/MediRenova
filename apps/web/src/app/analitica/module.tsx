@@ -62,7 +62,7 @@ function Avatar({ name, muted }: { name: string; muted?: boolean }) {
 interface OccRow { roomId: string; roomName: string; centerId: string; centerName: string; disponibles: number; usados: number; ocupacion: number }
 interface Occupancy { salas: OccRow[]; total: { disponibles: number; usados: number; ocupacion: number } }
 interface SatBucket { bucket: string; demanda: number; capacidad: number; saturacion: number; saturado: boolean }
-interface DoctorRow { doctorId: string; doctorName: string; visitasAtendidas: number; pacientesDistintos: number; apto: number; noApto: number; tasaAptitud: number | null; tiempoMedioMin: number | null }
+interface DoctorRow { doctorId: string; doctorName: string; visitasAtendidas: number; pacientesDistintos: number; apto: number; noApto: number; tasaAptitud: number | null; tiempoMedioMin: number | null; fueraDePlazo: number }
 interface CompRow { id: string; name: string; centerName?: string; reservas: number; atendidas: number; conversion: number; ocupacion: number }
 interface Comparison { porCentro: CompRow[]; porSala: CompRow[] }
 interface VolBucket { bucket: string; reservas: number; visitas: number }
@@ -858,31 +858,86 @@ function SaturacionView({ f }: { f: Filters }) {
 }
 
 // ── Vista: Médicos ───────────────────────────────────────────────────────────
+const APT_LOW = 80, TIME_HIGH = 22; // umbrales de realce (aptitud baja / tiempo alto)
+
 function MedicosView({ f }: { f: Filters }) {
   const { data } = useReport<DoctorRow[]>("doctors", f);
+  const rows = data ?? [];
+  const maxVis = Math.max(1, ...rows.map((r) => r.visitasAtendidas));
+  // Totales / medias para el pie.
+  const totVis = rows.reduce((s, r) => s + r.visitasAtendidas, 0);
+  const totPac = rows.reduce((s, r) => s + r.pacientesDistintos, 0);
+  const totApto = rows.reduce((s, r) => s + r.apto, 0);
+  const totNoApto = rows.reduce((s, r) => s + r.noApto, 0);
+  const totFuera = rows.reduce((s, r) => s + r.fueraDePlazo, 0);
+  const aptGlobal = totApto + totNoApto > 0 ? Math.round((totApto / (totApto + totNoApto)) * 1000) / 10 : null;
+  const tiempos = rows.map((r) => r.tiempoMedioMin).filter((t): t is number => t != null);
+  const tiempoGlobal = tiempos.length ? Math.round(tiempos.reduce((s, t) => s + t, 0) / tiempos.length) : null;
+
   return (
     <Card title="Rendimiento por médico" action={<CsvButton ep="doctors" f={f} />}>
-      {(data?.length ?? 0) === 0 ? empty : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs text-gray-400 border-b border-gray-100">
-              <th className="py-2 font-medium">Médico</th><th className="py-2 font-medium text-right">Visitas</th>
-              <th className="py-2 font-medium text-right">Pacientes</th><th className="py-2 font-medium text-right">Aptitud</th>
-              <th className="py-2 font-medium text-right">Tiempo medio</th>
-            </tr></thead>
-            <tbody>
-              {data!.map((d) => (
-                <tr key={d.doctorId} className="border-b border-gray-50">
-                  <td className="py-2 flex items-center gap-1.5 text-gray-700"><Stethoscope className="w-3.5 h-3.5 text-gray-400" />{d.doctorName}</td>
-                  <td className="py-2 text-right tabular-nums">{d.visitasAtendidas}</td>
-                  <td className="py-2 text-right tabular-nums">{d.pacientesDistintos}</td>
-                  <td className="py-2 text-right tabular-nums">{d.tasaAptitud == null ? "—" : `${d.tasaAptitud}%`}</td>
-                  <td className="py-2 text-right tabular-nums">{d.tiempoMedioMin == null ? "—" : `${d.tiempoMedioMin} min`}</td>
+      {rows.length === 0 ? empty : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead><tr className="text-xs text-gray-400 border-b border-gray-100">
+                <th className="py-2 font-medium text-left">Médico</th>
+                <th className="py-2 font-medium text-right">Carga (visitas)</th>
+                <th className="py-2 font-medium text-right">Pacientes</th>
+                <th className="py-2 font-medium text-right">Aptitud</th>
+                <th className="py-2 font-medium text-right">Fuera de plazo</th>
+                <th className="py-2 font-medium text-right">Tiempo medio</th>
+              </tr></thead>
+              <tbody>
+                {rows.map((d) => {
+                  const revisadas = d.apto + d.noApto;
+                  const aptLow = d.tasaAptitud != null && d.tasaAptitud < APT_LOW;
+                  const timeHigh = d.tiempoMedioMin != null && d.tiempoMedioMin > TIME_HIGH;
+                  const out = aptLow || timeHigh;
+                  return (
+                    <tr key={d.doctorId} className={`border-b border-gray-50 ${out ? "bg-amber-50/60" : ""}`}>
+                      <td className="py-2 pr-2">
+                        <span className="inline-flex items-center gap-2"><Avatar name={d.doctorName} muted={d.visitasAtendidas === 0} /><span className="text-gray-800">{d.doctorName}</span></span>
+                      </td>
+                      <td className="py-2 px-2">
+                        <span className="flex items-center gap-2 justify-end">
+                          <span className="w-20 h-2 bg-gray-100 rounded-full overflow-hidden"><span className="block h-full rounded-full bg-blue-500" style={{ width: `${(d.visitasAtendidas / maxVis) * 100}%` }} /></span>
+                          <span className="w-6 text-right tabular-nums text-gray-800">{d.visitasAtendidas}</span>
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-600">{d.pacientesDistintos}</td>
+                      <td className="py-2 px-2 text-right tabular-nums">
+                        {d.tasaAptitud == null ? <span className="text-gray-300">—</span> : (
+                          <><span className={aptLow ? "text-red-600 font-semibold" : "text-emerald-600"}>{d.tasaAptitud}%</span>
+                          {revisadas > 0 && <span className="text-[11px] text-gray-400 ml-1">· {d.noApto} no apto{d.noApto !== 1 ? "s" : ""}</span>}</>
+                        )}
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums">
+                        {d.fueraDePlazo > 0
+                          ? <span className="inline-block bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 text-xs font-medium">{d.fueraDePlazo}</span>
+                          : <span className="text-gray-300">0</span>}
+                      </td>
+                      <td className={`py-2 pl-2 text-right tabular-nums ${timeHigh ? "text-amber-600 font-medium" : "text-gray-600"}`}>{d.tiempoMedioMin == null ? <span className="text-gray-300">—</span> : `${d.tiempoMedioMin} min`}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-200 font-semibold text-gray-800">
+                  <td className="py-2 pr-2 text-gray-500 font-medium">Total · {rows.length} médico{rows.length !== 1 ? "s" : ""}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{totVis}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{totPac}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{aptGlobal == null ? "—" : <>{aptGlobal}% <span className="text-[11px] text-gray-400 font-normal">medio</span></>}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{totFuera}</td>
+                  <td className="py-2 pl-2 text-right tabular-nums">{tiempoGlobal == null ? "—" : <>{tiempoGlobal} min <span className="text-[11px] text-gray-400 font-normal">medio</span></>}</td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </tfoot>
+            </table>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-3">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-300 align-middle mr-1" /> Fila resaltada = requiere atención · umbrales: aptitud &lt; {APT_LOW}% · tiempo medio &gt; {TIME_HIGH} min. Ordenado por carga.
+          </p>
+        </>
       )}
     </Card>
   );

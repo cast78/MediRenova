@@ -109,7 +109,7 @@ describe("doctorRowsFrom — rendimiento por médico (tarea 4.4)", () => {
   const d = (h: number, m: number) => new Date(`2026-07-13T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00.000Z`);
   const revs: RevInput[] = [
     { doctorId: "d1", customerId: "p1", outcome: "APTO", startedAt: d(9, 0), completedAt: d(9, 15) }, // 15 min
-    { doctorId: "d1", customerId: "p2", outcome: "APTO", startedAt: d(10, 0), completedAt: d(10, 25) }, // 25 min
+    { doctorId: "d1", customerId: "p2", outcome: "APTO", startedAt: d(10, 0), completedAt: d(10, 25), closedLate: true }, // 25 min, tardía
     { doctorId: "d1", customerId: "p1", outcome: "NO_APTO", startedAt: null, completedAt: null }, // sin tiempos
     { doctorId: "d3", customerId: "p3", outcome: "APTO", startedAt: d(11, 0), completedAt: d(11, 10) },
   ];
@@ -118,7 +118,7 @@ describe("doctorRowsFrom — rendimiento por médico (tarea 4.4)", () => {
 
   it("agrega visitas, pacientes distintos, aptitud y tiempo medio", () => {
     const r1 = rows.find((r) => r.doctorId === "d1")!;
-    expect(r1).toMatchObject({ doctorName: "Dra. Uno", visitasAtendidas: 3, pacientesDistintos: 2, apto: 2, noApto: 1, tasaAptitud: 66.7, tiempoMedioMin: 20 });
+    expect(r1).toMatchObject({ doctorName: "Dra. Uno", visitasAtendidas: 3, pacientesDistintos: 2, apto: 2, noApto: 1, tasaAptitud: 66.7, tiempoMedioMin: 20, fueraDePlazo: 1 });
   });
   it("médico sin actividad → ceros y aptitud null (sin división por cero)", () => {
     const r2 = rows.find((r) => r.doctorId === "d2")!;

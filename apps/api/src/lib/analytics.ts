@@ -374,18 +374,21 @@ export async function computeSaturation(scope: AnalyticsScope, f: AnalyticsFilte
 export interface DoctorRow {
   doctorId: string; doctorName: string; visitasAtendidas: number; pacientesDistintos: number;
   apto: number; noApto: number; tasaAptitud: number | null; tiempoMedioMin: number | null;
+  // Revisiones completadas fuera del día de la cita (closedLate): señal de cierre tardío.
+  fueraDePlazo: number;
 }
-export interface RevInput { doctorId: string; customerId: string; outcome: string; startedAt: Date | null; completedAt: Date | null }
+export interface RevInput { doctorId: string; customerId: string; outcome: string; startedAt: Date | null; completedAt: Date | null; closedLate?: boolean }
 
 // NÚCLEO PURO: agrega revisiones por médico. `ids` incluye médicos con actividad
 // cero; `nameOf` resuelve el nombre de cualquier firmante (evita UUIDs crudos).
 export function doctorRowsFrom(ids: string[], revs: RevInput[], nameOf: Map<string, string>): DoctorRow[] {
-  interface Agg { visitas: number; pacientes: Set<string>; apto: number; noApto: number; durSum: number; durN: number }
+  interface Agg { visitas: number; pacientes: Set<string>; apto: number; noApto: number; durSum: number; durN: number; fueraDePlazo: number }
   const byDoc = new Map<string, Agg>();
   for (const r of revs) {
-    const a = byDoc.get(r.doctorId) ?? { visitas: 0, pacientes: new Set(), apto: 0, noApto: 0, durSum: 0, durN: 0 };
+    const a = byDoc.get(r.doctorId) ?? { visitas: 0, pacientes: new Set(), apto: 0, noApto: 0, durSum: 0, durN: 0, fueraDePlazo: 0 };
     a.visitas++; a.pacientes.add(r.customerId);
     if (r.outcome === "APTO") a.apto++; else if (r.outcome === "NO_APTO") a.noApto++;
+    if (r.closedLate) a.fueraDePlazo++;
     if (r.startedAt && r.completedAt) { a.durSum += (r.completedAt.getTime() - r.startedAt.getTime()) / 60_000; a.durN++; }
     byDoc.set(r.doctorId, a);
   }
@@ -399,6 +402,7 @@ export function doctorRowsFrom(ids: string[], revs: RevInput[], nameOf: Map<stri
       apto: a?.apto ?? 0, noApto: a?.noApto ?? 0,
       tasaAptitud: total > 0 ? Math.round(((a!.apto) / total) * 1000) / 10 : null,
       tiempoMedioMin: a && a.durN > 0 ? Math.round((a.durSum / a.durN) * 10) / 10 : null,
+      fueraDePlazo: a?.fueraDePlazo ?? 0,
     };
   }).sort((x, y) => y.visitasAtendidas - x.visitasAtendidas);
 }
@@ -409,7 +413,7 @@ export async function computeDoctors(scope: AnalyticsScope, f: AnalyticsFilters)
     prisma.user.findMany({ where: { ...scope.tenantWhere, role: "DOCTOR" }, select: { id: true } }),
     prisma.revision.findMany({
       where: { ...revisionScopeWhere(scope, f), outcome: { in: ["APTO", "NO_APTO"] }, completedAt: range },
-      select: { doctorId: true, customerId: true, outcome: true, startedAt: true, completedAt: true },
+      select: { doctorId: true, customerId: true, outcome: true, startedAt: true, completedAt: true, closedLate: true },
     }),
   ]);
   const ids = [...new Set<string>([...doctors.map((d) => d.id), ...revs.map((r) => r.doctorId)])];
