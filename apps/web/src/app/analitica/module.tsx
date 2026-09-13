@@ -562,7 +562,9 @@ function Resumen({ f, onDrillCenter, onGoTo }: { f: Filters; onDrillCenter: (id:
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-gray-400 mt-2">Clic en una sala → su centro en Comparativa</p>
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5">
+                <MousePointerClick className="w-3.5 h-3.5 shrink-0" /> Clic en una sala → su centro en Comparativa
+              </div>
             </>
           )}
         </Card>
