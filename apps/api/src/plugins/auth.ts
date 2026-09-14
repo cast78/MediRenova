@@ -27,6 +27,9 @@ async function authPlugin(server: FastifyInstance) {
     // Skip solo el magic-link público (rutas por token, que usa el cliente sin login).
     // `/link/generate` NO se exime: es interno y exige autenticación de staff.
     if (request.url.startsWith("/api/v1/link/") && !request.url.startsWith("/api/v1/link/generate")) return;
+    // Portal del paciente: rutas públicas por token de portal (el propio cliente,
+    // sin login de staff). Cada handler valida el token y filtra por customerId.
+    if (request.url.startsWith("/api/v1/portal/")) return;
     // Documentación OpenAPI/Swagger pública.
     if (request.url.startsWith("/docs")) return;
 
