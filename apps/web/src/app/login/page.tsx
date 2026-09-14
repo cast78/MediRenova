@@ -42,10 +42,12 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-teal-500 px-6 py-5 text-white">
-            <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white/20 mb-2"><Lock className="w-5 h-5" /></div>
-            <h1 className="text-lg font-bold">Accede a tu cuenta</h1>
-            <p className="text-sm text-white/85">Introduce tus credenciales para continuar.</p>
+          <div className="bg-gradient-to-r from-blue-600 to-teal-500 px-6 py-4 text-white">
+            <div className="flex items-center gap-2.5">
+              <div className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-white/20 shrink-0"><Lock className="w-5 h-5" /></div>
+              <h1 className="text-lg font-bold">Accede a tu cuenta</h1>
+            </div>
+            <p className="text-sm text-white/85 mt-1">Introduce tus credenciales para continuar.</p>
           </div>
 
           <div className="p-6">
