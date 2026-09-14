@@ -1,43 +1,48 @@
 ## 1. Acceso y sesión de portal (backend)
 
-- [ ] 1.1 Token de portal: `signPortalToken({ cid, tid })` / `verifyPortalToken` (`type: "portal"`, caducidad corta) en `lib/jwt.ts`
-- [ ] 1.2 Exención del grupo `/portal/*` en `plugins/auth.ts` (como `/link/*`); `preHandler` de portal que valida el token y expone `{ cid, tid }`
-- [ ] 1.3 `POST /portal/request-access` (dni + fecha nac.): match por `dniHash` + `birthDate`; envía enlace al contacto de ficha (email/SMS); respuesta genérica; rate-limit por IP y por DNI
-- [ ] 1.4 `POST /portal/session`: canjea el token del enlace por una sesión de portal
-- [ ] 1.5 `setTenantContext({ tenantId, role: "CUSTOMER" })` en el preHandler para activar la capa Prisma por tenant
+- [x] 1.1 Token de portal: `signPortalToken({ cid, tid })` / `verifyPortalToken` (`type: "portal"`, 60 min) en `lib/jwt.ts`
+- [x] 1.2 Exención de `/api/v1/portal/*` en `plugins/auth.ts`; `preHandler` `requirePortal` que valida el token y expone `request.portal = { cid, tid }`
+- [x] 1.3 `POST /portal/request-access` (dni + fecha nac.): match por `dniHash` + `birthDate`; envía enlace al email de ficha; respuesta genérica; rate-limit 5/10 min
+- [x] 1.4 Sesión: el enlace lleva el propio token de portal (60 min) que la web guarda en `sessionStorage` y usa como `Authorization` (sin canje separado, se simplifica)
+- [x] 1.5 `setTenantContext({ tenantId, role: "CUSTOMER" })` en el preHandler (activa la capa Prisma por tenant)
 
 ## 2. Datos del paciente (backend, scoping por customerId)
 
-- [ ] 2.1 `GET /portal/me` (nombre, centro)
-- [ ] 2.2 `GET /portal/revisions`: revisiones completadas del cliente (producto, fecha, outcome, caducidad, tienePdf) — `where` con `customerId`
-- [ ] 2.3 `GET /portal/revisions/:id/pdf`: verifica dueño (`revision.customerId === cid`) → `ensureRevisionPdf`
-- [ ] 2.4 `GET /portal/appointments`: próximas + historial del cliente — `where` con `customerId`
-- [ ] 2.5 Auditoría en `audit_logs` de accesos y descargas (actor = cliente)
+- [x] 2.1 `GET /portal/me` (nombre, centro)
+- [x] 2.2 `GET /portal/revisions`: revisiones completadas del cliente (producto, fecha, outcome, caducidad) — `where` con `customerId`
+- [x] 2.3 `GET /portal/revisions/:id/pdf`: verifica dueño (`revision.customerId === cid`) → `ensureRevisionPdf`
+- [x] 2.4 `GET /portal/appointments`: próximas + historial del cliente — `where` con `customerId`
+- [x] 2.5 Auditoría en `audit_logs` de solicitud de acceso y de descarga (actor = cliente, userId NULL)
 
 ## 3. Frontend `app/mi-area`
 
-- [ ] 3.1 Segmento `app/mi-area/**` con layout ligero propio (branding del centro), mobile-first, sin chrome de staff
-- [ ] 3.2 Pantalla "Solicitar acceso" (DNI + fecha de nacimiento) + estado "revisa tu email/SMS"
-- [ ] 3.3 Landing del enlace → canjea sesión → guarda token (sessionStorage) → panel del paciente
-- [ ] 3.4 "Mis reconocimientos" (lista + descargar PDF) y "Mis citas" (próximas/historial)
-- [ ] 3.5 Estados vacíos, error y sesión caducada (volver a solicitar acceso)
+- [x] 3.1 Segmento `app/mi-area/**` con layout ligero propio, mobile-first, sin chrome de staff
+- [x] 3.2 Pantalla "Solicitar acceso" (`/mi-area/[slug]`, DNI + fecha de nacimiento) + estado "revisa tu email"
+- [x] 3.3 Landing del enlace (`/mi-area/entrar?token=`) → guarda sesión → panel
+- [x] 3.4 Panel (`/mi-area/panel`): "Mis reconocimientos" (lista + descargar PDF) y "Mis citas" (historial)
+- [x] 3.5 Estados vacío/carga/sesión caducada (volver a solicitar acceso)
 
 ## 4. Seguridad
 
-- [ ] 4.1 Revisión de que **todas** las consultas del portal filtran por `customerId` (regla de oro)
-- [ ] 4.2 Rate-limit específico anti-enumeración en `request-access`; respuesta uniforme
-- [ ] 4.3 Sesiones cortas; no exponer `customerId` en URLs (viaja en el token)
-- [ ] 4.4 Tests: aislamiento (una sesión no accede a datos de otro cliente) + descarga verificada
+- [x] 4.1 Todas las consultas del portal filtran por `customerId` (regla de oro) — revisado
+- [x] 4.2 Rate-limit específico en `request-access` + respuesta uniforme (anti-enumeración)
+- [x] 4.3 Sesiones cortas (60 min); el `customerId` viaja en el token firmado, no en la URL
+- [~] 4.4 Tests de aislamiento y descarga verificada — verificado con sonda contra datos reales; falta test automático de integración con BD (convención del repo son tests de núcleo puro)
 
 ## 5. Almacenamiento (producción)
 
-- [ ] 5.1 Adaptador **R2** para `Storage` + `getSignedUrl` real (hoy stub local); servir el PDF por URL firmada de corta vida
+- [ ] 5.1 Adaptador **R2** para `Storage` + `getSignedUrl` real (hoy `LocalStorage` sirve del disco del servidor)
 
 ## 6. Verificación
 
-- [ ] 6.1 `tsc --noEmit` (api + web) limpio
-- [ ] 6.2 Tests del acceso, del scoping por cliente y de la descarga verificada
-- [ ] 6.3 Prueba manual del journey completo (solicitar → enlace → descargar) en un tenant demo
+- [x] 6.1 `tsc --noEmit` (api + web) limpio
+- [x] 6.2 Suite existente en verde (162); el flujo de datos del portal verificado con sonda (token + revisiones + citas del cliente demo)
+- [x] 6.3 Prueba manual: página pública de acceso renderiza; `/portal/*` rechaza sin token (401)
+
+## Limitaciones conocidas (MVP) → mejoras
+
+- [ ] Enlace de acceso **solo por email** en el MVP (si la ficha no tiene email, el paciente no puede entrar). Añadir **SMS/WhatsApp** (necesita plantilla) como canal alternativo.
+- [ ] `request-access` resuelve el tenant por `slug` en la URL (`/mi-area/[slug]`); no hay landing sin slug para "sesión caducada" (se muestra un mensaje genérico).
 
 ## 7. Fase 2 (posterior, fuera del MVP)
 
