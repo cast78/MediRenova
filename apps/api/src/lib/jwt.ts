@@ -59,3 +59,24 @@ export function verifyMagicLinkToken(token: string): MagicLinkPayload {
   if (payload.type !== "magic_link") throw new Error("Invalid token type");
   return payload;
 }
+
+// ── Portal del paciente ───────────────────────────────────────────────────────
+// Sesión del área privada del cliente (multi-recurso: sus revisiones, sus citas),
+// a diferencia del magic-link que es de un solo propósito. Vida corta.
+export interface PortalTokenPayload {
+  cid: string;   // customer_id
+  tid: string;   // tenant_id
+  type: "portal";
+  iat?: number;
+  exp?: number;
+}
+
+export function signPortalToken(payload: Omit<PortalTokenPayload, "iat" | "exp" | "type">): string {
+  return jwt.sign({ ...payload, type: "portal" }, secret, { algorithm: "HS256", expiresIn: "60m" });
+}
+
+export function verifyPortalToken(token: string): PortalTokenPayload {
+  const payload = jwt.verify(token, secret, { algorithms: ["HS256"] }) as PortalTokenPayload;
+  if (payload.type !== "portal") throw new Error("Invalid token type");
+  return payload;
+}
