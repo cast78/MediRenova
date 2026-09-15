@@ -93,13 +93,20 @@ type Tab = "templates" | "segments" | "campaigns";
 export default function CampaignsPage() {
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>("campaigns");
+  const [creatingCampaign, setCreatingCampaign] = useState(false); // botón "Nueva campaña" en el encabezado
 
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPERADMIN";
 
   return (
     <div className="p-6 max-w-5xl">
-      <div className="mb-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
         <PageHeader page="campanas" />
+        {isAdmin && tab === "campaigns" && (
+          <button onClick={() => setCreatingCampaign(true)}
+            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm transition-colors shrink-0">
+            + Nueva campaña
+          </button>
+        )}
       </div>
 
       {/* Sub-vistas — fila propia bajo el encabezado */}
@@ -121,7 +128,7 @@ export default function CampaignsPage() {
       ) : tab === "segments" ? (
         <SegmentsTab />
       ) : (
-        <CampaignsTab />
+        <CampaignsTab creating={creatingCampaign} setCreating={setCreatingCampaign} />
       )}
     </div>
   );
@@ -770,9 +777,8 @@ const SVIZ: Record<CampaignRow["status"], { icon: typeof Clock; circle: string; 
 };
 const CHANNEL_ICON: Record<Channel, typeof Mail> = { EMAIL: Mail, WHATSAPP: MessageCircle, SMS: MessageSquare };
 
-function CampaignsTab() {
+function CampaignsTab({ creating, setCreating }: { creating: boolean; setCreating: (v: boolean) => void }) {
   const qc = useQueryClient();
-  const [creating, setCreating] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [confirmSend, setConfirmSend] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -873,13 +879,7 @@ function CampaignsTab() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">Envía una plantilla a un segmento. El envío respeta el consentimiento por canal.</p>
-        <button onClick={() => setCreating(true)}
-          className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm transition-colors shrink-0">
-          + Nueva campaña
-        </button>
-      </div>
+      <p className="text-sm text-gray-500 mb-4">Envía una plantilla a un segmento. El envío respeta el consentimiento por canal.</p>
 
       {isLoading ? (
         <p className="text-sm text-gray-400">Cargando…</p>
