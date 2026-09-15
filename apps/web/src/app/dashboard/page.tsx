@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   ArrowRight,
   ChevronRight,
+  LayoutDashboard,
 } from "lucide-react";
 import {
   BarChart,
@@ -164,7 +165,15 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 max-w-5xl space-y-5">
-      <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-teal-500 text-white flex items-center justify-center shadow-sm shrink-0">
+          <LayoutDashboard className="w-5 h-5" strokeWidth={2} />
+        </div>
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 leading-tight">Dashboard</h1>
+          <p className="text-sm text-gray-500">Resumen operativo de tu centro</p>
+        </div>
+      </div>
 
       {/* KPIs operativos */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
