@@ -1014,11 +1014,11 @@ function EpisodeRow({ ep, role, onOpen, onChanged }: { ep: Episode; role: string
         </div>
       </div>
       <div className="shrink-0 flex items-center gap-2">
-        <button onClick={() => onOpen(ep)} title="Ver el flujo de la cita" className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">Ver flujo</button>
+        <button onClick={() => onOpen(ep)} title="Ver el flujo de la cita" className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium">Ver flujo</button>
         {hasRevision && (
           <button onClick={() => router.push(`/revisions/${ep.revision!.id}`)} className="text-xs px-2.5 py-1.5 rounded-lg border border-violet-200 text-violet-700 hover:bg-violet-50 font-medium">Ver revisión</button>
         )}
-        <button disabled={!!busy} onClick={() => setConfirm("left")} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 font-medium">Se fue</button>
+        <button disabled={!!busy} onClick={() => setConfirm("left")} className="text-xs px-2.5 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-50 font-medium">Se fue</button>
         {canReception && !hasRevision && (
           <button disabled={!!busy} onClick={() => setConfirm("void")} className="text-xs px-2.5 py-1.5 rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 disabled:opacity-50 font-medium">Anular</button>
         )}
