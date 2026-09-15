@@ -17,7 +17,7 @@ import {
 import {
   TrendingUp, TrendingDown, Percent, DoorOpen, Gauge, UserX, Download, AlertTriangle, ChevronRight, Stethoscope,
   UserPlus, Users, Send, CheckCircle, Building2, Package, ChevronDown, X, Calendar, Info, MousePointerClick,
-  Mail, MessageCircle, MessageSquare,
+  Mail, MessageCircle, MessageSquare, BarChart3,
 } from "lucide-react";
 
 // ── Tipos que devuelve la API ────────────────────────────────────────────────
@@ -335,7 +335,15 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
   return (
     <div className="p-6 max-w-6xl space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-teal-50 border border-blue-100/70 text-blue-600 flex items-center justify-center shrink-0">
+            {mod === "gestion" ? <BarChart3 className="w-5 h-5" strokeWidth={2} /> : <UserPlus className="w-5 h-5" strokeWidth={2} />}
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-gray-900 leading-tight">{title}</h1>
+            <p className="text-xs text-gray-500 mt-0.5">{mod === "gestion" ? "Operación, ocupación y rendimiento" : "Altas, campañas y conversión"}</p>
+          </div>
+        </div>
         {isSuper && (
           <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden text-xs">
             {([["tenant", "Empresa actual"], ["all", "Plataforma (todas)"]] as const).map(([v, l]) => (

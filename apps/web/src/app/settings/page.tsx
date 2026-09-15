@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError, authHeaders } from "@/lib/api";
@@ -497,8 +498,7 @@ export default function SettingsPage() {
   return (
     <div className="p-6 max-w-5xl">
       <div className="mb-5">
-        <h1 className="text-xl font-bold text-gray-900">Configuración</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{tenant?.name}{tenant?.slug ? ` · ${tenant.slug}` : ""}</p>
+        <PageHeader page="configuracion" />
       </div>
 
       {/* Pestañas */}

@@ -18,6 +18,7 @@ const SHOW_FULL_NAMES = false;
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { HeartPulse } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -181,6 +182,13 @@ function Monitor() {
       {/* Cabecera: centro + en directo (izq) · reloj y fecha (der) */}
       <header className="flex items-center justify-between gap-4 px-8 pt-6 pb-4">
         <div className="flex items-center gap-5 min-w-0">
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-600 to-teal-500 flex items-center justify-center shadow-sm">
+              <HeartPulse className="w-6 h-6 text-white" strokeWidth={2.2} />
+            </div>
+            <span className="text-2xl font-bold tracking-tight hidden md:block">MediRenova</span>
+          </div>
+          <span className="w-px h-9 bg-slate-700 hidden md:block" />
           <h1 className="text-3xl font-semibold truncate">{centerName || "Monitor de sala"}</h1>
           <span className="inline-flex items-center gap-2 text-sm text-slate-400 whitespace-nowrap">
             <span className={`w-2.5 h-2.5 rounded-full ${isFetching ? "bg-emerald-400 animate-pulse" : "bg-slate-600"}`} />

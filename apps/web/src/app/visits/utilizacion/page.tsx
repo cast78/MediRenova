@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -233,14 +234,8 @@ export default function UtilizationPage() {
   return (
     <div className="p-6 max-w-5xl">
       {/* Fila superior: título + pestañas (izq) · fecha (der) */}
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
-        <div className="flex items-center gap-4 flex-wrap">
-          <h1 className="text-xl font-semibold text-gray-900">Visitas</h1>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-            <button onClick={() => router.push("/visits")} className="px-3 py-1.5 text-sm rounded-md font-medium text-gray-500 hover:text-gray-700">Gestión</button>
-            <button className="px-3 py-1.5 text-sm rounded-md font-medium bg-white shadow-sm text-gray-900">Utilización</button>
-          </div>
-        </div>
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+        <PageHeader page="visitas" />
         <div className="flex items-center gap-2.5">
           {listMode === "hoy" ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
@@ -260,6 +255,12 @@ export default function UtilizationPage() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Sub-vistas: Gestión / Utilización — fila propia bajo el encabezado */}
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-5">
+        <button onClick={() => router.push("/visits")} className="px-5 py-1.5 text-sm rounded-md font-medium text-gray-500 hover:text-gray-700">Gestión</button>
+        <button className="px-5 py-1.5 text-sm rounded-md font-medium bg-white shadow-sm text-gray-900">Utilización</button>
       </div>
 
       {/* Filtros: Día/Estado/Paciente (izq) · Sala (der, misma posición que Reservas) */}

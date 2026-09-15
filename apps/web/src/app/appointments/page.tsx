@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, Suspense } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -1013,11 +1014,11 @@ function EpisodeRow({ ep, role, onOpen, onChanged }: { ep: Episode; role: string
         </div>
       </div>
       <div className="shrink-0 flex items-center gap-2">
-        <button onClick={() => onOpen(ep)} title="Ver el flujo de la cita" className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">Ver flujo</button>
+        <button onClick={() => onOpen(ep)} title="Ver el flujo de la cita" className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium">Ver flujo</button>
         {hasRevision && (
           <button onClick={() => router.push(`/revisions/${ep.revision!.id}`)} className="text-xs px-2.5 py-1.5 rounded-lg border border-violet-200 text-violet-700 hover:bg-violet-50 font-medium">Ver revisión</button>
         )}
-        <button disabled={!!busy} onClick={() => setConfirm("left")} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 font-medium">Se fue</button>
+        <button disabled={!!busy} onClick={() => setConfirm("left")} className="text-xs px-2.5 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-50 font-medium">Se fue</button>
         {canReception && !hasRevision && (
           <button disabled={!!busy} onClick={() => setConfirm("void")} className="text-xs px-2.5 py-1.5 rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50 disabled:opacity-50 font-medium">Anular</button>
         )}
@@ -1313,7 +1314,7 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
   const isToday = appt.scheduledAt.slice(0, 10) === todayStr; // la cita es HOY
   const name = `${appt.customer?.firstName ?? ""} ${appt.customer?.lastName ?? ""}`.trim() || "Sin nombre";
   const dateLabel = new Date(`${appt.scheduledAt.slice(0, 10)}T00:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
-  const btn = "text-sm px-3 py-2 rounded-lg border transition-colors";
+  const btn = "text-sm px-3 py-2 rounded-lg border transition-colors font-medium";
   // "No presentó" solo si: confirmada, SIN visita (si hizo check-in, sí vino) y ya
   // pasó su hora (comparación en hora de pared, convenio naïve del sistema).
   const canMarkNoShow = status === "CONFIRMED" && !appt.visit && appt.scheduledAt <= naiveNowIso();
@@ -1451,8 +1452,8 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
             )}
             <div className="grid grid-cols-2 gap-2">
               {status === "PENDING" && !appt.visit && <button disabled={busy} onClick={() => patch({ status: "CONFIRMED" })} className={`${btn} border-emerald-200 text-emerald-700 hover:bg-emerald-50`}>Confirmar</button>}
-              {(status === "PENDING" || status === "CONFIRMED") && !appt.visit && <button disabled={busy} onClick={() => { setRDate(appt.scheduledAt.slice(0, 10) > todayStr ? appt.scheduledAt.slice(0, 10) : todayStr); setMode("reschedule"); setError(null); }} className={`${btn} border-gray-200 text-gray-700 hover:bg-gray-50`}>Reprogramar</button>}
-              {canMarkNoShow && <button disabled={busy} onClick={() => patch({ status: "NO_SHOW" })} className={`${btn} border-gray-200 text-gray-600 hover:bg-gray-50`}>No presentó</button>}
+              {(status === "PENDING" || status === "CONFIRMED") && !appt.visit && <button disabled={busy} onClick={() => { setRDate(appt.scheduledAt.slice(0, 10) > todayStr ? appt.scheduledAt.slice(0, 10) : todayStr); setMode("reschedule"); setError(null); }} className={`${btn} border-blue-200 text-blue-700 hover:bg-blue-50 font-medium`}>Reprogramar</button>}
+              {canMarkNoShow && <button disabled={busy} onClick={() => patch({ status: "NO_SHOW" })} className={`${btn} border-orange-200 text-orange-700 hover:bg-orange-50 font-medium`}>No presentó</button>}
               {status === "PENDING" && !isPast && !appt.visit && (
                 <button disabled={busy} onClick={askConfirmation} className={`${btn} border-blue-200 text-blue-700 hover:bg-blue-50 col-span-2 inline-flex items-center justify-center gap-1.5`}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
@@ -1675,39 +1676,38 @@ function AppointmentsBoard() {
       {confirmErr && <div onClick={() => setConfirmErr(null)} className="fixed top-4 right-4 z-[70] bg-red-600 text-white text-sm px-4 py-2 rounded-lg shadow cursor-pointer">{confirmErr}</div>}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4 flex-wrap">
-          <h1 className="text-xl font-bold text-gray-900">Reservas</h1>
-          {/* View tabs */}
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm bg-white shadow-sm">
-            {(["month", "week", "day", "list", "sincerrar", "episodios"] as const).map((v) => {
-              const labels = { month: "Mes", week: "Semana", day: "Día", list: "Agenda", sincerrar: "Sin cerrar", episodios: "Episodios" };
-              const badge = v === "sincerrar" ? unclosedCount : v === "episodios" ? episodesCount : 0;
-              return (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className={`px-3.5 py-1.5 font-medium transition-colors inline-flex items-center gap-1.5 ${
-                    view === v
-                      ? "bg-blue-600 text-white"
-                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-                  }`}
-                >
-                  {labels[v]}
-                  {badge > 0 && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${view === v ? "bg-white/25 text-white" : "bg-amber-100 text-amber-700"}`}>{badge}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+        <PageHeader page="reservas" />
         <button
           onClick={() => setShowModal(true)}
           className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm transition-colors"
         >
           + Nueva reserva
         </button>
+      </div>
+
+      {/* View tabs — fila propia bajo el encabezado (estilo píldora, como Visitas/Campañas) */}
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit max-w-full overflow-x-auto mb-6">
+        {(["month", "week", "day", "list", "sincerrar", "episodios"] as const).map((v) => {
+          const labels = { month: "Mes", week: "Semana", day: "Día", list: "Agenda", sincerrar: "Sin cerrar", episodios: "Episodios" };
+          const badge = v === "sincerrar" ? unclosedCount : v === "episodios" ? episodesCount : 0;
+          return (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-5 py-1.5 text-sm rounded-md font-medium transition-colors inline-flex items-center gap-1.5 whitespace-nowrap ${
+                view === v
+                  ? "bg-white shadow-sm text-gray-900"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {labels[v]}
+              {badge > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">{badge}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Date nav + filters row (la vista Semana lleva su propia navegación) */}

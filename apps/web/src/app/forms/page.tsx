@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
@@ -54,8 +55,7 @@ export default function FormsPage() {
     <div className="p-6 max-w-5xl">
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Formularios</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Diseña los formularios de revisión por producto</p>
+          <PageHeader page="formularios" />
         </div>
         <div className="flex items-center gap-2.5">
           <select value={pid} onChange={(e) => { setProductId(e.target.value); setBuilder(null); }}
