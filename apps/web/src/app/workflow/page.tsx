@@ -247,7 +247,6 @@ export default function WorkflowPage() {
       <div className="flex items-center justify-between mb-5">
         <div>
           <PageHeader page="workflow" />
-          <p className="text-xs text-gray-400 mt-0.5">Avisos de renovación que se envían solos según la caducidad</p>
         </div>
         <button onClick={() => setShowNew(true)} disabled={activeProducts.length === 0}
           className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium disabled:opacity-50 inline-flex items-center gap-1.5">

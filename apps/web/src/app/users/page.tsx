@@ -173,7 +173,6 @@ export default function UsersPage() {
       <div className="flex items-start justify-between mb-5 gap-3 flex-wrap">
         <div>
           <PageHeader page="equipo" />
-          <p className="text-xs text-gray-400 mt-0.5">Usuarios del backoffice: admins, BackOffice por centro y médicos</p>
         </div>
         <button onClick={() => setShowNew(true)} className="px-3.5 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium inline-flex items-center gap-1.5 shrink-0">
           <UserPlus className="w-4 h-4" /> Nuevo usuario

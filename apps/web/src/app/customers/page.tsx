@@ -116,7 +116,6 @@ export default function CustomersPage() {
       <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
         <div>
           <PageHeader page="clientes" />
-          <p className="text-xs text-gray-400 mt-0.5">Base de pacientes y su contactabilidad</p>
         </div>
         <div className="flex items-center gap-2.5">
           <div className="relative w-64 max-w-[60vw]">

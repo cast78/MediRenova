@@ -56,7 +56,6 @@ export default function FormsPage() {
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <div>
           <PageHeader page="formularios" />
-          <p className="text-xs text-gray-400 mt-0.5">Diseña los formularios de revisión por producto</p>
         </div>
         <div className="flex items-center gap-2.5">
           <select value={pid} onChange={(e) => { setProductId(e.target.value); setBuilder(null); }}
