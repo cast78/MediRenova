@@ -1686,8 +1686,8 @@ function AppointmentsBoard() {
         </button>
       </div>
 
-      {/* View tabs — fila propia bajo el encabezado */}
-      <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm bg-white shadow-sm w-fit max-w-full overflow-x-auto mb-6">
+      {/* View tabs — fila propia bajo el encabezado (estilo píldora, como Visitas/Campañas) */}
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit max-w-full overflow-x-auto mb-6">
         {(["month", "week", "day", "list", "sincerrar", "episodios"] as const).map((v) => {
           const labels = { month: "Mes", week: "Semana", day: "Día", list: "Agenda", sincerrar: "Sin cerrar", episodios: "Episodios" };
           const badge = v === "sincerrar" ? unclosedCount : v === "episodios" ? episodesCount : 0;
@@ -1695,15 +1695,15 @@ function AppointmentsBoard() {
             <button
               key={v}
               onClick={() => setView(v)}
-              className={`px-3.5 py-1.5 font-medium transition-colors inline-flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors inline-flex items-center gap-1.5 whitespace-nowrap ${
                 view === v
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                  ? "bg-white shadow-sm text-gray-900"
+                  : "text-gray-500 hover:text-gray-700"
               }`}
             >
               {labels[v]}
               {badge > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${view === v ? "bg-white/25 text-white" : "bg-amber-100 text-amber-700"}`}>{badge}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">{badge}</span>
               )}
             </button>
           );
