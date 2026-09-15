@@ -3,6 +3,17 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  ClipboardPlus,
+  NotebookPen,
+  Paperclip,
+  PenLine,
+  CheckCircle2,
+  XCircle,
+  Circle,
+  CalendarClock,
+} from "lucide-react";
 import { apiFetch, ApiError, authHeaders } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -611,235 +622,321 @@ export default function RevisionPage() {
     if (miss.length === 0) { setError(null); complete.mutate(); }
   }
 
+  // Checklist de obligatorios para el panel lateral (refleja computeMissing).
+  const requiredChecklist = [
+    ...fields
+      .filter((f) => f.required)
+      .map((f) => {
+        const label = f.label || f.name;
+        let done: boolean;
+        if (f.type === "image") done = allAttachments.some((a) => a.fieldId === f.name);
+        else if (f.type === "boolean") done = true;
+        else {
+          const v = formData[f.name];
+          done = !(v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0));
+        }
+        return { label, done };
+      }),
+    { label: "Nota clínica", done: !!notes.trim() },
+    { label: "Firma del paciente", done: !!signatureAtt },
+  ];
+  const doneCount = requiredChecklist.filter((c) => c.done).length;
+  const totalCount = requiredChecklist.length;
+  const progressPct = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
+
+  const inputBase =
+    "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50";
+
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-6 max-w-5xl">
       {/* Back + header */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-600 text-sm">← Volver</button>
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">
-            Revisión — {appointment.customer.firstName} {appointment.customer.lastName}
+        <button
+          onClick={() => router.back()}
+          aria-label="Volver"
+          className="w-9 h-9 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center justify-center shrink-0"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-teal-50 border border-blue-100/70 text-blue-600 flex items-center justify-center shrink-0">
+          <ClipboardPlus className="w-5 h-5" strokeWidth={2} />
+        </div>
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold text-gray-900 leading-tight truncate">
+            Revisión · {appointment.customer.firstName} {appointment.customer.lastName}
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <p className="text-xs text-gray-500 mt-0.5">
             {appointment.product.name} · {new Date(appointment.scheduledAt).toLocaleDateString("es-ES")}
           </p>
         </div>
-        {isCompleted && (
-          <span className={`ml-auto text-xs px-3 py-1 rounded-full font-medium ${revision.outcome === "APTO" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-            {revision.outcome === "APTO" ? "✓ Apto" : "✗ No apto"}
-          </span>
-        )}
+        <span
+          className={`ml-auto text-xs px-3 py-1 rounded-full font-medium shrink-0 ${
+            !isCompleted
+              ? "bg-amber-100 text-amber-700"
+              : revision.outcome === "APTO"
+                ? "bg-green-100 text-green-700"
+                : "bg-red-100 text-red-700"
+          }`}
+        >
+          {!isCompleted ? "Pendiente" : revision.outcome === "APTO" ? "✓ Apto" : "✗ No apto"}
+        </span>
       </div>
 
-      {/* Patient summary */}
-      <div className="bg-blue-50 rounded-xl px-5 py-4 mb-5 grid grid-cols-2 gap-2 text-sm">
-        <div>
-          <span className="text-blue-400 text-xs">Paciente</span>
-          <p className="font-medium text-gray-900">{appointment.customer.firstName} {appointment.customer.lastName}</p>
-        </div>
-        <div>
-          <span className="text-blue-400 text-xs">Fecha nacimiento</span>
-          <p className="text-gray-700">
-            {appointment.customer.birthDate
-              ? new Date(appointment.customer.birthDate).toLocaleDateString("es-ES")
-              : "—"}
-          </p>
-        </div>
-        <div>
-          <span className="text-blue-400 text-xs">Teléfono</span>
-          <p className="text-gray-700">{appointment.customer.phone ?? "—"}</p>
-        </div>
-        <div>
-          <span className="text-blue-400 text-xs">Formulario</span>
-          <p className="text-gray-700">{formTemplate.name}</p>
-        </div>
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-5 items-start">
+        {/* ── Columna izquierda: datos ─────────────────────────────── */}
+        <div className="space-y-5">
+          {/* Patient summary */}
+          <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div>
+              <span className="text-gray-400 text-xs">Paciente</span>
+              <p className="font-medium text-gray-900">{appointment.customer.firstName} {appointment.customer.lastName}</p>
+            </div>
+            <div>
+              <span className="text-gray-400 text-xs">Fecha nacimiento</span>
+              <p className="text-gray-700">
+                {appointment.customer.birthDate
+                  ? new Date(appointment.customer.birthDate).toLocaleDateString("es-ES")
+                  : "—"}
+              </p>
+            </div>
+            <div>
+              <span className="text-gray-400 text-xs">Teléfono</span>
+              <p className="text-gray-700">{appointment.customer.phone ?? "—"}</p>
+            </div>
+            <div>
+              <span className="text-gray-400 text-xs">Formulario</span>
+              <p className="text-gray-700">{formTemplate.name}</p>
+            </div>
+          </div>
 
-      {/* Form */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-medium text-gray-900">Datos de la exploración</h2>
-          {!isCompleted && saveMsg && (
-            <span className="text-xs text-green-600">{saveMsg}</span>
-          )}
-        </div>
-
-        {fields.length === 0 && (
-          <p className="text-sm text-gray-400">Este formulario no tiene campos definidos.</p>
-        )}
-
-        <div className="space-y-4">
-          {fields.map((field) => (
-            <div key={field.name}>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                {field.label}
-                {field.required && <span className="text-red-500 ml-1">*</span>}
-              </label>
-              {field.type === "image" ? (
-                <ImageField
-                  revisionId={id}
-                  fieldName={field.name}
-                  attachment={allAttachments.find((a) => a.fieldId === field.name)}
-                  disabled={isCompleted}
-                  uploading={uploadingField === field.name}
-                  onUpload={(fn, blob, name) => void uploadFieldImage(fn, blob, name)}
-                  onDelete={(aid) => void deleteAttachment(aid)}
-                />
-              ) : (
-                <DynamicField
-                  field={field}
-                  value={formData[field.name]}
-                  onChange={(v) => handleFieldChange(field.name, v)}
-                  disabled={isCompleted}
-                />
+          {/* Exploración */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-medium text-gray-900">Datos de la exploración</h2>
+              {!isCompleted && saveMsg && (
+                <span className="text-xs text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> {saveMsg}
+                </span>
               )}
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Attachments */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-medium text-gray-900">Adjuntos</h2>
-          {!isCompleted && (
-            <label className={`text-xs px-3 py-1.5 rounded-lg cursor-pointer font-medium ${uploading ? "bg-gray-100 text-gray-400" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
-              {uploading ? "Subiendo..." : "+ Añadir foto/PDF"}
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                multiple
-                disabled={uploading}
-                className="hidden"
-                onChange={(e) => { void uploadFiles(e.target.files); e.target.value = ""; }}
-              />
+            {fields.length === 0 ? (
+              <p className="text-sm text-gray-400">Este formulario no tiene campos definidos.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {fields.map((field) => {
+                  const wide = field.type === "textarea" || field.type === "image";
+                  return (
+                    <div key={field.name} className={wide ? "sm:col-span-2" : ""}>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        {field.label}
+                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                      </label>
+                      {field.type === "image" ? (
+                        <ImageField
+                          revisionId={id}
+                          fieldName={field.name}
+                          attachment={allAttachments.find((a) => a.fieldId === field.name)}
+                          disabled={isCompleted}
+                          uploading={uploadingField === field.name}
+                          onUpload={(fn, blob, name) => void uploadFieldImage(fn, blob, name)}
+                          onDelete={(aid) => void deleteAttachment(aid)}
+                        />
+                      ) : (
+                        <DynamicField
+                          field={field}
+                          value={formData[field.name]}
+                          onChange={(v) => handleFieldChange(field.name, v)}
+                          disabled={isCompleted}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Nota clínica */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <label className="flex items-center gap-2 font-medium text-gray-900 mb-3">
+              <NotebookPen className="w-4 h-4 text-gray-500" />
+              Nota clínica <span className="text-red-500">*</span>
             </label>
+            <textarea
+              value={notes}
+              onChange={(e) => { setNotes(e.target.value); setMissing([]); }}
+              disabled={isCompleted}
+              rows={4}
+              placeholder="Observaciones, restricciones, recomendaciones..."
+              className={`${inputBase} resize-none`}
+            />
+          </div>
+
+          {/* Adjuntos */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="flex items-center gap-2 font-medium text-gray-900">
+                <Paperclip className="w-4 h-4 text-gray-500" />
+                Adjuntos
+              </h2>
+              {!isCompleted && (
+                <label className={`text-xs px-3 py-1.5 rounded-lg cursor-pointer font-medium ${uploading ? "bg-gray-100 text-gray-400" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
+                  {uploading ? "Subiendo..." : "+ Añadir foto/PDF"}
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    multiple
+                    disabled={uploading}
+                    className="hidden"
+                    onChange={(e) => { void uploadFiles(e.target.files); e.target.value = ""; }}
+                  />
+                </label>
+              )}
+            </div>
+            {generalAttachments.length === 0 ? (
+              <p className="text-sm text-gray-400">Sin adjuntos.</p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {generalAttachments.map((att) => (
+                  <AttachmentThumb
+                    key={att.id}
+                    revisionId={id}
+                    att={att}
+                    onDelete={(aid) => void deleteAttachment(aid)}
+                    canDelete={!isCompleted}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Firma */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="flex items-center gap-2 font-medium text-gray-900 mb-4">
+              <PenLine className="w-4 h-4 text-gray-500" />
+              Firma del paciente <span className="text-red-500">*</span>
+            </h2>
+            {signatureAtt ? (
+              <div className="flex items-start gap-4">
+                <AttachmentThumb
+                  revisionId={id}
+                  att={signatureAtt}
+                  onDelete={(aid) => void deleteAttachment(aid)}
+                  canDelete={!isCompleted}
+                />
+                {!isCompleted && <p className="text-xs text-gray-400 pt-1">Firma guardada. Bórrala para volver a firmar.</p>}
+              </div>
+            ) : isCompleted ? (
+              <p className="text-sm text-gray-400">Sin firma registrada.</p>
+            ) : (
+              <SignaturePad onSave={(blob) => void uploadSignature(blob)} saving={savingSig} />
+            )}
+          </div>
+        </div>
+
+        {/* ── Columna derecha: desenlace + finalizar (sticky) ──────── */}
+        <div className="space-y-5 lg:sticky lg:top-6">
+          {!isCompleted ? (
+            <>
+              {/* Desenlace */}
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <h2 className="font-medium text-gray-900 mb-3">Desenlace</h2>
+                <div className="space-y-2.5">
+                  <button
+                    onClick={() => setOutcome("APTO")}
+                    className={`w-full flex items-center gap-2.5 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${outcome === "APTO" ? "border-2 border-green-500 bg-green-50 text-green-700" : "border border-gray-200 text-gray-500 hover:border-green-300"}`}
+                  >
+                    <CheckCircle2 className="w-5 h-5" /> Apto
+                  </button>
+                  <button
+                    onClick={() => setOutcome("NO_APTO")}
+                    className={`w-full flex items-center gap-2.5 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${outcome === "NO_APTO" ? "border-2 border-red-500 bg-red-50 text-red-700" : "border border-gray-200 text-gray-500 hover:border-red-300"}`}
+                  >
+                    <XCircle className="w-5 h-5" /> No apto
+                  </button>
+                </div>
+              </div>
+
+              {/* Checklist + Finalizar */}
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-900">Obligatorios</span>
+                  <span className="text-sm text-gray-500">{doneCount} / {totalCount}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mb-3.5">
+                  <div className="h-full bg-blue-600 transition-all" style={{ width: `${progressPct}%` }} />
+                </div>
+                <ul className="space-y-2 mb-4">
+                  {requiredChecklist.map((c) => (
+                    <li key={c.label} className="flex items-center gap-2 text-xs">
+                      {c.done ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                      ) : (
+                        <Circle className="w-4 h-4 text-gray-300 shrink-0" />
+                      )}
+                      <span className={c.done ? "text-gray-500" : "text-gray-900"}>{c.label}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {missing.length > 0 && (
+                  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                    <p className="text-xs font-medium text-amber-800 mb-1">Faltan datos para finalizar:</p>
+                    <ul className="text-xs text-amber-700 list-disc list-inside space-y-0.5">
+                      {missing.map((m) => <li key={m}>{m}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+
+                <button
+                  onClick={handleComplete}
+                  disabled={complete.isPending}
+                  className="w-full py-3 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {complete.isPending ? "Finalizando..." : "Finalizar revisión"}
+                </button>
+              </div>
+            </>
+          ) : (
+            /* Resumen (solo lectura) */
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h2 className="font-medium text-gray-900 mb-4">Resultado</h2>
+              <div className="space-y-2.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Dictamen</span>
+                  <span className={`font-medium ${revision.outcome === "APTO" ? "text-green-600" : "text-red-600"}`}>
+                    {revision.outcome === "APTO" ? "✓ Apto" : "✗ No apto"}
+                  </span>
+                </div>
+                {revision.expiryDate && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 flex items-center gap-1.5">
+                      <CalendarClock className="w-4 h-4 text-gray-400" /> Próxima revisión
+                    </span>
+                    <span className="text-gray-900">{new Date(revision.expiryDate).toLocaleDateString("es-ES")}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Completada</span>
+                  <span className="text-gray-900">{revision.completedAt ? new Date(revision.completedAt).toLocaleString("es-ES") : "—"}</span>
+                </div>
+              </div>
+
+              {error && <p className="text-sm text-red-600 pt-2">{error}</p>}
+
+              <button
+                onClick={viewCertificate}
+                disabled={pdfLoading}
+                className="w-full mt-4 py-3 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                {pdfLoading ? "Generando certificado..." : "Ver certificado (PDF)"}
+              </button>
+            </div>
           )}
         </div>
-        {generalAttachments.length === 0 ? (
-          <p className="text-sm text-gray-400">Sin adjuntos.</p>
-        ) : (
-          <div className="flex flex-wrap gap-3">
-            {generalAttachments.map((att) => (
-              <AttachmentThumb
-                key={att.id}
-                revisionId={id}
-                att={att}
-                onDelete={(aid) => void deleteAttachment(aid)}
-                canDelete={!isCompleted}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Signature */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-        <h2 className="font-medium text-gray-900 mb-4">Firma del paciente <span className="text-red-500">*</span></h2>
-        {signatureAtt ? (
-          <div className="flex items-start gap-4">
-            <AttachmentThumb
-              revisionId={id}
-              att={signatureAtt}
-              onDelete={(aid) => void deleteAttachment(aid)}
-              canDelete={!isCompleted}
-            />
-            {!isCompleted && <p className="text-xs text-gray-400 pt-1">Firma guardada. Bórrala para volver a firmar.</p>}
-          </div>
-        ) : isCompleted ? (
-          <p className="text-sm text-gray-400">Sin firma registrada.</p>
-        ) : (
-          <SignaturePad onSave={(blob) => void uploadSignature(blob)} saving={savingSig} />
-        )}
-      </div>
-
-      {/* Notes + outcome + complete */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-medium text-gray-900 mb-4">Resultado</h2>
-
-        <div className="mb-4">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Notas clínicas <span className="text-red-500">*</span></label>
-          <textarea
-            value={notes}
-            onChange={(e) => { setNotes(e.target.value); setMissing([]); }}
-            disabled={isCompleted}
-            rows={3}
-            placeholder="Observaciones, restricciones, recomendaciones..."
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none disabled:bg-gray-50"
-          />
-        </div>
-
-        {!isCompleted && (
-          <>
-            <div className="mb-5">
-              <label className="block text-xs font-medium text-gray-600 mb-2">Dictamen *</label>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setOutcome("APTO")}
-                  className={`flex-1 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${outcome === "APTO" ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 text-gray-500 hover:border-green-300"}`}
-                >
-                  ✓ Apto
-                </button>
-                <button
-                  onClick={() => setOutcome("NO_APTO")}
-                  className={`flex-1 py-3 rounded-lg border-2 text-sm font-medium transition-colors ${outcome === "NO_APTO" ? "border-red-500 bg-red-50 text-red-700" : "border-gray-200 text-gray-500 hover:border-red-300"}`}
-                >
-                  ✗ No apto
-                </button>
-              </div>
-            </div>
-
-            {missing.length > 0 && (
-              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-                <p className="text-xs font-medium text-amber-800 mb-1">Faltan datos para finalizar la revisión:</p>
-                <ul className="text-xs text-amber-700 list-disc list-inside space-y-0.5">
-                  {missing.map((m) => <li key={m}>{m}</li>)}
-                </ul>
-              </div>
-            )}
-
-            {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
-
-            <button
-              onClick={handleComplete}
-              disabled={complete.isPending}
-              className="w-full py-3 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-50"
-            >
-              {complete.isPending ? "Finalizando..." : "Finalizar revisión"}
-            </button>
-          </>
-        )}
-
-        {isCompleted && (
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Dictamen</span>
-              <span className={`font-medium ${revision.outcome === "APTO" ? "text-green-600" : "text-red-600"}`}>
-                {revision.outcome === "APTO" ? "✓ Apto" : "✗ No apto"}
-              </span>
-            </div>
-            {revision.expiryDate && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Próxima revisión</span>
-                <span className="text-gray-900">{new Date(revision.expiryDate).toLocaleDateString("es-ES")}</span>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <span className="text-gray-500">Completada</span>
-              <span className="text-gray-900">{revision.completedAt ? new Date(revision.completedAt).toLocaleString("es-ES") : "—"}</span>
-            </div>
-
-            {error && <p className="text-sm text-red-600 pt-1">{error}</p>}
-
-            <button
-              onClick={viewCertificate}
-              disabled={pdfLoading}
-              className="w-full mt-2 py-3 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-50"
-            >
-              {pdfLoading ? "Generando certificado..." : "Ver certificado (PDF)"}
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
