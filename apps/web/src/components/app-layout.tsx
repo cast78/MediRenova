@@ -26,6 +26,8 @@ import {
   Stethoscope,
   BarChart3,
   UserPlus,
+  HeartPulse,
+  LogOut,
   type LucideIcon,
 } from "lucide-react";
 
@@ -183,12 +185,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          {branding?.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={branding.logoUrl} alt={branding.name} className="h-7 max-w-[170px] object-contain" />
-          ) : (
-            <span className="font-bold text-lg" style={{ color: primary }}>{branding?.name ?? "MediRenova"}</span>
-          )}
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-teal-500 text-white flex items-center justify-center shadow-sm shrink-0">
+              <HeartPulse className="w-5 h-5" strokeWidth={2.2} />
+            </div>
+            <div className="leading-tight min-w-0">
+              <span className="block font-bold text-gray-900 tracking-tight truncate">MediRenova</span>
+              {branding?.name && <span className="block text-[11px] text-gray-400 truncate">{branding.name}</span>}
+            </div>
+          </div>
         </div>
 
         {user.role === "SUPERADMIN" && <TenantSwitcher />}
@@ -225,20 +230,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="p-3 border-t border-gray-200">
-          <div className="flex items-center gap-2 px-2 mb-2">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: `${primary}1a`, color: primary }}>
+          <div className="flex items-center gap-2.5 px-1.5 mb-2">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-teal-500 text-white flex items-center justify-center text-xs font-bold shrink-0">
               {(user.firstName?.[0] ?? user.email[0] ?? "U").toUpperCase()}
             </div>
             <div className="min-w-0">
               <p className="text-xs font-medium text-gray-900 truncate">{user.email}</p>
-              <p className="text-xs text-gray-400">{user.role}</p>
+              <p className="text-[11px] text-gray-400">{user.role}</p>
             </div>
           </div>
           <button
             onClick={logout}
-            className="w-full text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-lg text-left transition-colors"
+            className="w-full inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-lg text-left transition-colors"
           >
-            Cerrar sesión
+            <LogOut className="w-4 h-4" /> Cerrar sesión
           </button>
         </div>
       </aside>
