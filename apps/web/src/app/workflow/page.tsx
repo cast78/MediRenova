@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -232,7 +233,7 @@ export default function WorkflowPage() {
   if (!isAdmin) {
     return (
       <div className="p-6 max-w-5xl">
-        <h1 className="text-xl font-bold text-gray-900 mb-4">Workflow</h1>
+        <PageHeader page="workflow" />
         <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-4">Esta sección es solo para administradores.</p>
       </div>
     );
@@ -245,7 +246,7 @@ export default function WorkflowPage() {
 
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Workflow</h1>
+          <PageHeader page="workflow" />
           <p className="text-sm text-gray-500 mt-0.5">Avisos de renovación que se envían solos según la caducidad</p>
         </div>
         <button onClick={() => setShowNew(true)} disabled={activeProducts.length === 0}

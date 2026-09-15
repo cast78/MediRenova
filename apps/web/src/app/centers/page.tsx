@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
 import { Building2, MapPin, Phone, Mail, DoorOpen, Clock, CalendarDays, MoreVertical, Plus, Search, Package, Tag } from "lucide-react";
@@ -557,7 +558,7 @@ export default function CentersPage() {
       {showModal && <CenterModal onClose={() => setShowModal(false)} />}
 
       <div className="flex items-center justify-between mb-5">
-        <h1 className="text-xl font-bold text-gray-900">Centros</h1>
+        <PageHeader page="centros" />
         <button onClick={() => setShowModal(true)} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">
           + Nuevo centro
         </button>

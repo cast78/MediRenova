@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError, authHeaders } from "@/lib/api";
@@ -97,7 +98,7 @@ export default function ConsultaPage() {
       {/* Cabecera: título + fecha · KPIs · alcance */}
       <div className="flex items-start justify-between gap-3 flex-wrap mb-5">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Consulta</h1>
+          <PageHeader page="consulta" />
           <p className="text-sm text-gray-500 capitalize">{dateLabel || "Tu jornada"}</p>
         </div>
         <div className="flex items-center gap-2.5">

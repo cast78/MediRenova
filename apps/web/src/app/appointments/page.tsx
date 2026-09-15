@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, Suspense } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -1677,7 +1678,7 @@ function AppointmentsBoard() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4 flex-wrap">
-          <h1 className="text-xl font-bold text-gray-900">Reservas</h1>
+          <PageHeader page="reservas" />
           {/* View tabs */}
           <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm bg-white shadow-sm">
             {(["month", "week", "day", "list", "sincerrar", "episodios"] as const).map((v) => {

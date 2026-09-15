@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError, authHeaders } from "@/lib/api";
 import { Search, UserPlus, Pencil, CheckCircle2, Building2, Stethoscope, Upload, PenLine, X, Trash2, Ban } from "lucide-react";
@@ -294,7 +295,7 @@ export default function DoctorsPage() {
 
       <div className="flex items-start justify-between mb-5 gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Médicos</h1>
+          <PageHeader page="medicos" />
           <p className="text-sm text-gray-500 mt-0.5">Gestión de médicos y sus centros asignados</p>
         </div>
         <button onClick={() => setShowNew(true)} className="px-3.5 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium inline-flex items-center gap-1.5 shrink-0">

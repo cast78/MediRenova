@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
@@ -114,7 +115,7 @@ export default function CustomersPage() {
       {/* Header: título (izq) · búsqueda + acción (der) */}
       <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Clientes</h1>
+          <PageHeader page="clientes" />
           <p className="text-sm text-gray-500 mt-0.5">Base de pacientes y su contactabilidad</p>
         </div>
         <div className="flex items-center gap-2.5">

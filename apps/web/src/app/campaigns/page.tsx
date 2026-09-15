@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -98,7 +99,7 @@ export default function CampaignsPage() {
   return (
     <div className="p-6 max-w-5xl">
       <div className="flex items-center gap-4 flex-wrap mb-5">
-        <h1 className="text-xl font-bold text-gray-900">Campañas</h1>
+        <PageHeader page="campanas" />
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
           {([["campaigns", "Campañas"], ["templates", "Plantillas"], ["segments", "Segmentos"]] as const).map(([t, l]) => (
             <button key={t} onClick={() => setTab(t)}

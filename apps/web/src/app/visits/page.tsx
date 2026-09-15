@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -219,7 +220,7 @@ function VisitsBoard() {
       {/* Fila superior: título + pestañas (izq) · estado en vivo + acción (der) */}
       <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
         <div className="flex items-center gap-4 flex-wrap">
-          <h1 className="text-xl font-semibold text-gray-900">Visitas</h1>
+          <PageHeader page="visitas" />
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
             <button className="px-3 py-1.5 text-sm rounded-md font-medium bg-white shadow-sm text-gray-900">Gestión</button>
             <button onClick={() => router.push("/visits/utilizacion")} className="px-3 py-1.5 text-sm rounded-md font-medium text-gray-500 hover:text-gray-700">Utilización</button>

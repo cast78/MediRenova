@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -341,7 +342,7 @@ export default function RevisionsPage() {
       {/* Header + search */}
       <div className="flex items-center justify-between gap-4 mb-5">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Revisiones médicas</h1>
+          <PageHeader page="revisiones" />
           <p className="text-sm text-gray-500 mt-0.5">{isDoctor ? "Tus pendientes de cerrar e historial del paciente" : "Historial, pendientes y renovaciones"}</p>
         </div>
         <div className="relative w-72 max-w-[45%]">
