@@ -71,14 +71,23 @@ function KpiCard({ icon: Icon, label, value, sub, tone = "plain" }: {
     warning: "bg-amber-50 border-amber-100 text-amber-700",
     success: "bg-emerald-50 border-emerald-100 text-emerald-700",
   }[tone];
+  const badge = {
+    plain: "bg-gray-100 text-gray-500",
+    accent: "bg-blue-100 text-blue-600",
+    warning: "bg-amber-100 text-amber-600",
+    success: "bg-emerald-100 text-emerald-600",
+  }[tone];
   const labelColor = tone === "plain" ? "text-gray-500" : "";
   return (
-    <div className={`rounded-xl border px-4 py-3 ${tones}`}>
-      <p className={`text-xs font-medium mb-0.5 flex items-center gap-1.5 ${labelColor}`}>
-        <Icon className="w-3.5 h-3.5" /> {label}
-      </p>
-      <p className="text-2xl font-bold">{value}</p>
-      {sub && <p className="text-[10px] opacity-70 mt-0.5">{sub}</p>}
+    <div className={`rounded-xl border px-4 py-3 shadow-sm ${tones}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className={`text-xs font-medium mb-1 ${labelColor}`}>{label}</p>
+          <p className="text-2xl font-bold leading-none">{value}</p>
+          {sub && <p className="text-[10px] opacity-70 mt-1">{sub}</p>}
+        </div>
+        <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${badge}`}><Icon className="w-5 h-5" /></span>
+      </div>
     </div>
   );
 }
@@ -108,12 +117,12 @@ function ExpiryCard({ label, value, note, tone, href }: {
   );
   if (href) {
     return (
-      <Link href={href} className={`rounded-xl border-2 border-red-200 px-4 py-3 block transition-colors hover:bg-red-100/60 ${styles.box}`}>
+      <Link href={href} className={`rounded-xl border-2 border-red-200 px-4 py-3 block shadow-sm transition-all hover:bg-red-100/60 hover:shadow ${styles.box}`}>
         {inner}
       </Link>
     );
   }
-  return <div className={`rounded-xl border px-4 py-3 ${styles.box}`}>{inner}</div>;
+  return <div className={`rounded-xl border px-4 py-3 shadow-sm ${styles.box}`}>{inner}</div>;
 }
 
 export default function DashboardPage() {
@@ -198,7 +207,7 @@ export default function DashboardPage() {
       {/* Gráficos — misma fila */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Reservas por mes */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Reservas por mes — 12 meses</h2>
           {formattedChart.length === 0 ? (
             <p className="text-center text-gray-400 text-sm py-8">Sin datos</p>
@@ -220,7 +229,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Clientes por provincia */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Clientes por provincia</h2>
           {topProvinces.length === 0 ? (
             <p className="text-center text-gray-400 text-sm py-8">Sin datos</p>

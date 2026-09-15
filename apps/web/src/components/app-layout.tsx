@@ -212,9 +212,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       <Link
                         key={item.href}
                         href={item.href as string}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${active ? "font-medium" : "text-gray-600 hover:bg-gray-100"}`}
+                        className={`relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${active ? "font-medium" : "text-gray-600 hover:bg-gray-100"}`}
                         style={active ? { backgroundColor: `${primary}14`, color: primary } : undefined}
                       >
+                        {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full" style={{ backgroundColor: primary }} />}
                         <item.icon size={16} strokeWidth={1.75} />
                         <span className="flex-1">{item.label}</span>
                         {item.href === "/appointments" && episodesCount > 0 && (
