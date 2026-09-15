@@ -31,8 +31,8 @@ export function PageHeader({ page }: { page: keyof typeof PAGES }) {
         <Icon className="w-5 h-5" strokeWidth={2} />
       </div>
       <div>
-        <h1 className="text-xl font-bold text-gray-900 leading-tight">{p.title}</h1>
-        <p className="text-sm text-gray-500">{p.subtitle}</p>
+        <h1 className="text-lg font-bold text-gray-900 leading-tight">{p.title}</h1>
+        <p className="text-xs text-gray-500 mt-0.5">{p.subtitle}</p>
       </div>
     </div>
   );

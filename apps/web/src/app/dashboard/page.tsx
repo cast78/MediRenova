@@ -170,8 +170,8 @@ export default function DashboardPage() {
           <LayoutDashboard className="w-5 h-5" strokeWidth={2} />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-gray-900 leading-tight">Dashboard</h1>
-          <p className="text-sm text-gray-500">Resumen operativo de tu centro</p>
+          <h1 className="text-lg font-bold text-gray-900 leading-tight">Dashboard</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Resumen operativo de tu centro</p>
         </div>
       </div>
 
