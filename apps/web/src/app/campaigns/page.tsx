@@ -113,7 +113,7 @@ export default function CampaignsPage() {
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-5">
         {([["campaigns", "Campañas"], ["templates", "Plantillas"], ["segments", "Segmentos"]] as const).map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${tab === t ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>
+            className={`px-5 py-1.5 text-sm rounded-md font-medium transition-colors ${tab === t ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>
             {l}
           </button>
         ))}

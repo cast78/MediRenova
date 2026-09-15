@@ -259,8 +259,8 @@ export default function UtilizationPage() {
 
       {/* Sub-vistas: Gestión / Utilización — fila propia bajo el encabezado */}
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-5">
-        <button onClick={() => router.push("/visits")} className="px-3 py-1.5 text-sm rounded-md font-medium text-gray-500 hover:text-gray-700">Gestión</button>
-        <button className="px-3 py-1.5 text-sm rounded-md font-medium bg-white shadow-sm text-gray-900">Utilización</button>
+        <button onClick={() => router.push("/visits")} className="px-5 py-1.5 text-sm rounded-md font-medium text-gray-500 hover:text-gray-700">Gestión</button>
+        <button className="px-5 py-1.5 text-sm rounded-md font-medium bg-white shadow-sm text-gray-900">Utilización</button>
       </div>
 
       {/* Filtros: Día/Estado/Paciente (izq) · Sala (der, misma posición que Reservas) */}

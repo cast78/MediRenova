@@ -243,8 +243,8 @@ function VisitsBoard() {
 
       {/* Sub-vistas: Gestión / Utilización — fila propia bajo el encabezado */}
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-5">
-        <button className="px-3 py-1.5 text-sm rounded-md font-medium bg-white shadow-sm text-gray-900">Gestión</button>
-        <button onClick={() => router.push("/visits/utilizacion")} className="px-3 py-1.5 text-sm rounded-md font-medium text-gray-500 hover:text-gray-700">Utilización</button>
+        <button className="px-5 py-1.5 text-sm rounded-md font-medium bg-white shadow-sm text-gray-900">Gestión</button>
+        <button onClick={() => router.push("/visits/utilizacion")} className="px-5 py-1.5 text-sm rounded-md font-medium text-gray-500 hover:text-gray-700">Utilización</button>
       </div>
 
       {/* Fila de controles: fecha (izq) · sala (der, misma posición que Reservas) */}
