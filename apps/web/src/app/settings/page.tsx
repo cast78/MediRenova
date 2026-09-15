@@ -499,7 +499,7 @@ export default function SettingsPage() {
     <div className="p-6 max-w-5xl">
       <div className="mb-5">
         <PageHeader page="configuracion" />
-        <p className="text-sm text-gray-500 mt-0.5">{tenant?.name}{tenant?.slug ? ` · ${tenant.slug}` : ""}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{tenant?.name}{tenant?.slug ? ` · ${tenant.slug}` : ""}</p>
       </div>
 
       {/* Pestañas */}

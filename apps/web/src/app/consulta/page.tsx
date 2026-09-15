@@ -99,7 +99,7 @@ export default function ConsultaPage() {
       <div className="flex items-start justify-between gap-3 flex-wrap mb-5">
         <div>
           <PageHeader page="consulta" />
-          <p className="text-sm text-gray-500 capitalize">{dateLabel || "Tu jornada"}</p>
+          <p className="text-xs text-gray-400 capitalize">{dateLabel || "Tu jornada"}</p>
         </div>
         <div className="flex items-center gap-2.5">
           <Kpi value={ready.length + upcoming.length} label="pendientes" color="text-gray-800" />

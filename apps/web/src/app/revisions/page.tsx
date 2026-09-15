@@ -343,7 +343,7 @@ export default function RevisionsPage() {
       <div className="flex items-center justify-between gap-4 mb-5">
         <div>
           <PageHeader page="revisiones" />
-          <p className="text-sm text-gray-500 mt-0.5">{isDoctor ? "Tus pendientes de cerrar e historial del paciente" : "Historial, pendientes y renovaciones"}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{isDoctor ? "Tus pendientes de cerrar e historial del paciente" : "Historial, pendientes y renovaciones"}</p>
         </div>
         <div className="relative w-72 max-w-[45%]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
