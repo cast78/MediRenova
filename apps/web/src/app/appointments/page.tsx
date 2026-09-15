@@ -1314,7 +1314,7 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
   const isToday = appt.scheduledAt.slice(0, 10) === todayStr; // la cita es HOY
   const name = `${appt.customer?.firstName ?? ""} ${appt.customer?.lastName ?? ""}`.trim() || "Sin nombre";
   const dateLabel = new Date(`${appt.scheduledAt.slice(0, 10)}T00:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
-  const btn = "text-sm px-3 py-2 rounded-lg border transition-colors";
+  const btn = "text-sm px-3 py-2 rounded-lg border transition-colors font-medium";
   // "No presentó" solo si: confirmada, SIN visita (si hizo check-in, sí vino) y ya
   // pasó su hora (comparación en hora de pared, convenio naïve del sistema).
   const canMarkNoShow = status === "CONFIRMED" && !appt.visit && appt.scheduledAt <= naiveNowIso();
@@ -1452,8 +1452,8 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
             )}
             <div className="grid grid-cols-2 gap-2">
               {status === "PENDING" && !appt.visit && <button disabled={busy} onClick={() => patch({ status: "CONFIRMED" })} className={`${btn} border-emerald-200 text-emerald-700 hover:bg-emerald-50`}>Confirmar</button>}
-              {(status === "PENDING" || status === "CONFIRMED") && !appt.visit && <button disabled={busy} onClick={() => { setRDate(appt.scheduledAt.slice(0, 10) > todayStr ? appt.scheduledAt.slice(0, 10) : todayStr); setMode("reschedule"); setError(null); }} className={`${btn} border-gray-200 text-gray-700 hover:bg-gray-50`}>Reprogramar</button>}
-              {canMarkNoShow && <button disabled={busy} onClick={() => patch({ status: "NO_SHOW" })} className={`${btn} border-gray-200 text-gray-600 hover:bg-gray-50`}>No presentó</button>}
+              {(status === "PENDING" || status === "CONFIRMED") && !appt.visit && <button disabled={busy} onClick={() => { setRDate(appt.scheduledAt.slice(0, 10) > todayStr ? appt.scheduledAt.slice(0, 10) : todayStr); setMode("reschedule"); setError(null); }} className={`${btn} border-blue-200 text-blue-700 hover:bg-blue-50 font-medium`}>Reprogramar</button>}
+              {canMarkNoShow && <button disabled={busy} onClick={() => patch({ status: "NO_SHOW" })} className={`${btn} border-orange-200 text-orange-700 hover:bg-orange-50 font-medium`}>No presentó</button>}
               {status === "PENDING" && !isPast && !appt.visit && (
                 <button disabled={busy} onClick={askConfirmation} className={`${btn} border-blue-200 text-blue-700 hover:bg-blue-50 col-span-2 inline-flex items-center justify-center gap-1.5`}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
