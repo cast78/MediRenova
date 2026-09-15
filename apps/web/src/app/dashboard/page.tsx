@@ -166,7 +166,7 @@ export default function DashboardPage() {
   return (
     <div className="p-6 max-w-5xl space-y-5">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-teal-500 text-white flex items-center justify-center shadow-sm shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-teal-50 border border-blue-100/70 text-blue-600 flex items-center justify-center shrink-0">
           <LayoutDashboard className="w-5 h-5" strokeWidth={2} />
         </div>
         <div>
