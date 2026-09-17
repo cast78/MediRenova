@@ -132,7 +132,10 @@ function VisitsBoard() {
   const searchParams = useSearchParams();
   const focusId = searchParams.get("focus"); // visita a enfocar (llegada desde Reservas)
   const { centers, centerId: ctxCenter } = useAppContext();
-  const centerId = ctxCenter || centers[0]?.id || ""; // el tablero necesita un centro concreto
+  // El tablero es mono-centro. Con un solo centro (p. ej. recepción) se usa ese;
+  // con varios (admin), el usuario DEBE elegir uno — no se cae en el primero en silencio.
+  const centerId = ctxCenter || (centers.length === 1 ? centers[0]?.id ?? "" : "");
+  const mustPickCenter = !centerId && centers.length > 1;
   const [actionErr, setActionErr] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [showWalkIn, setShowWalkIn] = useState(false);
@@ -247,6 +250,14 @@ function VisitsBoard() {
         <button onClick={() => router.push("/visits/utilizacion")} className="px-5 py-1.5 text-sm rounded-md font-medium text-gray-500 hover:text-gray-700">Utilización</button>
       </div>
 
+      {mustPickCenter ? (
+        <div className="border border-dashed border-gray-200 rounded-xl py-16 text-center">
+          <DoorOpen className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-700">Elige un centro para ver el tablero</p>
+          <p className="text-xs text-gray-400 mt-1">Selecciónalo en el selector de centro, arriba junto al nombre de la empresa.</p>
+        </div>
+      ) : (
+      <>
       {/* Fila de controles: fecha (izq) · sala (der, misma posición que Reservas) */}
       <div className="flex items-center gap-3 flex-wrap mb-5">
         <p className="text-sm text-gray-500 capitalize">{dateLabel || "Actividad del día"}</p>
@@ -331,16 +342,16 @@ function VisitsBoard() {
                           patch.mutate({ id: v.id, body: { status: "IN_PROGRESS", currentRoomId: roomId } });
                         }
                       }}
-                      className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
                     >
-                      <option value="">Llamar a sala…</option>
+                      <option value="">Llamar a…</option>
                       {shownRooms.map((r) => <option key={r.id} value={r.id}>{r.name}{roomOccupant.has(r.id) ? " · ocupada" : ""}</option>)}
                     </select>
                     <button
                       disabled={patch.isPending}
                       onClick={() => patch.mutate({ id: v.id, body: { status: "LEFT" } })}
                       title="Se fue sin ser atendido"
-                      className="flex-shrink-0 w-9 h-9 rounded-full border border-red-300 text-red-600 hover:bg-red-50 text-[9px] font-medium leading-tight flex items-center justify-center text-center disabled:opacity-50"
+                      className="flex-shrink-0 text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-medium disabled:opacity-50"
                     >
                       Se fue
                     </button>
@@ -427,6 +438,8 @@ function VisitsBoard() {
         <Legend color="bg-red-500" label={`>${wt.red} min`} />
         <Legend color="bg-blue-500" label="en sala" />
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -41,7 +41,10 @@ export default function ConsultaPage() {
   const qc = useQueryClient();
   const router = useRouter();
   const { centers, centerId: ctxCenter } = useAppContext();
-  const centerId = ctxCenter || centers[0]?.id || "";
+  // Con un centro fijo (lo habitual del médico) se usa ese; si el médico no está
+  // asignado a un centro y tiene varios, debe elegir uno (no se cae en el primero).
+  const centerId = ctxCenter || (centers.length === 1 ? centers[0]?.id ?? "" : "");
+  const mustPickCenter = !centerId && centers.length > 1;
   const searchParams = useSearchParams();
   // La pestaña vive en la URL (?scope=all) para que al volver desde la revisión
   // (router.back) se conserve en vez de reiniciarse a "Míos".
@@ -101,11 +104,13 @@ export default function ConsultaPage() {
           <PageHeader page="consulta" />
           <p className="text-xs text-gray-400 capitalize">{dateLabel || "Tu jornada"}</p>
         </div>
-        <div className="flex items-center gap-2.5">
-          <Kpi value={ready.length + upcoming.length} label="pendientes" color="text-gray-800" />
-          <Kpi value={inCurso.length} label="en curso" color="text-blue-700" />
-          <Kpi value={done.length} label="hechas hoy" color="text-emerald-700" />
-        </div>
+        {!mustPickCenter && (
+          <div className="flex items-center gap-2.5">
+            <Kpi value={ready.length + upcoming.length} label="pendientes" color="text-gray-800" />
+            <Kpi value={inCurso.length} label="en curso" color="text-blue-700" />
+            <Kpi value={done.length} label="hechas hoy" color="text-emerald-700" />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
@@ -125,7 +130,12 @@ export default function ConsultaPage() {
 
       {err && <p className="text-sm text-red-600 mb-3">{err}</p>}
 
-      {!data ? (
+      {mustPickCenter ? (
+        <div className="border border-dashed border-gray-200 rounded-xl py-16 text-center">
+          <p className="text-sm font-medium text-gray-700">Elige un centro para ver tu consulta</p>
+          <p className="text-xs text-gray-400 mt-1">Selecciónalo en el selector de centro, arriba junto al nombre de la empresa.</p>
+        </div>
+      ) : !data ? (
         <p className="text-sm text-gray-400">Cargando…</p>
       ) : items.length === 0 ? (
         <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-10 text-center">
