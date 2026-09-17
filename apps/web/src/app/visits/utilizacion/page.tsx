@@ -103,7 +103,9 @@ export default function UtilizationPage() {
   const { centers, centerId: ctxCenter } = useAppContext();
   const { user } = useAuth();
   const isClinical = user?.role === "ADMIN" || user?.role === "DOCTOR"; // puede crear revisión
-  const centerId = ctxCenter || centers[0]?.id || "";
+  // Vista mono-centro: con un solo centro se usa ese; con varios (admin) hay que elegir uno.
+  const centerId = ctxCenter || (centers.length === 1 ? centers[0]?.id ?? "" : "");
+  const mustPickCenter = !centerId && centers.length > 1;
   // Estado inicial leído de la URL: al volver de una revisión (router.back) se
   // reconstruye la vista tal cual estaba (fecha, pestaña, filtros).
   const qTab = searchParams.get("tab");
@@ -263,6 +265,14 @@ export default function UtilizationPage() {
         <button className="px-5 py-1.5 text-sm rounded-md font-medium bg-white shadow-sm text-gray-900">Utilización</button>
       </div>
 
+      {mustPickCenter ? (
+        <div className="border border-dashed border-gray-200 rounded-xl py-16 text-center">
+          <DoorOpen className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-700">Elige un centro para ver la utilización</p>
+          <p className="text-xs text-gray-400 mt-1">Selecciónalo en el selector de centro, arriba junto al nombre de la empresa.</p>
+        </div>
+      ) : (
+      <>
       {/* Filtros: Día/Estado/Paciente (izq) · Sala (der, misma posición que Reservas) */}
       <div className="flex flex-wrap items-end gap-3 mb-5">
         <Field label="Día">
@@ -481,6 +491,8 @@ export default function UtilizationPage() {
           </div>
           <p className="text-xs text-gray-400 mt-2">Ocupación del día completo por franja horaria (no aplica los filtros de estado/paciente). El número son reservas en esa hora; el color, el % sobre lo ofertado.</p>
         </div>
+      )}
+      </>
       )}
 
       {trace && (

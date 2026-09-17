@@ -25,7 +25,10 @@ export function useAppContext(): AppCtx {
 }
 
 // Módulos que entienden la dimensión de centro (muestran el selector de centro).
-const CENTER_AWARE = ["/dashboard", "/visits", "/appointments", "/revisions"];
+const CENTER_AWARE = ["/dashboard", "/visits", "/appointments", "/revisions", "/consulta"];
+// Vistas mono-centro: no agregan varios centros, hay que elegir uno. En el resto,
+// "sin centro" significa "todos" (panel de dirección), y ahí el texto lo refleja.
+const CENTER_REQUIRED = ["/visits", "/consulta"];
 
 const CENTER_KEY = "ctx_center1"; // v1: la clave se bumpéó para limpiar valores viejos
 
@@ -61,6 +64,7 @@ export function ContextBar({ empresaName, primaryColor }: { empresaName: string;
   const pathname = usePathname();
   const { centers, centerId, setCenterId } = useAppContext();
   const aware = CENTER_AWARE.some((p) => pathname.startsWith(p));
+  const requireCenter = CENTER_REQUIRED.some((p) => pathname.startsWith(p));
 
   const onlyOne = centers.length <= 1;
 
@@ -98,7 +102,7 @@ export function ContextBar({ empresaName, primaryColor }: { empresaName: string;
                 onChange={(e) => setCenterId(e.target.value)}
                 className="text-sm border border-gray-200 rounded-lg px-2.5 py-1 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Todos los centros</option>
+                <option value="">{requireCenter ? "Elige un centro…" : "Todos los centros"}</option>
                 {centers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
