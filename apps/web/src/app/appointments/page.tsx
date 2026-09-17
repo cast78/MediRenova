@@ -73,7 +73,7 @@ const fmtTraceDate = (iso: string) => new Date(iso).toLocaleString("es-ES", { da
 
 interface Customer { id: string; firstName: string | null; lastName: string | null; }
 interface Product { id: string; name: string; slotDuration: number; }
-interface Room { id: string; name: string; centerId: string; allowedProductIds?: string[]; schedule?: { slotsByDay?: Record<string, string[]> }; }
+interface Room { id: string; name: string; centerId: string; active?: boolean; allowedProductIds?: string[]; schedule?: { slotsByDay?: Record<string, string[]> }; }
 interface Center { id: string; name: string; rooms: Room[]; }
 
 // Una sala ofrece un producto si su lista de permitidos está vacía (= todos) o lo
@@ -417,9 +417,9 @@ function NewAppointmentModal({ onClose, onManageExisting }: { onClose: () => voi
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
               >
                 <option value="">— Selecciona sala —</option>
-                {selectedCenter?.rooms.filter((r) => roomOffersProduct(r.allowedProductIds, productId)).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                {selectedCenter?.rooms.filter((r) => r.active !== false && roomOffersProduct(r.allowedProductIds, productId)).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
-              {centerId && selectedCenter && selectedCenter.rooms.filter((r) => roomOffersProduct(r.allowedProductIds, productId)).length === 0 && (
+              {centerId && selectedCenter && selectedCenter.rooms.filter((r) => r.active !== false && roomOffersProduct(r.allowedProductIds, productId)).length === 0 && (
                 <p className="mt-1 text-xs text-amber-600">Ninguna sala de este centro ofrece el producto seleccionado.</p>
               )}
             </div>

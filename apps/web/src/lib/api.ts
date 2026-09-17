@@ -91,7 +91,14 @@ export async function apiFetch<T>(
     throw new ApiError(401, [{ code: "UNAUTHORIZED" }]);
   }
 
-  const json = (await res.json()) as { data?: unknown; errors?: unknown };
+  // Respuestas sin cuerpo (p. ej. 204 No Content en DELETE) o cuerpos no-JSON no
+  // deben romper el parseo: se leen como texto y solo se parsea si hay contenido.
+  const text = await res.text();
+  let json: { data?: unknown; errors?: unknown } = {};
+  if (text) {
+    try { json = JSON.parse(text) as { data?: unknown; errors?: unknown }; }
+    catch { json = {}; }
+  }
 
   if (!res.ok) {
     throw new ApiError(res.status, json.errors, json.data);

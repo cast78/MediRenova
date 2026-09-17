@@ -50,7 +50,11 @@ async function proxyRequest(request: NextRequest, path: string[], method: string
     const disposition = response.headers.get("content-disposition");
     if (disposition) resHeaders["Content-Disposition"] = disposition;
     const buffer = await response.arrayBuffer();
-    return new NextResponse(buffer, { status: response.status, headers: resHeaders });
+    // 204/205/304 son "null body status": construir una Response con cuerpo (aunque
+    // sea vacío) lanza, y el proxy devolvía 502 aunque la API respondiera bien
+    // (p. ej. DELETE → 204). En esos casos se reenvía sin cuerpo.
+    const noBody = [204, 205, 304].includes(response.status) || buffer.byteLength === 0;
+    return new NextResponse(noBody ? null : buffer, { status: response.status, headers: resHeaders });
   } catch (err) {
     console.error(`[proxy] Failed to reach upstream ${url}:`, err);
     return NextResponse.json(

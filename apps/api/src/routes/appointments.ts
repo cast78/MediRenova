@@ -438,6 +438,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
       if (!customer) return reply.status(400).send({ errors: [{ code: "INVALID_CUSTOMER" }] });
       if (!product) return reply.status(400).send({ errors: [{ code: "INVALID_PRODUCT" }] });
       if (!room) return reply.status(400).send({ errors: [{ code: "INVALID_ROOM" }] });
+      if (!room.active) return reply.status(400).send({ errors: [{ code: "ROOM_INACTIVE", message: "La sala está desactivada; elige otra sala." }] });
 
       if (!productAllowedInRoom(room.allowedProductIds, body.data.productId)) {
         return reply.status(400).send({ errors: [{ code: "PRODUCT_NOT_ALLOWED_IN_ROOM", message: "Este producto no se ofrece en la sala seleccionada" }] });
@@ -627,6 +628,10 @@ export async function appointmentRoutes(server: FastifyInstance) {
       const targetRoomId = body.data.roomId ?? existing.roomId;
       const room = await prisma.room.findFirst({ where: { id: targetRoomId, center: { tenantId: request.ctx.tenantId }, ...(request.ctx.centerId ? { centerId: request.ctx.centerId } : {}) } });
       if (!room) return reply.status(400).send({ errors: [{ code: "INVALID_ROOM" }] });
+      // Solo se bloquea si el usuario CAMBIA a una sala inactiva. Si mantiene la sala
+      // original (aunque esté desactivada) puede seguir reprogramando la hora, para no
+      // dejar atrapada una cita cuya sala se desactivó después.
+      if (body.data.roomId && !room.active) return reply.status(400).send({ errors: [{ code: "ROOM_INACTIVE", message: "La sala está desactivada; elige otra sala para reprogramar." }] });
       if (!productAllowedInRoom(room.allowedProductIds, existing.productId)) {
         return reply.status(400).send({ errors: [{ code: "PRODUCT_NOT_ALLOWED_IN_ROOM", message: "Este producto no se ofrece en la sala seleccionada" }] });
       }
