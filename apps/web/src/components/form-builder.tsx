@@ -26,6 +26,10 @@ export interface BuilderField {
   required: boolean;
   options: string[];
   unit: string;
+  // Si true, la clave (name) se deriva automáticamente de la etiqueta.
+  // Los campos de un formulario ya guardado se cargan con autoKey=false para
+  // no cambiar sus claves y no dejar huérfanas las respuestas ya registradas.
+  autoKey?: boolean;
 }
 
 export interface Product {
@@ -107,6 +111,28 @@ function uid(): string {
   return crypto.randomUUID();
 }
 
+// Deriva una clave técnica a partir de la etiqueta: sin acentos, minúsculas,
+// solo [a-z0-9_]. "Agudeza visual" -> "agudeza_visual".
+function slugifyKey(label: string): string {
+  const base = label
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return base || "campo";
+}
+
+// Clave única dentro del formulario (añade _2, _3… si ya existe).
+function uniqueName(label: string, selfId: string, all: BuilderField[]): string {
+  const base = slugifyKey(label);
+  const taken = new Set(all.filter((f) => f.id !== selfId).map((f) => f.name));
+  if (!taken.has(base)) return base;
+  let i = 2;
+  while (taken.has(`${base}_${i}`)) i++;
+  return `${base}_${i}`;
+}
+
 // ── Sortable field row ────────────────────────────────────────────────────────
 
 function SortableField({ field, selected, onSelect, onRemove }: {
@@ -145,7 +171,7 @@ function FormPreview({ fields }: { fields: BuilderField[] }) {
               <span className="px-3 py-2 rounded-lg border border-dashed border-gray-300">Adjuntar imagen</span>
             </div>
           ) : f.type === "select" ? (
-            <select disabled className={base}><option>— Seleccionar —</option>{f.options.map((o) => <option key={o}>{o}</option>)}</select>
+            <select disabled className={base}><option>— Seleccionar —</option>{f.options.map((s) => s.trim()).filter(Boolean).map((o) => <option key={o}>{o}</option>)}</select>
           ) : f.type === "textarea" ? (
             <textarea disabled rows={2} className={`${base} resize-none`} />
           ) : (
@@ -169,6 +195,7 @@ export function Builder({ productId, productName, editing, onClose }: { productI
     (editing?.schema.fields ?? []).map((f) => ({
       id: uid(), name: f.name, label: f.label, type: f.type as FieldType,
       required: !!f.required, options: f.options ?? [], unit: f.unit ?? "",
+      autoKey: false, // clave existente: se preserva para no romper datos guardados
     })),
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -179,16 +206,26 @@ export function Builder({ productId, productName, editing, onClose }: { productI
   const selected = fields.find((f) => f.id === selectedId) ?? null;
 
   function addField(type: FieldType) {
-    const n = fields.length + 1;
-    const f: BuilderField = { id: uid(), name: `campo_${n}`, label: "Nuevo campo", type, required: false, options: type === "select" ? ["Opción 1"] : [], unit: "" };
+    const f: BuilderField = { id: uid(), name: "", label: "Nuevo campo", type, required: false, options: type === "select" ? ["Opción 1"] : [], unit: "", autoKey: true };
+    f.name = uniqueName(f.label, f.id, fields);
     setFields((arr) => [...arr, f]);
     setSelectedId(f.id);
   }
   function update(id: string, patch: Partial<BuilderField>) {
-    setFields((arr) => arr.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+    setFields((arr) =>
+      arr.map((f) => {
+        if (f.id !== id) return f;
+        const next = { ...f, ...patch };
+        // Al cambiar la etiqueta, regenera la clave automáticamente (solo si autoKey).
+        if (patch.label !== undefined && f.autoKey) {
+          next.name = uniqueName(patch.label, id, arr);
+        }
+        return next;
+      }),
+    );
   }
   function loadTemplate(key: string) {
-    setFields((BASE_TEMPLATES[key] ?? []).map((f) => ({ id: uid(), ...f })));
+    setFields((BASE_TEMPLATES[key] ?? []).map((f) => ({ id: uid(), ...f, autoKey: true })));
     setSelectedId(null);
   }
   function onDragEnd(e: DragEndEvent) {
@@ -204,7 +241,7 @@ export function Builder({ productId, productName, editing, onClose }: { productI
         name: name.trim(),
         fields: fields.map((f) => ({
           name: f.name.trim(), label: f.label.trim(), type: f.type, required: f.required,
-          ...(f.type === "select" ? { options: f.options } : {}),
+          ...(f.type === "select" ? { options: f.options.map((s) => s.trim()).filter(Boolean) } : {}),
           ...(f.unit.trim() ? { unit: f.unit.trim() } : {}),
         })),
       };
@@ -229,7 +266,7 @@ export function Builder({ productId, productName, editing, onClose }: { productI
       if (!f.name.trim()) return setError("Todos los campos necesitan un nombre");
       if (names.has(f.name.trim())) return setError(`Campo duplicado: ${f.name}`);
       names.add(f.name.trim());
-      if (f.type === "select" && f.options.filter(Boolean).length === 0) return setError(`"${f.label}" (lista) necesita opciones`);
+      if (f.type === "select" && f.options.map((s) => s.trim()).filter(Boolean).length === 0) return setError(`"${f.label}" (lista) necesita opciones`);
     }
     save.mutate();
   }
@@ -299,10 +336,6 @@ export function Builder({ productId, productName, editing, onClose }: { productI
                   <input value={selected.label} onChange={(e) => update(selected.id, { label: e.target.value })} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Nombre (clave)</label>
-                  <input value={selected.name} onChange={(e) => update(selected.id, { name: e.target.value })} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm font-mono" />
-                </div>
-                <div>
                   <label className="block text-xs text-gray-600 mb-1">Tipo</label>
                   <select value={selected.type} onChange={(e) => update(selected.id, { type: e.target.value as FieldType })} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm">
                     {TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
@@ -311,7 +344,8 @@ export function Builder({ productId, productName, editing, onClose }: { productI
                 {selected.type === "select" && (
                   <div>
                     <label className="block text-xs text-gray-600 mb-1">Opciones (una por línea)</label>
-                    <textarea value={selected.options.join("\n")} onChange={(e) => update(selected.id, { options: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })} rows={4} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm resize-none" />
+                    <textarea value={selected.options.join("\n")} onChange={(e) => update(selected.id, { options: e.target.value.split("\n") })} rows={4} placeholder={"Apto\nCon observaciones\nNo apto"} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm resize-none" />
+                    <p className="text-[11px] text-gray-400 mt-1">Una opción por línea. Pulsa Enter para añadir otra.</p>
                   </div>
                 )}
                 {(selected.type === "text" || selected.type === "number") && (
