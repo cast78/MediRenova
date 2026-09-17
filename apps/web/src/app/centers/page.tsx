@@ -16,6 +16,7 @@ interface RoomSchedule {
 interface Room {
   id: string;
   name: string;
+  active: boolean;
   schedule: RoomSchedule;
   allowedProductIds: string[];
 }
@@ -344,17 +345,118 @@ function RoomModal({ centerId, room, onClose }: { centerId: string; room?: Room;
 
 // ── Delete confirm ────────────────────────────────────────────────────────────
 
-function DeleteConfirm({ label, onConfirm, onCancel, loading }: { label: string; onConfirm: () => void; onCancel: () => void; loading: boolean }) {
+function DeleteConfirm({ label, onConfirm, onCancel, loading, error }: { label: string; onConfirm: () => void; onCancel: () => void; loading: boolean; error?: string | null }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
         <h3 className="font-semibold text-gray-900 mb-2">¿Eliminar {label}?</h3>
         <p className="text-sm text-gray-500 mb-5">Esta acción no se puede deshacer.</p>
+        {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-4">{error}</p>}
         <div className="flex justify-end gap-3">
-          <button onClick={onCancel} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
-          <button onClick={onConfirm} disabled={loading} className="px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+          <button onClick={onCancel} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">{error ? "Cerrar" : "Cancelar"}</button>
+          <button onClick={onConfirm} disabled={loading || !!error} className="px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
             {loading ? "Eliminando..." : "Eliminar"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Aviso antes de desactivar una sala: muestra el resumen de su impacto (nº de citas
+// futuras y pacientes en curso) y deja continuar; la sala se apaga pero conserva todo.
+function DeactivateRoomModal({ center, room, onClose }: { center: Center; room: Room; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const { data: impact, isLoading } = useQuery<{ futureAppointments: number; totalAppointments: number; activeVisits: number }>({
+    queryKey: ["room-impact", room.id],
+    queryFn: () => apiFetch(`/centers/${center.id}/rooms/${room.id}/impact`),
+  });
+  const mutation = useMutation({
+    mutationFn: () => apiFetch(`/centers/${center.id}/rooms/${room.id}`, { method: "PATCH", body: JSON.stringify({ active: false }) }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["centers"] }); onClose(); },
+    onError: (err: unknown) => setError(errorMessage(err)),
+  });
+  const future = impact?.futureAppointments ?? 0;
+  const inProgress = impact?.activeVisits ?? 0;
+  const hasImpact = future > 0 || inProgress > 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
+        <h3 className="font-semibold text-gray-900 mb-2">¿Desactivar la sala &laquo;{room.name}&raquo;?</h3>
+        {isLoading ? (
+          <p className="text-sm text-gray-400 mb-5">Comprobando citas y pacientes…</p>
+        ) : hasImpact ? (
+          <div className="text-sm text-gray-600 mb-5 space-y-2">
+            <p>Esta sala tiene:</p>
+            <ul className="space-y-1">
+              {future > 0 && <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />{future} cita{future === 1 ? "" : "s"} programada{future === 1 ? "" : "s"}</li>}
+              {inProgress > 0 && <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />{inProgress} paciente{inProgress === 1 ? "" : "s"} en curso ahora mismo</li>}
+            </ul>
+            <p className="text-xs text-gray-500">Seguirán existiendo, pero la sala no aparecerá en el tablero ni admitirá reservas nuevas. Te recomendamos reprogramarlas en Reservas o esperar a que terminen.</p>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500 mb-5">No tiene citas futuras ni pacientes en curso. Podrás reactivarla cuando quieras.</p>
+        )}
+        {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
+          <button onClick={() => mutation.mutate()} disabled={mutation.isPending}
+            className={`px-4 py-2 text-sm rounded-lg text-white disabled:opacity-50 ${hasImpact ? "bg-amber-600 hover:bg-amber-700" : "bg-blue-600 hover:bg-blue-700"}`}>
+            {mutation.isPending ? "Desactivando..." : hasImpact ? "Desactivar de todas formas" : "Desactivar sala"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Confirmación de borrado de sala: muestra el resumen del impacto. Solo deja eliminar
+// si la sala no tiene NINGUNA cita ni paciente; si los tiene, orienta a desactivar.
+function DeleteRoomModal({ center, room, onClose }: { center: Center; room: Room; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const { data: impact, isLoading } = useQuery<{ futureAppointments: number; totalAppointments: number; activeVisits: number }>({
+    queryKey: ["room-impact", room.id],
+    queryFn: () => apiFetch(`/centers/${center.id}/rooms/${room.id}/impact`),
+  });
+  const mutation = useMutation({
+    mutationFn: () => apiFetch(`/centers/${center.id}/rooms/${room.id}`, { method: "DELETE" }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["centers"] }); onClose(); },
+    onError: (err: unknown) => setError(errorMessage(err)),
+  });
+  const totalAppts = impact?.totalAppointments ?? 0;
+  const future = impact?.futureAppointments ?? 0;
+  const inProgress = impact?.activeVisits ?? 0;
+  const blocked = totalAppts > 0 || inProgress > 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
+        <h3 className="font-semibold text-gray-900 mb-2">¿Eliminar la sala &laquo;{room.name}&raquo;?</h3>
+        {isLoading ? (
+          <p className="text-sm text-gray-400 mb-5">Comprobando citas y pacientes…</p>
+        ) : blocked ? (
+          <div className="text-sm text-gray-600 mb-5 space-y-2">
+            <p>No se puede eliminar porque tiene:</p>
+            <ul className="space-y-1">
+              {totalAppts > 0 && <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />{totalAppts} cita{totalAppts === 1 ? "" : "s"} en el historial{future > 0 ? ` (${future} futura${future === 1 ? "" : "s"})` : ""}</li>}
+              {inProgress > 0 && <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />{inProgress} paciente{inProgress === 1 ? "" : "s"} en curso ahora mismo</li>}
+            </ul>
+            <p className="text-xs text-gray-500">Para conservar el historial, <span className="font-medium">desactívala</span> en lugar de eliminarla.</p>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500 mb-5">No tiene citas ni pacientes asociados. Esta acción no se puede deshacer.</p>
+        )}
+        {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+        <div className="flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">{blocked ? "Cerrar" : "Cancelar"}</button>
+          {!blocked && !isLoading && (
+            <button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+              {mutation.isPending ? "Eliminando..." : "Eliminar"}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -429,6 +531,7 @@ function CenterDetail({ center }: { center: Center }) {
   const [newRoom, setNewRoom] = useState(false);
   const [editRoom, setEditRoom] = useState<Room | null>(null);
   const [deleteRoom, setDeleteRoom] = useState<Room | null>(null);
+  const [deactivateRoom, setDeactivateRoom] = useState<Room | null>(null);
   const [showHolidays, setShowHolidays] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -440,9 +543,10 @@ function CenterDetail({ center }: { center: Center }) {
     mutationFn: () => apiFetch(`/centers/${center.id}`, { method: "DELETE" }),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["centers"] }); setDeleteCenter(false); },
   });
-  const deleteRoomMutation = useMutation({
-    mutationFn: (roomId: string) => apiFetch(`/centers/${center.id}/rooms/${roomId}`, { method: "DELETE" }),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["centers"] }); setDeleteRoom(null); },
+  // Reactivar una sala inactiva es directo (no requiere aviso).
+  const activateRoom = useMutation({
+    mutationFn: (roomId: string) => apiFetch(`/centers/${center.id}/rooms/${roomId}`, { method: "PATCH", body: JSON.stringify({ active: true }) }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["centers"] }); },
   });
 
   const holidayCount = center.holidays?.length ?? 0;
@@ -453,7 +557,8 @@ function CenterDetail({ center }: { center: Center }) {
       {deleteCenter && <DeleteConfirm label={`el centro "${center.name}"`} onConfirm={() => deleteCenterMutation.mutate()} onCancel={() => setDeleteCenter(false)} loading={deleteCenterMutation.isPending} />}
       {newRoom && <RoomModal centerId={center.id} onClose={() => setNewRoom(false)} />}
       {editRoom && <RoomModal centerId={center.id} room={editRoom} onClose={() => setEditRoom(null)} />}
-      {deleteRoom && <DeleteConfirm label={`la sala "${deleteRoom.name}"`} onConfirm={() => deleteRoomMutation.mutate(deleteRoom.id)} onCancel={() => setDeleteRoom(null)} loading={deleteRoomMutation.isPending} />}
+      {deleteRoom && <DeleteRoomModal center={center} room={deleteRoom} onClose={() => setDeleteRoom(null)} />}
+      {deactivateRoom && <DeactivateRoomModal center={center} room={deactivateRoom} onClose={() => setDeactivateRoom(null)} />}
       {showHolidays && <HolidaysModal center={center} onClose={() => setShowHolidays(false)} />}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -509,16 +614,24 @@ function CenterDetail({ center }: { center: Center }) {
           {center.rooms.length === 0 && <p className="px-5 py-6 text-sm text-gray-400 text-center">Sin salas — crea la primera</p>}
           <div className="divide-y divide-gray-50">
             {center.rooms.map((room) => (
-              <div key={room.id} className="px-5 py-3">
+              <div key={room.id} className={`px-5 py-3 ${room.active ? "" : "bg-gray-50/60"}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 flex items-center gap-1.5"><DoorOpen className="w-4 h-4 text-gray-400 shrink-0" /> {room.name}</p>
+                    <p className={`text-sm font-medium flex items-center gap-1.5 ${room.active ? "text-gray-900" : "text-gray-500"}`}>
+                      <DoorOpen className="w-4 h-4 text-gray-400 shrink-0" /> {room.name}
+                      {!room.active && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600 uppercase tracking-wide">Inactiva</span>}
+                    </p>
                     <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
                       <span className="text-xs text-gray-500">{(room.allowedProductIds?.length ?? 0) === 0 ? "Todos los productos" : `${room.allowedProductIds.length} producto(s)`}</span>
                       <span className="text-xs text-gray-500">{scheduleSummary(room.schedule)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {room.active ? (
+                      <button onClick={() => setDeactivateRoom(room)} className="text-xs px-2.5 py-1.5 rounded-lg border border-amber-200 hover:bg-amber-50 text-amber-700">Desactivar</button>
+                    ) : (
+                      <button onClick={() => activateRoom.mutate(room.id)} disabled={activateRoom.isPending} className="text-xs px-2.5 py-1.5 rounded-lg border border-emerald-200 hover:bg-emerald-50 text-emerald-700 disabled:opacity-50">Activar</button>
+                    )}
                     <button onClick={() => setEditRoom(room)} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Editar</button>
                     <button onClick={() => setDeleteRoom(room)} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-100 hover:bg-red-50 text-red-500">Eliminar</button>
                   </div>
