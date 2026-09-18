@@ -32,6 +32,8 @@ interface Appointment {
   cancelReason?: string | null;
   rescheduledTo?: { id: string; scheduledAt: string } | null;
   rescheduledFrom?: { id: string; scheduledAt: string } | null;
+  recoveredFrom?: { id: string; scheduledAt: string } | null;
+  recoveredBy?: { id: string; scheduledAt: string }[] | null;
 }
 
 // Episodio sin cerrar: cita pasada CON visita cuyo episodio no cerró. Extiende la
@@ -1292,7 +1294,7 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
     try {
       await apiFetch(`/appointments`, {
         method: "POST",
-        body: JSON.stringify({ customerId: appt.customer.id, productId: appt.product.id, roomId: appt.room.id, scheduledAt: slot, source: "BACKOFFICE" }),
+        body: JSON.stringify({ customerId: appt.customer.id, productId: appt.product.id, roomId: appt.room.id, scheduledAt: slot, source: "BACKOFFICE", ...(appt.status === "NO_SHOW" ? { recoveredFromId: appt.id } : {}) }),
       });
       onChanged();
       onClose();
@@ -1318,6 +1320,9 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
   // "No presentó" solo si: confirmada, SIN visita (si hizo check-in, sí vino) y ya
   // pasó su hora (comparación en hora de pared, convenio naïve del sistema).
   const canMarkNoShow = status === "CONFIRMED" && !appt.visit && appt.scheduledAt <= naiveNowIso();
+  // No-show ya recuperado (tiene cita nueva enlazada): solo lectura, como una
+  // reprogramada — se ve la trazabilidad pero no se gestiona (no se reagenda otra vez).
+  const isRecoveredNoShow = status === "NO_SHOW" && (appt.recoveredBy?.length ?? 0) > 0;
   const situation = apptSituation(appt, isPast, isToday); // etiqueta de situación (llegada)
 
   return (
@@ -1386,6 +1391,18 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
               <span>Reprogramada desde: {reschedDate(appt.rescheduledFrom.scheduledAt)} →</span>
             </button>
           )}
+          {appt.recoveredFrom && (
+            <button onClick={() => onOpenById(appt.recoveredFrom!.id)} className="flex items-center gap-2.5 text-emerald-700 hover:text-emerald-900 hover:underline text-left w-full">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg>
+              <span>Recuperada del no-show del: {reschedDate(appt.recoveredFrom.scheduledAt)} →</span>
+            </button>
+          )}
+          {(appt.recoveredBy?.length ?? 0) > 0 && (
+            <button onClick={() => onOpenById(appt.recoveredBy![0]!.id)} className="flex items-center gap-2.5 text-emerald-700 hover:text-emerald-900 hover:underline text-left w-full">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></svg>
+              <span>Recuperada con la cita del: {reschedDate(appt.recoveredBy![0]!.scheduledAt)} →</span>
+            </button>
+          )}
           {appt.notes && (
             <div className="flex items-start gap-2.5 text-gray-700">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500 shrink-0 mt-0.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h4" /></svg>
@@ -1418,9 +1435,13 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
                 </ol>
               )}
             </div>
-            <button onClick={() => { setMode("actions"); setError(null); }} className="w-full py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 flex items-center justify-center gap-2">
-              Gestionar reserva →
-            </button>
+            {isRecoveredNoShow ? (
+              <p className="text-xs text-gray-400 text-center py-1">Cita recuperada — solo lectura</p>
+            ) : (
+              <button onClick={() => { setMode("actions"); setError(null); }} className="w-full py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 flex items-center justify-center gap-2">
+                Gestionar reserva →
+              </button>
+            )}
           </div>
         )}
 
@@ -1464,7 +1485,7 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
               {status === "CANCELLED" && !isPast && <button disabled={busy} onClick={() => patch({ status: "CONFIRMED" })} className={`${btn} border-emerald-200 text-emerald-700 hover:bg-emerald-50 col-span-2`}>Reactivar cita</button>}
               {/* Cancelada/no-show cuya hora ya pasó → no se reactiva; se reserva una nueva a futuro.
                   Una reprogramada NO entra aquí: ya tiene su cita nueva (ver botón arriba). */}
-              {(status === "CANCELLED" || status === "NO_SHOW") && isPast && <button disabled={busy} onClick={() => { setRDate(todayStr); setMode("rebook"); setError(null); }} className={`${btn} border-blue-200 text-blue-700 hover:bg-blue-50 col-span-2`}>Reservar nueva cita →</button>}
+              {(status === "CANCELLED" || status === "NO_SHOW") && isPast && !isRecoveredNoShow && <button disabled={busy} onClick={() => { setRDate(todayStr); setMode("rebook"); setError(null); }} className={`${btn} border-blue-200 text-blue-700 hover:bg-blue-50 col-span-2`}>Reservar nueva cita →</button>}
             </div>
             {/* Cancelar solo tiene sentido en citas AÚN futuras (aún no ha pasado su
                 hora) y SIN visita: si el paciente ya hizo check-in, no se cancela desde
@@ -1537,8 +1558,8 @@ function AppointmentsBoard() {
   // regresar de una revisión (y para poder compartir/enlazar la vista).
   const qView = searchParams.get("view");
   const qDay = searchParams.get("dv");
-  const [view, setView] = useState<"month" | "week" | "day" | "list" | "sincerrar" | "episodios">(
-    (["month", "week", "day", "list", "sincerrar", "episodios"] as const).includes(qView as never) ? (qView as "month" | "week" | "day" | "list" | "sincerrar" | "episodios") : "month",
+  const [view, setView] = useState<"month" | "week" | "day" | "list" | "sincerrar" | "episodios" | "recuperar">(
+    (["month", "week", "day", "list", "sincerrar", "episodios", "recuperar"] as const).includes(qView as never) ? (qView as "month" | "week" | "day" | "list" | "sincerrar" | "episodios" | "recuperar") : "month",
   );
   const [dayView, setDayView] = useState<"agenda" | "timeline">(
     (["agenda", "timeline"] as const).includes(qDay as never) ? (qDay as "agenda" | "timeline") : "agenda",
@@ -1547,6 +1568,10 @@ function AppointmentsBoard() {
   const [statusFilter, setStatusFilter] = useState("");
   const [roomFilter, setRoomFilter] = useState(searchParams.get("room") ?? ""); // filtro de sala (todas las vistas de Reservas)
   const [showModal, setShowModal] = useState(false);
+  // Bandeja de recuperación de no-shows.
+  const [recoveryFilter, setRecoveryFilter] = useState<"pending" | "contacted" | "recovered" | "all">("pending");
+  const [recoveryWindow, setRecoveryWindow] = useState(30);
+  const [inviteRow, setInviteRow] = useState<NoShowRow | null>(null);
   const queryClient = useQueryClient();
   const [detailAppt, setDetailAppt] = useState<Appointment | null>(null);
   const invalidateAppts = () => queryClient.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("appointments") });
@@ -1645,6 +1670,14 @@ function AppointmentsBoard() {
   });
   const episodesCount = episodesData?.meta.total ?? 0;
 
+  // Bandeja "Recuperar": no-shows recientes con su estado de seguimiento. Se consulta
+  // siempre (el badge de la pestaña usa counts.pending, calculado sobre toda la ventana).
+  const { data: noShowData, isLoading: noShowLoading } = useQuery<{ data: NoShowRow[]; meta: NoShowMeta }>({
+    queryKey: ["appointments-no-shows", recoveryFilter, recoveryWindow, centerId],
+    queryFn: () => apiFetch(`/appointments/no-shows?window=${recoveryWindow}&filter=${recoveryFilter}`, { raw: true }),
+  });
+  const noShowPending = noShowData?.meta.counts.pending ?? 0;
+
   // ── Derived data ─────────────────────────────────────────────────────────
 
   // Filtro combinado centro (global) + sala (Reservas), aplicado a todas las vistas.
@@ -1688,9 +1721,9 @@ function AppointmentsBoard() {
 
       {/* View tabs — fila propia bajo el encabezado (estilo píldora, como Visitas/Campañas) */}
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit max-w-full overflow-x-auto mb-6">
-        {(["month", "week", "day", "list", "sincerrar", "episodios"] as const).map((v) => {
-          const labels = { month: "Mes", week: "Semana", day: "Día", list: "Agenda", sincerrar: "Sin cerrar", episodios: "Episodios" };
-          const badge = v === "sincerrar" ? unclosedCount : v === "episodios" ? episodesCount : 0;
+        {(["month", "week", "day", "list", "sincerrar", "episodios", "recuperar"] as const).map((v) => {
+          const labels = { month: "Mes", week: "Semana", day: "Día", list: "Agenda", sincerrar: "Sin cerrar", episodios: "Episodios", recuperar: "Recuperar" };
+          const badge = v === "sincerrar" ? unclosedCount : v === "episodios" ? episodesCount : v === "recuperar" ? noShowPending : 0;
           return (
             <button
               key={v}
@@ -1712,7 +1745,7 @@ function AppointmentsBoard() {
 
       {/* Date nav + filters row (la vista Semana lleva su propia navegación) */}
       <div className={`flex items-center gap-3 flex-wrap ${view === "week" || view === "month" ? "" : "mb-5"}`}>
-        {view !== "week" && view !== "month" && view !== "sincerrar" && view !== "episodios" && <DateNav date={dateFilter} onChange={handleDateChange} />}
+        {view !== "week" && view !== "month" && view !== "sincerrar" && view !== "episodios" && view !== "recuperar" && <DateNav date={dateFilter} onChange={handleDateChange} />}
         {view === "list" && (
           <div className="ml-auto flex items-center gap-3">
             {(dateFilter !== today || statusFilter) && (
@@ -1888,6 +1921,23 @@ function AppointmentsBoard() {
           {showAlert && <EpisodeAlertModal onClose={() => setShowAlert(false)} />}
         </div>
       )}
+
+      {/* ── Recuperar: bandeja de no-shows recuperables ─────────────────────── */}
+      {view === "recuperar" && (
+        <RecoveryInbox
+          data={noShowData}
+          loading={noShowLoading}
+          filter={recoveryFilter}
+          onFilter={setRecoveryFilter}
+          windowDays={recoveryWindow}
+          onWindow={setRecoveryWindow}
+          onInvite={setInviteRow}
+          onReagendar={(r) => void openApptById(r.id)}
+          onChanged={invalidateAppts}
+        />
+      )}
+
+      {inviteRow && <InviteRebookModal row={inviteRow} onClose={() => setInviteRow(null)} onContacted={invalidateAppts} />}
     </div>
   );
 }
@@ -2106,6 +2156,190 @@ function TimelineView({ appts, loading, dateFilter, onManage }: {
           ))}
           {isToday && <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-[2px] bg-red-500" />Ahora</span>}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Bandeja de recuperación de no-shows ────────────────────────────────────────
+
+interface NoShowRow {
+  id: string;
+  scheduledAt: string;
+  closedBy: "auto" | "manual";
+  recoveryState: "pending" | "contacted" | "dismissed" | "recovered";
+  contactedAt: string | null;
+  note: string | null;
+  customer: { id: string; firstName: string | null; lastName: string | null; phone: string | null; email: string | null; consent: { whatsapp: boolean; email: boolean; sms: boolean } };
+  product: { id: string; name: string } | null;
+  room: { id: string; name: string; center: { id: string; name: string } } | null;
+}
+interface NoShowMeta { page: number; limit: number; total: number; pages: number; counts: { pending: number; contacted: number; recovered: number; total: number; ratio: number } }
+
+const RECOVERY_LABEL: Record<NoShowRow["recoveryState"], { label: string; cls: string }> = {
+  pending: { label: "Pendiente", cls: "bg-amber-50 text-amber-700" },
+  contacted: { label: "Contactada", cls: "bg-blue-50 text-blue-700" },
+  dismissed: { label: "Descartada", cls: "bg-gray-100 text-gray-500" },
+  recovered: { label: "Recuperada", cls: "bg-emerald-50 text-emerald-700" },
+};
+
+function RecoveryInbox({ data, loading, filter, onFilter, windowDays, onWindow, onInvite, onReagendar, onChanged }: {
+  data: { data: NoShowRow[]; meta: NoShowMeta } | undefined;
+  loading: boolean;
+  filter: "pending" | "contacted" | "recovered" | "all";
+  onFilter: (f: "pending" | "contacted" | "recovered" | "all") => void;
+  windowDays: number;
+  onWindow: (d: number) => void;
+  onInvite: (r: NoShowRow) => void;
+  onReagendar: (r: NoShowRow) => void;
+  onChanged: () => void;
+}) {
+  const counts = data?.meta.counts;
+  const rows = data?.data ?? [];
+  const FILTERS = [
+    { key: "pending" as const, label: "Pendientes" }, { key: "contacted" as const, label: "Contactadas" },
+    { key: "recovered" as const, label: "Recuperadas" }, { key: "all" as const, label: "Todas" },
+  ];
+  return (
+    <div>
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="bg-gray-50 rounded-xl px-4 py-3"><p className="text-xs text-gray-500">Sin gestionar</p><p className="text-2xl font-semibold text-amber-700">{counts?.pending ?? 0}</p></div>
+        <div className="bg-gray-50 rounded-xl px-4 py-3"><p className="text-xs text-gray-500">Contactadas</p><p className="text-2xl font-semibold text-gray-800">{counts?.contacted ?? 0}</p></div>
+        <div className="bg-gray-50 rounded-xl px-4 py-3"><p className="text-xs text-gray-500">Recuperadas · tasa</p><p className="text-2xl font-semibold text-emerald-700">{counts?.recovered ?? 0} <span className="text-sm text-gray-500 font-normal">· {counts?.ratio ?? 0}%</span></p></div>
+      </div>
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          {FILTERS.map((f) => (
+            <button key={f.key} onClick={() => onFilter(f.key)} className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${filter === f.key ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>{f.label}</button>
+          ))}
+        </div>
+        <select value={windowDays} onChange={(e) => onWindow(Number(e.target.value))} className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600">
+          <option value={15}>Últimos 15 días</option>
+          <option value={30}>Últimos 30 días</option>
+          <option value={60}>Últimos 60 días</option>
+          <option value={90}>Últimos 90 días</option>
+        </select>
+      </div>
+      {loading ? (
+        <p className="text-gray-400 text-sm py-8 text-center">Cargando…</p>
+      ) : rows.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 py-16 text-center">
+          <p className="text-sm text-gray-500">{filter === "pending" ? "No hay no-shows pendientes de gestionar en esta ventana." : "Sin resultados para este filtro."}</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {rows.map((r) => <RecoveryRow key={r.id} row={r} onInvite={onInvite} onReagendar={onReagendar} onChanged={onChanged} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecoveryRow({ row, onInvite, onReagendar, onChanged }: { row: NoShowRow; onInvite: (r: NoShowRow) => void; onReagendar: (r: NoShowRow) => void; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const name = `${row.customer.firstName ?? ""} ${row.customer.lastName ?? ""}`.trim() || "Sin nombre";
+  const faltoEl = new Date(`${row.scheduledAt.slice(0, 10)}T00:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+  const st = RECOVERY_LABEL[row.recoveryState];
+  const done = row.recoveryState === "recovered" || row.recoveryState === "dismissed";
+  async function setState(state: "contacted" | "dismissed" | "reset") {
+    setBusy(true);
+    try { await apiFetch(`/appointments/${row.id}/recovery`, { method: "POST", body: JSON.stringify({ state }) }); onChanged(); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className={`bg-white border border-gray-200 rounded-xl px-4 py-3 ${done ? "opacity-80" : ""}`}>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium text-gray-900">{name}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${row.closedBy === "auto" ? "bg-orange-50 text-orange-600" : "bg-sky-50 text-sky-700"}`}>{row.closedBy === "auto" ? "Auto" : "Manual"}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">Faltó el {faltoEl}{row.product ? ` · ${row.product.name}` : ""}{row.room ? ` · ${row.room.name} · ${row.room.center.name}` : ""}{row.customer.phone ? ` · ${row.customer.phone}` : ""}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {row.recoveryState === "pending" && (
+            <>
+              <button disabled={busy} onClick={() => setState("contacted")} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">Contactado</button>
+              <button disabled={busy} onClick={() => setState("dismissed")} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50">Descartar</button>
+            </>
+          )}
+          {(row.recoveryState === "contacted" || row.recoveryState === "dismissed") && (
+            <button disabled={busy} onClick={() => setState("reset")} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50">Reabrir</button>
+          )}
+          {row.recoveryState !== "recovered" && (
+            <>
+              <button onClick={() => onInvite(row)} className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium">Invitar a reagendar</button>
+              <button onClick={() => onReagendar(row)} className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">Reagendar</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InviteRebookModal({ row, onClose, onContacted }: { row: NoShowRow; onClose: () => void; onContacted: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!row.product) { setErr("La cita no tiene producto asociado."); return; }
+    apiFetch<{ url: string }>(`/link/generate`, { method: "POST", body: JSON.stringify({ customerId: row.customer.id, productId: row.product.id }) })
+      .then((d) => setUrl(d.url)).catch((e) => setErr(apptErr(e)));
+  }, [row]);
+  const nombre = row.customer.firstName ?? "";
+  const producto = row.product?.name ?? "revisión";
+  const fecha = new Date(`${row.scheduledAt.slice(0, 10)}T00:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "long" });
+  const centro = row.room?.center.name ?? "nuestro centro";
+  const base = `Hola ${nombre}, tenía una cita de ${producto} el ${fecha} en ${centro} a la que no pudo asistir. Como no llegó a cancelarla, sigue pendiente: puede reservar un nuevo día`;
+  const preview = `${base} desde el enlace.`;
+  const msg = url ? `${base} aquí: ${url}` : "";
+  const c = row.customer;
+  const waUrl = url && c.phone ? `https://wa.me/${waNorm(c.phone)}?text=${encodeURIComponent(msg)}` : null;
+  const mailUrl = url && c.email ? `mailto:${c.email}?subject=${encodeURIComponent("Reagende su cita")}&body=${encodeURIComponent(msg)}` : null;
+
+  function Channel({ label, contact, consented, href }: { label: string; contact: string | null; consented: boolean; href: string | null }) {
+    const enabled = !!contact && consented && !!href;
+    return (
+      <div className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2.5">
+        <div className="min-w-0">
+          <p className="text-sm text-gray-800">{label}</p>
+          <p className="text-xs text-gray-400 truncate">{!contact ? `Sin ${label === "Email" ? "email" : "teléfono"}` : !consented ? "Sin consentimiento del cliente" : contact}</p>
+        </div>
+        {enabled ? (
+          <a href={href!} target="_blank" rel="noopener noreferrer" onClick={() => onContacted()} className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 shrink-0">Abrir</a>
+        ) : (
+          <span className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-400 shrink-0">No disponible</span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold text-gray-900">Invitar a reagendar</h2>
+          <button onClick={onClose} aria-label="Cerrar" className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+        </div>
+        <p className="text-sm text-gray-500 mb-3">El cliente reservará un nuevo día desde el enlace.</p>
+        <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 mb-4 break-words">{preview}</div>
+        {err ? (
+          <p className="text-sm text-red-600 mb-2">{err}</p>
+        ) : !url ? (
+          <p className="text-sm text-gray-400 mb-2">Generando enlace…</p>
+        ) : (
+          <div className="space-y-2">
+            <Channel label="WhatsApp" contact={c.phone} consented={c.consent.whatsapp} href={waUrl} />
+            <Channel label="Email" contact={c.email} consented={c.consent.email} href={mailUrl} />
+            <button onClick={() => { void navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }} className="w-full flex items-center justify-center gap-2 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-50">
+              {copied ? "Enlace copiado ✓" : "Copiar enlace"}
+            </button>
+          </div>
+        )}
+        <button onClick={() => { void apiFetch(`/appointments/${row.id}/recovery`, { method: "POST", body: JSON.stringify({ state: "contacted" }) }).then(onContacted); onClose(); }} className="w-full mt-3 text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Marcar como contactado y cerrar</button>
+        <p className="text-[11px] text-gray-400 mt-3">Solo se habilitan los canales que el cliente ha aceptado (RGPD).</p>
       </div>
     </div>
   );

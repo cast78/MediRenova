@@ -435,6 +435,9 @@ model Appointment {
   // queda RESCHEDULED en su día y se crea una NUEVA cuyo rescheduledFromId apunta
   // aquí. Permite ver el rastro en el día original y navegar vieja↔nueva.
   rescheduledFromId String?         @unique @map("rescheduled_from_id")
+  // No-show recuperado por esta cita (uno-a-muchos: un no-show puede tener varios
+  // intentos de reagendado). No @unique, a diferencia de la reprogramación.
+  recoveredFromId String?           @map("recovered_from_id")
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
@@ -444,14 +447,45 @@ model Appointment {
   doctor          User?         @relation(fields: [doctorId], references: [id])
   revision        Revision?
   visit           Visit?
+  noShowRecovery  NoShowRecovery?
   rescheduledFrom Appointment?  @relation("Reschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
   rescheduledTo   Appointment?  @relation("Reschedule")
+  // Recuperación de un no-show: esta cita (nueva) recuperó el no-show `recoveredFrom`.
+  // Separado de la reprogramación: el no-show conserva su estado (métrica), solo se
+  // enlaza para la trazabilidad y para marcar la fila como "recuperada".
+  recoveredFrom   Appointment?  @relation("Recovery", fields: [recoveredFromId], references: [id], onDelete: SetNull)
+  recoveredBy     Appointment[] @relation("Recovery")
 
   @@index([tenantId])
   @@index([tenantId, scheduledAt])
   @@index([tenantId, status])
   @@index([roomId, scheduledAt])
   @@map("appointments")
+}
+
+// Seguimiento de recuperación de un no-show: estado que fija recepción (contactado /
+// descartado). "Pendiente" = sin registro; "Recuperada" se DERIVA en runtime (el
+// cliente tiene una cita nueva del mismo producto tras el no-show), no se guarda aquí.
+enum NoShowRecoveryState {
+  CONTACTED
+  DISMISSED
+}
+
+model NoShowRecovery {
+  id            String              @id @default(uuid())
+  tenantId      String              @map("tenant_id")
+  appointmentId String              @unique @map("appointment_id")
+  state         NoShowRecoveryState
+  at            DateTime            @default(now())
+  byUserId      String?             @map("by_user_id")
+  note          String?
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("no_show_recovery")
 }
 
 // ─────────────────────────────────────────────────────────────
