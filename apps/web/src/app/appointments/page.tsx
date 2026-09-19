@@ -12,7 +12,7 @@ import { RoomSelect } from "@/components/room-select";
 import { ClientInfoModal } from "@/components/client-info-modal";
 import { estadoDelCiclo, type CycleState } from "@/lib/cycle-state";
 import { arrivalInfo } from "@/lib/flow";
-import { ArrowUpRight, Phone, MessageCircle, Mail, MapPin, FileText, Calendar, Building2, DoorOpen, UserCircle, CalendarPlus, Send, X, RotateCcw, ArrowRight, CheckCircle2, CalendarX, PhoneCall, Bot, PencilLine } from "lucide-react";
+import { ArrowUpRight, Phone, MessageCircle, Mail, MapPin, FileText, Calendar, Building2, DoorOpen, UserCircle, CalendarPlus, Send, X, RotateCcw, ArrowRight, CheckCircle2, CalendarX, PhoneCall, Bot, PencilLine, Copy, Trash2 } from "lucide-react";
 
 // Origen de la reserva (solo destacamos los no-recepción, que son la mayoría).
 const ORIGIN: Record<string, string> = { WALK_IN: "mostrador", MAGIC_LINK: "online", API: "API", BACKOFFICE: "recepción" };
@@ -2217,18 +2217,24 @@ function RecoveryActionModal({ row, mode, onClose, onDone }: { row: NoShowRow; m
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">{isCall ? "Registrar llamada" : "Descartar recuperación"}</h2>
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isCall ? "bg-blue-50 text-blue-600" : "bg-red-50 text-red-600"}`}>
+              {isCall ? <PhoneCall className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900">{isCall ? "Registrar llamada" : "Descartar recuperación"}</h2>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+        </div>
         <p className="text-sm text-gray-500 mb-3">{isCall ? "Deja constancia de la llamada al paciente." : "Este no-show no se recuperará. Podrás reabrirlo más tarde."}</p>
         <label className="block text-xs font-medium text-gray-600 mb-1">Nota {isCall ? "(opcional)" : "(motivo, opcional)"}</label>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} autoFocus
           placeholder={isCall ? "No contesta · volverá a llamar · lo pensará…" : "No le interesa · número erróneo…"}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
-          <button onClick={submit} disabled={busy} className={`px-4 py-2 text-sm rounded-lg text-white disabled:opacity-50 ${isCall ? "bg-blue-600 hover:bg-blue-700" : "bg-red-600 hover:bg-red-700"}`}>
-            {busy ? "Guardando…" : isCall ? "Registrar" : "Descartar"}
-          </button>
-        </div>
+        <button onClick={submit} disabled={busy} className={`w-full py-2.5 text-sm rounded-lg text-white font-medium disabled:opacity-50 inline-flex items-center justify-center gap-2 ${isCall ? "bg-blue-600 hover:bg-blue-700" : "bg-red-600 hover:bg-red-700"}`}>
+          {isCall ? <PhoneCall className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
+          {busy ? "Guardando…" : isCall ? "Registrar y cerrar" : "Descartar y cerrar"}
+        </button>
       </div>
     </div>
   );
@@ -2314,7 +2320,7 @@ function RecoveryRow({ row, onInvite, onOpenAppt, onCall, onDismiss, onChanged }
   return (
     <div className={`bg-white border border-gray-200 rounded-xl px-4 py-3 ${row.recoveryState === "dismissed" ? "bg-gray-50/60" : ""}`}>
       <div className="flex items-center gap-2 flex-wrap">
-        <span className={`text-sm font-medium ${row.recoveryState === "dismissed" ? "text-gray-500" : "text-gray-900"}`}>{name}</span>
+        <span className={`text-sm font-medium inline-flex items-center gap-1.5 ${row.recoveryState === "dismissed" ? "text-gray-500" : "text-gray-900"}`}><UserCircle className="w-4 h-4 text-blue-600 shrink-0" />{name}</span>
         <span className={`text-[10px] px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 ${row.closedBy === "auto" ? "bg-orange-50 text-orange-600" : "bg-sky-50 text-sky-700"}`}>{row.closedBy === "auto" ? <><Bot className="w-3 h-3" />Auto</> : <><PencilLine className="w-3 h-3" />Manual</>}</span>
         <span className={`text-[10px] px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 ${st.cls}`}>{row.recoveryState === "recovered" && <CheckCircle2 className="w-3 h-3" />}{st.label}</span>
       </div>
@@ -2393,14 +2399,19 @@ function InviteRebookModal({ row, onClose, onContacted }: { row: NoShowRow; onCl
 
   function Channel({ label, channelKey, contact, consented, href }: { label: string; channelKey: "whatsapp" | "email"; contact: string | null; consented: boolean; href: string | null }) {
     const enabled = !!contact && consented && !!href;
+    const isWa = channelKey === "whatsapp";
+    const Icon = isWa ? MessageCircle : Mail;
     return (
       <div className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2.5">
-        <div className="min-w-0">
-          <p className="text-sm text-gray-800">{label}</p>
-          <p className="text-xs text-gray-400 truncate">{!contact ? `Sin ${label === "Email" ? "email" : "teléfono"}` : !consented ? "Sin consentimiento del cliente" : contact}</p>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Icon className={`w-4 h-4 shrink-0 ${isWa ? "text-emerald-600" : "text-blue-600"}`} />
+          <div className="min-w-0">
+            <p className="text-sm text-gray-800">{label}</p>
+            <p className="text-xs text-gray-400 truncate">{!contact ? `Sin ${label === "Email" ? "email" : "teléfono"}` : !consented ? "Sin consentimiento del cliente" : contact}</p>
+          </div>
         </div>
         {enabled ? (
-          <a href={href!} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(channelKey)} className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 shrink-0">Abrir</a>
+          <a href={href!} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(channelKey)} className={`text-xs px-3 py-1.5 rounded-lg text-white shrink-0 inline-flex items-center gap-1.5 ${isWa ? "bg-emerald-600 hover:bg-emerald-700" : "bg-blue-600 hover:bg-blue-700"}`}><Send className="w-3.5 h-3.5" />Abrir</a>
         ) : (
           <span className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-400 shrink-0">No disponible</span>
         )}
@@ -2411,12 +2422,15 @@ function InviteRebookModal({ row, onClose, onContacted }: { row: NoShowRow; onCl
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-semibold text-gray-900">Invitar a reagendar</h2>
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0"><Send className="w-5 h-5" /></div>
+            <h2 className="text-lg font-semibold text-gray-900">Invitar a reagendar</h2>
+          </div>
           <button onClick={onClose} aria-label="Cerrar" className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
         </div>
         <p className="text-sm text-gray-500 mb-3">El cliente reservará un nuevo día desde el enlace.</p>
-        <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 mb-4 break-words">{preview}</div>
+        <div className="rounded-lg bg-blue-50/50 border border-blue-100 p-3 text-xs text-gray-600 mb-4 break-words">{preview}</div>
         {err ? (
           <p className="text-sm text-red-600 mb-2">{err}</p>
         ) : !url ? (
@@ -2426,11 +2440,11 @@ function InviteRebookModal({ row, onClose, onContacted }: { row: NoShowRow; onCl
             <Channel label="WhatsApp" channelKey="whatsapp" contact={c.phone} consented={c.consent.whatsapp} href={waUrl} />
             <Channel label="Email" channelKey="email" contact={c.email} consented={c.consent.email} href={mailUrl} />
             <button onClick={() => { void navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }} className="w-full flex items-center justify-center gap-2 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-50">
-              {copied ? "Enlace copiado ✓" : "Copiar enlace"}
+              {copied ? <><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Enlace copiado</> : <><Copy className="w-4 h-4" /> Copiar enlace</>}
             </button>
           </div>
         )}
-        <button onClick={() => markContacted()} className="w-full mt-3 text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Marcar como contactado y cerrar</button>
+        <button onClick={() => markContacted()} className="w-full mt-3 text-sm px-3 py-2.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium inline-flex items-center justify-center gap-2"><CheckCircle2 className="w-4 h-4" /> Marcar como contactado y cerrar</button>
         <p className="text-[11px] text-gray-400 mt-3">Solo se habilitan los canales que el cliente ha aceptado (RGPD).</p>
       </div>
     </div>
