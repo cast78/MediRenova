@@ -12,7 +12,7 @@ import { RoomSelect } from "@/components/room-select";
 import { ClientInfoModal } from "@/components/client-info-modal";
 import { estadoDelCiclo, type CycleState } from "@/lib/cycle-state";
 import { arrivalInfo } from "@/lib/flow";
-import { ArrowUpRight, Phone, MessageCircle, Mail, MapPin, FileText, Calendar, Building2, DoorOpen, UserCircle } from "lucide-react";
+import { ArrowUpRight, Phone, MessageCircle, Mail, MapPin, FileText, Calendar, Building2, DoorOpen, UserCircle, CalendarPlus, Send, X, RotateCcw, ArrowRight, CheckCircle2, CalendarX, PhoneCall, Bot, PencilLine } from "lucide-react";
 
 // Origen de la reserva (solo destacamos los no-recepción, que son la mayoría).
 const ORIGIN: Record<string, string> = { WALK_IN: "mostrador", MAGIC_LINK: "online", API: "API", BACKOFFICE: "recepción" };
@@ -1569,7 +1569,7 @@ function AppointmentsBoard() {
   const [roomFilter, setRoomFilter] = useState(searchParams.get("room") ?? ""); // filtro de sala (todas las vistas de Reservas)
   const [showModal, setShowModal] = useState(false);
   // Bandeja de recuperación de no-shows.
-  const [recoveryFilter, setRecoveryFilter] = useState<"pending" | "contacted" | "recovered" | "all">("pending");
+  const [recoveryFilter, setRecoveryFilter] = useState<RecoveryFilterT>("pending");
   const [recoveryWindow, setRecoveryWindow] = useState(30);
   const [inviteRow, setInviteRow] = useState<NoShowRow | null>(null);
   const queryClient = useQueryClient();
@@ -1932,7 +1932,7 @@ function AppointmentsBoard() {
           windowDays={recoveryWindow}
           onWindow={setRecoveryWindow}
           onInvite={setInviteRow}
-          onReagendar={(r) => void openApptById(r.id)}
+          onOpenAppt={(id) => void openApptById(id)}
           onChanged={invalidateAppts}
         />
       )}
@@ -2163,18 +2163,19 @@ function TimelineView({ appts, loading, dateFilter, onManage }: {
 
 // ── Bandeja de recuperación de no-shows ────────────────────────────────────────
 
+type RecoveryFilterT = "pending" | "contacted" | "recovered" | "dismissed" | "all";
 interface NoShowRow {
   id: string;
   scheduledAt: string;
   closedBy: "auto" | "manual";
   recoveryState: "pending" | "contacted" | "dismissed" | "recovered";
-  contactedAt: string | null;
-  note: string | null;
+  contact: { channel: string | null; by: string | null; at: string | null; note: string | null } | null;
+  recovered: { appointmentId: string; scheduledAt: string; by: string | null } | null;
   customer: { id: string; firstName: string | null; lastName: string | null; phone: string | null; email: string | null; consent: { whatsapp: boolean; email: boolean; sms: boolean } };
   product: { id: string; name: string } | null;
   room: { id: string; name: string; center: { id: string; name: string } } | null;
 }
-interface NoShowMeta { page: number; limit: number; total: number; pages: number; counts: { pending: number; contacted: number; recovered: number; total: number; ratio: number } }
+interface NoShowMeta { page: number; limit: number; total: number; pages: number; counts: { pending: number; contacted: number; recovered: number; dismissed: number; total: number; ratio: number } }
 
 const RECOVERY_LABEL: Record<NoShowRow["recoveryState"], { label: string; cls: string }> = {
   pending: { label: "Pendiente", cls: "bg-amber-50 text-amber-700" },
@@ -2182,33 +2183,86 @@ const RECOVERY_LABEL: Record<NoShowRow["recoveryState"], { label: string; cls: s
   dismissed: { label: "Descartada", cls: "bg-gray-100 text-gray-500" },
   recovered: { label: "Recuperada", cls: "bg-emerald-50 text-emerald-700" },
 };
+const CHANNEL_META: Record<string, { label: string; Icon: typeof Phone; color: string }> = {
+  phone: { label: "Llamada", Icon: PhoneCall, color: "text-blue-600" },
+  whatsapp: { label: "WhatsApp", Icon: MessageCircle, color: "text-emerald-600" },
+  email: { label: "Email", Icon: Mail, color: "text-blue-600" },
+};
+const relTime = (iso: string | null): string => {
+  if (!iso) return "";
+  const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
+  if (mins < 60) return "hace un momento";
+  const h = Math.floor(mins / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? "ayer" : `hace ${d} días`;
+};
+const naiveDate = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 
-function RecoveryInbox({ data, loading, filter, onFilter, windowDays, onWindow, onInvite, onReagendar, onChanged }: {
+// Modal para "Registrar llamada" (contacto telefónico) o "Descartar", con nota opcional.
+function RecoveryActionModal({ row, mode, onClose, onDone }: { row: NoShowRow; mode: "call" | "dismiss"; onClose: () => void; onDone: () => void }) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const isCall = mode === "call";
+  async function submit() {
+    setBusy(true);
+    try {
+      await apiFetch(`/appointments/${row.id}/recovery`, {
+        method: "POST",
+        body: JSON.stringify(isCall ? { state: "contacted", channel: "phone", note: note.trim() || undefined } : { state: "dismissed", note: note.trim() || undefined }),
+      });
+      onDone(); onClose();
+    } finally { setBusy(false); }
+  }
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">{isCall ? "Registrar llamada" : "Descartar recuperación"}</h2>
+        <p className="text-sm text-gray-500 mb-3">{isCall ? "Deja constancia de la llamada al paciente." : "Este no-show no se recuperará. Podrás reabrirlo más tarde."}</p>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Nota {isCall ? "(opcional)" : "(motivo, opcional)"}</label>
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} autoFocus
+          placeholder={isCall ? "No contesta · volverá a llamar · lo pensará…" : "No le interesa · número erróneo…"}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" />
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={submit} disabled={busy} className={`px-4 py-2 text-sm rounded-lg text-white disabled:opacity-50 ${isCall ? "bg-blue-600 hover:bg-blue-700" : "bg-red-600 hover:bg-red-700"}`}>
+            {busy ? "Guardando…" : isCall ? "Registrar" : "Descartar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecoveryInbox({ data, loading, filter, onFilter, windowDays, onWindow, onInvite, onOpenAppt, onChanged }: {
   data: { data: NoShowRow[]; meta: NoShowMeta } | undefined;
   loading: boolean;
-  filter: "pending" | "contacted" | "recovered" | "all";
-  onFilter: (f: "pending" | "contacted" | "recovered" | "all") => void;
+  filter: RecoveryFilterT;
+  onFilter: (f: RecoveryFilterT) => void;
   windowDays: number;
   onWindow: (d: number) => void;
   onInvite: (r: NoShowRow) => void;
-  onReagendar: (r: NoShowRow) => void;
+  onOpenAppt: (id: string) => void;
   onChanged: () => void;
 }) {
+  const [action, setAction] = useState<{ row: NoShowRow; mode: "call" | "dismiss" } | null>(null);
   const counts = data?.meta.counts;
   const rows = data?.data ?? [];
-  const FILTERS = [
-    { key: "pending" as const, label: "Pendientes" }, { key: "contacted" as const, label: "Contactadas" },
-    { key: "recovered" as const, label: "Recuperadas" }, { key: "all" as const, label: "Todas" },
+  const FILTERS: { key: RecoveryFilterT; label: string }[] = [
+    { key: "pending", label: "Pendientes" }, { key: "contacted", label: "Contactadas" },
+    { key: "recovered", label: "Recuperadas" }, { key: "dismissed", label: "Descartadas" }, { key: "all", label: "Todas" },
   ];
   return (
     <div>
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-gray-50 rounded-xl px-4 py-3"><p className="text-xs text-gray-500">Sin gestionar</p><p className="text-2xl font-semibold text-amber-700">{counts?.pending ?? 0}</p></div>
-        <div className="bg-gray-50 rounded-xl px-4 py-3"><p className="text-xs text-gray-500">Contactadas</p><p className="text-2xl font-semibold text-gray-800">{counts?.contacted ?? 0}</p></div>
-        <div className="bg-gray-50 rounded-xl px-4 py-3"><p className="text-xs text-gray-500">Recuperadas · tasa</p><p className="text-2xl font-semibold text-emerald-700">{counts?.recovered ?? 0} <span className="text-sm text-gray-500 font-normal">· {counts?.ratio ?? 0}%</span></p></div>
+      {action && <RecoveryActionModal row={action.row} mode={action.mode} onClose={() => setAction(null)} onDone={onChanged} />}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3"><p className="text-xs text-amber-700">Sin gestionar</p><p className="text-2xl font-semibold text-amber-700">{counts?.pending ?? 0}</p></div>
+        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3"><p className="text-xs text-blue-700">Contactadas</p><p className="text-2xl font-semibold text-blue-700">{counts?.contacted ?? 0}</p></div>
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3"><p className="text-xs text-emerald-700">Recuperadas · tasa</p><p className="text-2xl font-semibold text-emerald-700">{counts?.recovered ?? 0} <span className="text-sm text-emerald-600 font-normal">· {counts?.ratio ?? 0}%</span></p><p className="text-[10px] text-emerald-600/80 mt-0.5">sobre el total; las descartadas cuentan como pérdidas</p></div>
+        <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3"><p className="text-xs text-red-700">Descartadas</p><p className="text-2xl font-semibold text-red-700">{counts?.dismissed ?? 0}</p></div>
       </div>
       <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 flex-wrap">
           {FILTERS.map((f) => (
             <button key={f.key} onClick={() => onFilter(f.key)} className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${filter === f.key ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>{f.label}</button>
           ))}
@@ -2228,52 +2282,84 @@ function RecoveryInbox({ data, loading, filter, onFilter, windowDays, onWindow, 
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {rows.map((r) => <RecoveryRow key={r.id} row={r} onInvite={onInvite} onReagendar={onReagendar} onChanged={onChanged} />)}
+          {rows.map((r) => (
+            <RecoveryRow key={r.id} row={r} onInvite={onInvite} onOpenAppt={onOpenAppt}
+              onCall={() => setAction({ row: r, mode: "call" })} onDismiss={() => setAction({ row: r, mode: "dismiss" })} onChanged={onChanged} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function RecoveryRow({ row, onInvite, onReagendar, onChanged }: { row: NoShowRow; onInvite: (r: NoShowRow) => void; onReagendar: (r: NoShowRow) => void; onChanged: () => void }) {
+function RecoveryRow({ row, onInvite, onOpenAppt, onCall, onDismiss, onChanged }: {
+  row: NoShowRow; onInvite: (r: NoShowRow) => void; onOpenAppt: (id: string) => void;
+  onCall: () => void; onDismiss: () => void; onChanged: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const name = `${row.customer.firstName ?? ""} ${row.customer.lastName ?? ""}`.trim() || "Sin nombre";
-  const faltoEl = new Date(`${row.scheduledAt.slice(0, 10)}T00:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
   const st = RECOVERY_LABEL[row.recoveryState];
-  const done = row.recoveryState === "recovered" || row.recoveryState === "dismissed";
-  async function setState(state: "contacted" | "dismissed" | "reset") {
+  const ch = row.contact?.channel ? CHANNEL_META[row.contact.channel] : null;
+  async function reopen() {
     setBusy(true);
-    try { await apiFetch(`/appointments/${row.id}/recovery`, { method: "POST", body: JSON.stringify({ state }) }); onChanged(); }
+    try { await apiFetch(`/appointments/${row.id}/recovery`, { method: "POST", body: JSON.stringify({ state: "reset" }) }); onChanged(); }
     finally { setBusy(false); }
   }
+  const redBtn = "text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 inline-flex items-center gap-1";
+  const greenBtn = "text-xs px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 inline-flex items-center gap-1";
+  const outBlue = "text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium inline-flex items-center gap-1";
+  const prim = "text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium inline-flex items-center gap-1";
+  const outGreen = "text-xs px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-medium inline-flex items-center gap-1";
+
   return (
-    <div className={`bg-white border border-gray-200 rounded-xl px-4 py-3 ${done ? "opacity-80" : ""}`}>
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-gray-900">{name}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${row.closedBy === "auto" ? "bg-orange-50 text-orange-600" : "bg-sky-50 text-sky-700"}`}>{row.closedBy === "auto" ? "Auto" : "Manual"}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
-          </div>
-          <p className="text-xs text-gray-500 mt-1">Faltó el {faltoEl}{row.product ? ` · ${row.product.name}` : ""}{row.room ? ` · ${row.room.name} · ${row.room.center.name}` : ""}{row.customer.phone ? ` · ${row.customer.phone}` : ""}</p>
+    <div className={`bg-white border border-gray-200 rounded-xl px-4 py-3 ${row.recoveryState === "dismissed" ? "bg-gray-50/60" : ""}`}>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className={`text-sm font-medium ${row.recoveryState === "dismissed" ? "text-gray-500" : "text-gray-900"}`}>{name}</span>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 ${row.closedBy === "auto" ? "bg-orange-50 text-orange-600" : "bg-sky-50 text-sky-700"}`}>{row.closedBy === "auto" ? <><Bot className="w-3 h-3" />Auto</> : <><PencilLine className="w-3 h-3" />Manual</>}</span>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 ${st.cls}`}>{row.recoveryState === "recovered" && <CheckCircle2 className="w-3 h-3" />}{st.label}</span>
+      </div>
+      <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5 flex-wrap">
+        <CalendarX className="w-3.5 h-3.5 text-gray-400" />Faltó el {naiveDate(row.scheduledAt)}
+        {row.product && <span>· {row.product.name}</span>}
+        {row.room && <span>· {row.room.name} · {row.room.center.name}</span>}
+        {row.customer.phone && <span className="inline-flex items-center gap-1"><Phone className="w-3 h-3 text-gray-400" />{row.customer.phone}</span>}
+      </p>
+
+      {row.recoveryState === "contacted" && row.contact && (
+        <div className="mt-2 rounded-lg bg-blue-50/60 px-3 py-2">
+          <p className="text-xs text-gray-600 flex items-center gap-1.5">
+            {ch ? <ch.Icon className={`w-3.5 h-3.5 ${ch.color}`} /> : <PhoneCall className="w-3.5 h-3.5 text-gray-400" />}
+            <span className="text-gray-800">{ch?.label ?? "Contacto"}</span>{row.contact.by ? ` · por ${row.contact.by}` : ""} · {relTime(row.contact.at)}
+          </p>
+          {row.contact.note && <p className="text-xs text-gray-500 italic mt-0.5">“{row.contact.note}”</p>}
         </div>
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
-          {row.recoveryState === "pending" && (
-            <>
-              <button disabled={busy} onClick={() => setState("contacted")} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">Contactado</button>
-              <button disabled={busy} onClick={() => setState("dismissed")} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50">Descartar</button>
-            </>
-          )}
-          {(row.recoveryState === "contacted" || row.recoveryState === "dismissed") && (
-            <button disabled={busy} onClick={() => setState("reset")} className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50">Reabrir</button>
-          )}
-          {row.recoveryState !== "recovered" && (
-            <>
-              <button onClick={() => onInvite(row)} className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium">Invitar a reagendar</button>
-              <button onClick={() => onReagendar(row)} className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">Reagendar</button>
-            </>
-          )}
-        </div>
+      )}
+      {row.recoveryState === "dismissed" && (
+        <p className="text-xs text-gray-400 italic mt-1.5">Descartada{row.contact?.by ? ` · por ${row.contact.by}` : ""}{row.contact?.note ? ` · “${row.contact.note}”` : ""}</p>
+      )}
+      {row.recoveryState === "recovered" && row.recovered && (
+        <p className="text-xs text-emerald-700 mt-1.5 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" />Cita nueva el {naiveDate(row.recovered.scheduledAt)}{row.recovered.by ? ` · por ${row.recovered.by}` : ""}</p>
+      )}
+
+      <div className="flex items-center gap-2 flex-wrap justify-end mt-2.5">
+        {row.recoveryState === "recovered" && row.recovered && (
+          <button onClick={() => onOpenAppt(row.recovered!.appointmentId)} className={outGreen}><ArrowRight className="w-3.5 h-3.5" /> Ver cita nueva</button>
+        )}
+        {(row.recoveryState === "contacted" || row.recoveryState === "dismissed") && (
+          <button disabled={busy} onClick={reopen} className={greenBtn}><RotateCcw className="w-3.5 h-3.5" /> Reabrir</button>
+        )}
+        {row.recoveryState === "pending" && (
+          <>
+            <button onClick={onDismiss} className={redBtn}><X className="w-3.5 h-3.5" /> Descartar</button>
+            <button onClick={onCall} className={outBlue}><PhoneCall className="w-3.5 h-3.5" /> Registrar llamada</button>
+          </>
+        )}
+        {row.recoveryState !== "recovered" && (
+          <>
+            <button onClick={() => onInvite(row)} className={outBlue}><Send className="w-3.5 h-3.5" /> Invitar a reagendar</button>
+            <button onClick={() => onOpenAppt(row.id)} className={prim}><CalendarPlus className="w-3.5 h-3.5" /> Reagendar</button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -2292,14 +2378,20 @@ function InviteRebookModal({ row, onClose, onContacted }: { row: NoShowRow; onCl
   const producto = row.product?.name ?? "revisión";
   const fecha = new Date(`${row.scheduledAt.slice(0, 10)}T00:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "long" });
   const centro = row.room?.center.name ?? "nuestro centro";
-  const base = `Hola ${nombre}, tenía una cita de ${producto} el ${fecha} en ${centro} a la que no pudo asistir. Como no llegó a cancelarla, sigue pendiente: puede reservar un nuevo día`;
-  const preview = `${base} desde el enlace.`;
-  const msg = url ? `${base} aquí: ${url}` : "";
+  const base = `Hola ${nombre}, tenía una cita de ${producto} el ${fecha} en ${centro} a la que no pudo asistir. Como no llegó a cancelarla, sigue pendiente. Puede reservar un nuevo día aquí:`;
+  const preview = base;
+  const msg = url ? `${base}\n\n${url}` : "";
   const c = row.customer;
   const waUrl = url && c.phone ? `https://wa.me/${waNorm(c.phone)}?text=${encodeURIComponent(msg)}` : null;
-  const mailUrl = url && c.email ? `mailto:${c.email}?subject=${encodeURIComponent("Reagende su cita")}&body=${encodeURIComponent(msg)}` : null;
+  const mailUrl = url && c.email ? `mailto:${c.email}?subject=${encodeURIComponent("MediRenova - Reagenda tu cita")}&body=${encodeURIComponent(msg)}` : null;
 
-  function Channel({ label, contact, consented, href }: { label: string; contact: string | null; consented: boolean; href: string | null }) {
+  // Marca el no-show como contactado, guardando la vía usada. Refresca y cierra.
+  const markContacted = (channel?: "whatsapp" | "email") => {
+    void apiFetch(`/appointments/${row.id}/recovery`, { method: "POST", body: JSON.stringify({ state: "contacted", ...(channel ? { channel } : {}) }) }).then(onContacted);
+    onClose();
+  };
+
+  function Channel({ label, channelKey, contact, consented, href }: { label: string; channelKey: "whatsapp" | "email"; contact: string | null; consented: boolean; href: string | null }) {
     const enabled = !!contact && consented && !!href;
     return (
       <div className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2.5">
@@ -2308,7 +2400,7 @@ function InviteRebookModal({ row, onClose, onContacted }: { row: NoShowRow; onCl
           <p className="text-xs text-gray-400 truncate">{!contact ? `Sin ${label === "Email" ? "email" : "teléfono"}` : !consented ? "Sin consentimiento del cliente" : contact}</p>
         </div>
         {enabled ? (
-          <a href={href!} target="_blank" rel="noopener noreferrer" onClick={() => onContacted()} className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 shrink-0">Abrir</a>
+          <a href={href!} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(channelKey)} className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 shrink-0">Abrir</a>
         ) : (
           <span className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-400 shrink-0">No disponible</span>
         )}
@@ -2331,14 +2423,14 @@ function InviteRebookModal({ row, onClose, onContacted }: { row: NoShowRow; onCl
           <p className="text-sm text-gray-400 mb-2">Generando enlace…</p>
         ) : (
           <div className="space-y-2">
-            <Channel label="WhatsApp" contact={c.phone} consented={c.consent.whatsapp} href={waUrl} />
-            <Channel label="Email" contact={c.email} consented={c.consent.email} href={mailUrl} />
+            <Channel label="WhatsApp" channelKey="whatsapp" contact={c.phone} consented={c.consent.whatsapp} href={waUrl} />
+            <Channel label="Email" channelKey="email" contact={c.email} consented={c.consent.email} href={mailUrl} />
             <button onClick={() => { void navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }} className="w-full flex items-center justify-center gap-2 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-50">
               {copied ? "Enlace copiado ✓" : "Copiar enlace"}
             </button>
           </div>
         )}
-        <button onClick={() => { void apiFetch(`/appointments/${row.id}/recovery`, { method: "POST", body: JSON.stringify({ state: "contacted" }) }).then(onContacted); onClose(); }} className="w-full mt-3 text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Marcar como contactado y cerrar</button>
+        <button onClick={() => markContacted()} className="w-full mt-3 text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Marcar como contactado y cerrar</button>
         <p className="text-[11px] text-gray-400 mt-3">Solo se habilitan los canales que el cliente ha aceptado (RGPD).</p>
       </div>
     </div>

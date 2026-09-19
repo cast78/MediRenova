@@ -256,7 +256,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const q = z.object({
         window: z.coerce.number().int().min(1).max(180).default(30),
-        filter: z.enum(["pending", "contacted", "recovered", "all"]).default("pending"),
+        filter: z.enum(["pending", "contacted", "recovered", "dismissed", "all"]).default("pending"),
         page: z.coerce.number().int().min(1).default(1),
         limit: z.coerce.number().int().min(1).max(200).default(50),
       }).safeParse(request.query);
@@ -278,8 +278,8 @@ export async function appointmentRoutes(server: FastifyInstance) {
           customer: { select: { id: true, firstName: true, lastName: true, phone: true, email: true, acceptsWhatsapp: true, acceptsEmail: true, acceptsSms: true } },
           product: { select: { id: true, name: true } },
           room: { include: { center: { select: { id: true, name: true } } } },
-          noShowRecovery: { select: { state: true, at: true, note: true } },
-          recoveredBy: { select: { id: true }, take: 1 }, // enlace explícito de recuperación
+          noShowRecovery: { select: { state: true, channel: true, at: true, note: true, byUser: { select: { firstName: true, lastName: true } } } },
+          recoveredBy: { select: { id: true, scheduledAt: true, createdById: true }, take: 1, orderBy: { scheduledAt: "desc" } },
         },
         orderBy: { scheduledAt: "desc" },
       });
@@ -303,27 +303,41 @@ export async function appointmentRoutes(server: FastifyInstance) {
       const isRecovered = (a: (typeof noShows)[number]) =>
         (laterByKey.get(`${a.customerId}:${a.productId}`) ?? []).some((t) => t > a.createdAt.getTime());
 
-      const rows = noShows.map((a) => ({
-        id: a.id,
-        scheduledAt: a.scheduledAt,
-        closedBy: a.autoClosed ? "auto" : "manual",
-        recoveryState: deriveRecoveryState({ recovered: a.recoveredBy.length > 0 || isRecovered(a), savedState: a.noShowRecovery?.state ?? null }),
-        contactedAt: a.noShowRecovery?.at ?? null,
-        note: a.noShowRecovery?.note ?? null,
-        customer: {
-          id: a.customer.id, firstName: a.customer.firstName, lastName: a.customer.lastName,
-          phone: a.customer.phone, email: a.customer.email,
-          consent: { whatsapp: a.customer.acceptsWhatsapp, email: a.customer.acceptsEmail, sms: a.customer.acceptsSms },
-        },
-        product: a.product,
-        room: a.room ? { id: a.room.id, name: a.room.name, center: a.room.center } : null,
-      }));
+      // Nombre de quién creó la cita nueva (recuperación explícita).
+      const creatorIds = [...new Set(noShows.flatMap((a) => a.recoveredBy.map((r) => r.createdById)).filter((x): x is string => !!x))];
+      const creators = creatorIds.length
+        ? await prisma.user.findMany({ where: { id: { in: creatorIds } }, select: { id: true, firstName: true, lastName: true } })
+        : [];
+      const creatorName = new Map(creators.map((u) => [u.id, `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || "—"]));
+      const uname = (u: { firstName: string | null; lastName: string | null } | null | undefined) =>
+        u ? (`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || "—") : null;
+
+      const rows = noShows.map((a) => {
+        const nsr = a.noShowRecovery;
+        const rb = a.recoveredBy[0];
+        return {
+          id: a.id,
+          scheduledAt: a.scheduledAt,
+          closedBy: a.autoClosed ? "auto" : "manual",
+          recoveryState: deriveRecoveryState({ recovered: a.recoveredBy.length > 0 || isRecovered(a), savedState: nsr?.state ?? null }),
+          contact: nsr ? { channel: nsr.channel ? nsr.channel.toLowerCase() : null, by: uname(nsr.byUser), at: nsr.at, note: nsr.note } : null,
+          recovered: rb ? { appointmentId: rb.id, scheduledAt: rb.scheduledAt, by: rb.createdById ? creatorName.get(rb.createdById) ?? null : null } : null,
+          customer: {
+            id: a.customer.id, firstName: a.customer.firstName, lastName: a.customer.lastName,
+            phone: a.customer.phone, email: a.customer.email,
+            consent: { whatsapp: a.customer.acceptsWhatsapp, email: a.customer.acceptsEmail, sms: a.customer.acceptsSms },
+          },
+          product: a.product,
+          room: a.room ? { id: a.room.id, name: a.room.name, center: a.room.center } : null,
+        };
+      });
 
       const recoveredCount = rows.filter((r) => r.recoveryState === "recovered").length;
       const counts = {
         pending: rows.filter((r) => r.recoveryState === "pending").length,
         contacted: rows.filter((r) => r.recoveryState === "contacted").length,
         recovered: recoveredCount,
+        dismissed: rows.filter((r) => r.recoveryState === "dismissed").length,
         total: rows.length,
         ratio: recoveryRatio(recoveredCount, rows.length),
       };
@@ -337,7 +351,11 @@ export async function appointmentRoutes(server: FastifyInstance) {
   // descartado) o lo reinicia (vuelve a pendiente). Deja traza en la ficha del cliente.
   server.post<{ Params: { id: string } }>("/appointments/:id/recovery", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request, reply: FastifyReply) => {
-      const body = z.object({ state: z.enum(["contacted", "dismissed", "reset"]), note: z.string().max(500).optional() }).safeParse(request.body);
+      const body = z.object({
+        state: z.enum(["contacted", "dismissed", "reset"]),
+        channel: z.enum(["phone", "whatsapp", "email"]).optional(),
+        note: z.string().max(500).optional(),
+      }).safeParse(request.body);
       if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
       const appt = await prisma.appointment.findFirst({ where: { id: request.params.id, tenantId: request.ctx.tenantId }, select: { id: true, status: true, customerId: true } });
       if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
@@ -348,10 +366,11 @@ export async function appointmentRoutes(server: FastifyInstance) {
         return reply.send({ data: { state: "pending" }, errors: null });
       }
       const state = body.data.state === "contacted" ? "CONTACTED" : "DISMISSED";
+      const channel = body.data.channel ? (body.data.channel.toUpperCase() as "PHONE" | "WHATSAPP" | "EMAIL") : null;
       await prisma.noShowRecovery.upsert({
         where: { appointmentId: appt.id },
-        create: { tenantId: request.ctx.tenantId, appointmentId: appt.id, state, byUserId: request.ctx.userId ?? null, note: body.data.note ?? null },
-        update: { state, at: new Date(), byUserId: request.ctx.userId ?? null, note: body.data.note ?? null },
+        create: { tenantId: request.ctx.tenantId, appointmentId: appt.id, state, channel, byUserId: request.ctx.userId ?? null, note: body.data.note ?? null },
+        update: { state, channel, at: new Date(), byUserId: request.ctx.userId ?? null, note: body.data.note ?? null },
       });
       await prisma.customerEvent.create({ data: {
         tenantId: request.ctx.tenantId, customerId: appt.customerId, appointmentId: appt.id,

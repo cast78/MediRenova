@@ -196,6 +196,7 @@ model User {
   appointments    Appointment[]
   auditLogs       AuditLog[]
   rooms           RoomDoctor[]
+  noShowRecoveries NoShowRecovery[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -471,18 +472,27 @@ enum NoShowRecoveryState {
   DISMISSED
 }
 
+// Vía por la que se registró el contacto (para mostrar "por qué canal" en la bandeja).
+enum NoShowRecoveryChannel {
+  PHONE
+  WHATSAPP
+  EMAIL
+}
+
 model NoShowRecovery {
-  id            String              @id @default(uuid())
-  tenantId      String              @map("tenant_id")
-  appointmentId String              @unique @map("appointment_id")
+  id            String                 @id @default(uuid())
+  tenantId      String                 @map("tenant_id")
+  appointmentId String                 @unique @map("appointment_id")
   state         NoShowRecoveryState
-  at            DateTime            @default(now())
-  byUserId      String?             @map("by_user_id")
+  channel       NoShowRecoveryChannel?
+  at            DateTime               @default(now())
+  byUserId      String?                @map("by_user_id")
   note          String?
-  createdAt     DateTime            @default(now()) @map("created_at")
-  updatedAt     DateTime            @updatedAt @map("updated_at")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
 
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  byUser      User?       @relation(fields: [byUserId], references: [id])
 
   @@index([tenantId])
   @@map("no_show_recovery")
@@ -767,3 +777,16 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+
+// Enlace corto para magic links: `code` (aleatorio, inadivinable) → token JWT. Permite
+// mandar URLs cortas y de confianza (…/b/CODE) en vez del token largo. Sin tenantId: el
+// token que guarda ya lleva su empresa; se busca por `code`, que es el secreto.
+model ShortLink {
+  code      String   @id
+  token     String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("short_links")
+}

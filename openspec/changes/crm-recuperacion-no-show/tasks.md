@@ -41,6 +41,21 @@
 - [x] 5b.5 Popup de la cita: rastro "Recuperada del no-show del {fecha} →" (verde), navegable
 - [x] 5b.6 Texto de invitación opción A (producto + fecha + "sigue pendiente", no culpabilizador)
 
+## 5c. Enlace corto para el mensaje (magic link)
+
+- [x] 5c.1 Tabla `ShortLink` (code aleatorio → token, con caducidad); migración
+- [x] 5c.2 `/link/generate` devuelve `…/b/CODE` (token de 30 días) + endpoint público `GET /link/short/:code`
+- [x] 5c.3 Página web `/b/[code]` resuelve y redirige a `/booking/:token`
+- [x] 5c.4 Mensaje de invitación con salto de línea antes del enlace; asunto de email "MediRenova - Reagenda tu cita"
+
+## 5d. Rediseño de la bandeja (vía, nota, recepcionista, estados)
+
+- [x] 5d.1 Migración `NoShowRecovery.channel` (phone/whatsapp/email) + relación al usuario
+- [x] 5d.2 Listado enriquecido: vía, recepcionista (`byUser`), nota, cuándo; para recuperadas, fecha de la cita nueva + quién; `counts.dismissed`
+- [x] 5d.3 KPIs con color (4: sin gestionar / contactadas / recuperadas·tasa+nota / descartadas) y pestaña "Descartadas"
+- [x] 5d.4 Filas por estado con iconos y botones de color (Reagendar / Invitar / Registrar llamada / Descartar rojo / Reabrir verde / Ver cita nueva)
+- [x] 5d.5 "Registrar llamada" y "Descartar" con mini-modal de nota; el modal de invitar sella la vía (whatsapp/email); "Reagendar" abre el popup de gestión (trazabilidad)
+
 ## 6. Verificación
 
 - [x] 6.1 Typecheck API + web en verde
