@@ -12,6 +12,7 @@ import { signConfirmationToken } from "../lib/jwt.js";
 import { appointmentEvents } from "../lib/appointment-timeline.js";
 import { classifyStuckEpisode, episodeAgeDays, STUCK_LABELS } from "../lib/episodes.js";
 import { buildTenantAlert, sendTenantAlert } from "../lib/episode-alerts.js";
+import { deriveRecoveryState, recoveryRatio } from "../lib/no-show-recovery.js";
 
 const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
 
@@ -23,6 +24,9 @@ const createAppointmentSchema = z.object({
   source: z.enum(["BACKOFFICE", "WALK_IN", "API"]).default("BACKOFFICE"),
   notes: z.string().optional(),
   doctorId: z.string().uuid().optional(),
+  // Recuperación de un no-show: id de la cita NO_SHOW que esta cita nueva reagenda
+  // (para la trazabilidad). Se valida en el handler.
+  recoveredFromId: z.string().uuid().optional(),
 });
 
 const updateAppointmentSchema = z.object({
@@ -187,6 +191,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
             revision: { select: { id: true, outcome: true } },
             rescheduledTo: { select: { id: true, scheduledAt: true } },
             rescheduledFrom: { select: { id: true, scheduledAt: true } },
+            recoveredFrom: { select: { id: true, scheduledAt: true } },
           },
           orderBy: { scheduledAt: "asc" },
         }),
@@ -242,6 +247,137 @@ export async function appointmentRoutes(server: FastifyInstance) {
         prisma.appointment.count({ where }),
       ]);
       return reply.send({ data: appointments, meta: { page, limit, total, pages: Math.ceil(total / limit) }, errors: null });
+    });
+
+  // GET /appointments/no-shows — bandeja de recuperación: citas NO_SHOW recientes con
+  // su estado de seguimiento (pendiente/contactado/descartado) y si ya se recuperaron
+  // (el cliente tiene una cita nueva del MISMO producto creada tras el no-show).
+  server.get("/appointments/no-shows", { preHandler: [requireRole("RECEPTIONIST")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const q = z.object({
+        window: z.coerce.number().int().min(1).max(180).default(30),
+        filter: z.enum(["pending", "contacted", "recovered", "dismissed", "all"]).default("pending"),
+        page: z.coerce.number().int().min(1).default(1),
+        limit: z.coerce.number().int().min(1).max(200).default(50),
+      }).safeParse(request.query);
+      if (!q.success) return reply.status(400).send({ errors: q.error.flatten().fieldErrors });
+      const { window: windowDays, filter, page, limit } = q.data;
+
+      const config = await prisma.tenantConfig.findUnique({ where: { tenantId: request.ctx.tenantId }, select: { timezone: true } });
+      const today = nowInTimezone(config?.timezone ?? "Europe/Madrid").date;
+      const from = new Date(`${today}T00:00:00.000Z`);
+      from.setUTCDate(from.getUTCDate() - windowDays);
+
+      const where: Record<string, unknown> = { tenantId: request.ctx.tenantId, status: "NO_SHOW", scheduledAt: { gte: from } };
+      if (request.ctx.centerId) where["room"] = { centerId: request.ctx.centerId };
+
+      const noShows = await prisma.appointment.findMany({
+        where,
+        take: 1000,
+        include: {
+          customer: { select: { id: true, firstName: true, lastName: true, phone: true, email: true, acceptsWhatsapp: true, acceptsEmail: true, acceptsSms: true } },
+          product: { select: { id: true, name: true } },
+          room: { include: { center: { select: { id: true, name: true } } } },
+          noShowRecovery: { select: { state: true, channel: true, at: true, note: true, byUser: { select: { firstName: true, lastName: true } } } },
+          recoveredBy: { select: { id: true, scheduledAt: true, createdById: true }, take: 1, orderBy: { scheduledAt: "desc" } },
+        },
+        orderBy: { scheduledAt: "desc" },
+      });
+
+      // "Recuperada": el cliente tiene una cita del MISMO producto creada tras el no-show.
+      const custIds = [...new Set(noShows.map((a) => a.customerId))];
+      const prodIds = [...new Set(noShows.map((a) => a.productId))];
+      const later = custIds.length
+        ? await prisma.appointment.findMany({
+            where: { tenantId: request.ctx.tenantId, customerId: { in: custIds }, productId: { in: prodIds }, status: { in: ["PENDING", "CONFIRMED", "ATTENDED"] } },
+            select: { customerId: true, productId: true, createdAt: true },
+          })
+        : [];
+      const laterByKey = new Map<string, number[]>();
+      for (const a of later) {
+        const k = `${a.customerId}:${a.productId}`;
+        const arr = laterByKey.get(k) ?? [];
+        arr.push(a.createdAt.getTime());
+        laterByKey.set(k, arr);
+      }
+      const isRecovered = (a: (typeof noShows)[number]) =>
+        (laterByKey.get(`${a.customerId}:${a.productId}`) ?? []).some((t) => t > a.createdAt.getTime());
+
+      // Nombre de quién creó la cita nueva (recuperación explícita).
+      const creatorIds = [...new Set(noShows.flatMap((a) => a.recoveredBy.map((r) => r.createdById)).filter((x): x is string => !!x))];
+      const creators = creatorIds.length
+        ? await prisma.user.findMany({ where: { id: { in: creatorIds } }, select: { id: true, firstName: true, lastName: true } })
+        : [];
+      const creatorName = new Map(creators.map((u) => [u.id, `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || "—"]));
+      const uname = (u: { firstName: string | null; lastName: string | null } | null | undefined) =>
+        u ? (`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || "—") : null;
+
+      const rows = noShows.map((a) => {
+        const nsr = a.noShowRecovery;
+        const rb = a.recoveredBy[0];
+        return {
+          id: a.id,
+          scheduledAt: a.scheduledAt,
+          closedBy: a.autoClosed ? "auto" : "manual",
+          recoveryState: deriveRecoveryState({ recovered: a.recoveredBy.length > 0 || isRecovered(a), savedState: nsr?.state ?? null }),
+          contact: nsr ? { channel: nsr.channel ? nsr.channel.toLowerCase() : null, by: uname(nsr.byUser), at: nsr.at, note: nsr.note } : null,
+          recovered: rb ? { appointmentId: rb.id, scheduledAt: rb.scheduledAt, by: rb.createdById ? creatorName.get(rb.createdById) ?? null : null } : null,
+          customer: {
+            id: a.customer.id, firstName: a.customer.firstName, lastName: a.customer.lastName,
+            phone: a.customer.phone, email: a.customer.email,
+            consent: { whatsapp: a.customer.acceptsWhatsapp, email: a.customer.acceptsEmail, sms: a.customer.acceptsSms },
+          },
+          product: a.product,
+          room: a.room ? { id: a.room.id, name: a.room.name, center: a.room.center } : null,
+        };
+      });
+
+      const recoveredCount = rows.filter((r) => r.recoveryState === "recovered").length;
+      const counts = {
+        pending: rows.filter((r) => r.recoveryState === "pending").length,
+        contacted: rows.filter((r) => r.recoveryState === "contacted").length,
+        recovered: recoveredCount,
+        dismissed: rows.filter((r) => r.recoveryState === "dismissed").length,
+        total: rows.length,
+        ratio: recoveryRatio(recoveredCount, rows.length),
+      };
+
+      const filtered = filter === "all" ? rows : rows.filter((r) => r.recoveryState === filter);
+      const paged = filtered.slice((page - 1) * limit, page * limit);
+      return reply.send({ data: paged, meta: { page, limit, total: filtered.length, pages: Math.ceil(filtered.length / limit), counts }, errors: null });
+    });
+
+  // POST /appointments/:id/recovery — fija el seguimiento de un no-show (contactado /
+  // descartado) o lo reinicia (vuelve a pendiente). Deja traza en la ficha del cliente.
+  server.post<{ Params: { id: string } }>("/appointments/:id/recovery", { preHandler: [requireRole("RECEPTIONIST")] },
+    async (request, reply: FastifyReply) => {
+      const body = z.object({
+        state: z.enum(["contacted", "dismissed", "reset"]),
+        channel: z.enum(["phone", "whatsapp", "email"]).optional(),
+        note: z.string().max(500).optional(),
+      }).safeParse(request.body);
+      if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
+      const appt = await prisma.appointment.findFirst({ where: { id: request.params.id, tenantId: request.ctx.tenantId }, select: { id: true, status: true, customerId: true } });
+      if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      if (appt.status !== "NO_SHOW") return reply.status(400).send({ errors: [{ code: "NOT_A_NO_SHOW", message: "Solo se gestionan citas marcadas como no presentado." }] });
+
+      if (body.data.state === "reset") {
+        await prisma.noShowRecovery.deleteMany({ where: { appointmentId: appt.id } });
+        return reply.send({ data: { state: "pending" }, errors: null });
+      }
+      const state = body.data.state === "contacted" ? "CONTACTED" : "DISMISSED";
+      const channel = body.data.channel ? (body.data.channel.toUpperCase() as "PHONE" | "WHATSAPP" | "EMAIL") : null;
+      await prisma.noShowRecovery.upsert({
+        where: { appointmentId: appt.id },
+        create: { tenantId: request.ctx.tenantId, appointmentId: appt.id, state, channel, byUserId: request.ctx.userId ?? null, note: body.data.note ?? null },
+        update: { state, channel, at: new Date(), byUserId: request.ctx.userId ?? null, note: body.data.note ?? null },
+      });
+      await prisma.customerEvent.create({ data: {
+        tenantId: request.ctx.tenantId, customerId: appt.customerId, appointmentId: appt.id,
+        type: body.data.state === "contacted" ? "noshow_contactado" : "noshow_descartado",
+        actor: "recepcion", detail: body.data.note ?? null,
+      } }).catch(() => {});
+      return reply.send({ data: { state: body.data.state }, errors: null });
     });
 
   // GET /appointments/unclosed-episodes — episodios "sin cerrar": citas de días
@@ -469,6 +605,17 @@ export async function appointmentRoutes(server: FastifyInstance) {
         }
       }
 
+      // Enlace de recuperación: solo si la cita origen es un NO_SHOW del mismo cliente
+      // y producto (trazabilidad; el no-show conserva su estado). Si no encaja, se ignora.
+      let recoveredFromId: string | null = null;
+      if (body.data.recoveredFromId) {
+        const src = await prisma.appointment.findFirst({
+          where: { id: body.data.recoveredFromId, tenantId: request.ctx.tenantId, status: "NO_SHOW", customerId: body.data.customerId, productId: body.data.productId },
+          select: { id: true },
+        });
+        recoveredFromId = src?.id ?? null;
+      }
+
       try {
         const appointment = await prisma.appointment.create({
           data: {
@@ -483,6 +630,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
             status: "PENDING",
             doctorId: body.data.doctorId ?? null,
             createdById: request.ctx.userId,
+            recoveredFromId,
           },
           include: {
             customer: { select: { id: true, firstName: true, lastName: true, phone: true } },
@@ -523,7 +671,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
     async (request, reply: FastifyReply) => {
       const appointment = await prisma.appointment.findFirst({
         where: { id: request.params.id, tenantId: request.ctx.tenantId },
-        include: { customer: true, product: true, room: { include: { center: true } }, revision: true, visit: { select: { id: true, status: true, centerId: true } }, rescheduledTo: { select: { id: true, scheduledAt: true } }, rescheduledFrom: { select: { id: true, scheduledAt: true } } },
+        include: { customer: true, product: true, room: { include: { center: true } }, revision: true, visit: { select: { id: true, status: true, centerId: true } }, rescheduledTo: { select: { id: true, scheduledAt: true } }, rescheduledFrom: { select: { id: true, scheduledAt: true } }, recoveredFrom: { select: { id: true, scheduledAt: true } }, recoveredBy: { select: { id: true, scheduledAt: true }, orderBy: { scheduledAt: "desc" }, take: 1 } },
       });
       if (!appointment) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
       return reply.send({ data: appointment, errors: null });

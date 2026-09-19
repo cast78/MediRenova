@@ -47,7 +47,7 @@ describe("withTenantFilter (aislamiento multitenant, tarea 3.6)", () => {
     expect(withTenantFilter("Appointment", "count", {}, TID).where).toEqual({ tenantId: TID });
   });
 
-  it("cubre exactamente los 15 modelos tenant-scoped del schema", () => {
+  it("cubre exactamente los 16 modelos tenant-scoped del schema", () => {
     expect([...TENANT_SCOPED_MODELS].sort()).toEqual([
       "ApiKey",
       "Appointment",
@@ -57,6 +57,7 @@ describe("withTenantFilter (aislamiento multitenant, tarea 3.6)", () => {
       "Customer",
       "CustomerEvent",
       "MessageTemplate",
+      "NoShowRecovery",
       "Product",
       "Revision",
       "Segment",
