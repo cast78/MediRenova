@@ -8,7 +8,7 @@ import { prisma } from "../lib/prisma.js";
 import { setTenantContext } from "../lib/tenant-context.js";
 import { signPortalToken, verifyPortalToken } from "../lib/jwt.js";
 import { hashDni } from "../lib/dni.js";
-import { email } from "../lib/email.js";
+import { email, emailConfigured } from "../lib/email.js";
 import { ensureRevisionPdf } from "../lib/pdf.js";
 
 const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
@@ -58,12 +58,24 @@ export async function portalRoutes(server: FastifyInstance) {
         where: { tenantId: tenant.id, dniHash: hashDni(body.data.dni), deletedAt: null },
         select: { id: true, birthDate: true, email: true },
       });
-      // Debe coincidir la fecha de nacimiento (día) y tener email para enviar el enlace.
+      // Debe coincidir la fecha de nacimiento (día).
       if (!customer?.birthDate || customer.birthDate.toISOString().slice(0, 10) !== body.data.birthDate.slice(0, 10)) return reply.send(generic);
-      if (!customer.email?.includes("@")) return reply.send(generic);
 
       const token = signPortalToken({ cid: customer.id, tid: tenant.id });
       const url = `${PUBLIC_URL}/mi-area/entrar?token=${token}`;
+
+      // Modo transitorio "revelar enlace": mientras el email NO esté configurado
+      // (sin RESEND_API_KEY/EMAIL_FROM) no hay forma de hacer llegar el enlace, así
+      // que se devuelve para copiarlo y enviarlo a mano (WhatsApp/email). Se desactiva
+      // solo en cuanto el email quede configurado, y entonces vuelve al envío normal.
+      // AVISO: en este modo se salta la anti-enumeración (revela si el DNI+fecha existe).
+      if (!emailConfigured) {
+        await portalAudit(tenant.id, "customer", customer.id, { kind: "portal_access_link_revealed" }, request.ip);
+        return reply.send({ data: { ok: true, link: url }, errors: null });
+      }
+
+      // Modo normal: enviar el enlace al email de la ficha (requiere email válido).
+      if (!customer.email?.includes("@")) return reply.send(generic);
       try {
         await email.sendEmail({
           to: customer.email,
