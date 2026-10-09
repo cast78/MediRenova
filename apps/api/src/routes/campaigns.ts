@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
+import { guardModule } from "../lib/plan-guards.js";
 import { sendCampaign } from "../lib/campaign-runner.js";
 
 const createSchema = z.object({
@@ -13,6 +14,7 @@ const createSchema = z.object({
 });
 
 export async function campaignRoutes(server: FastifyInstance) {
+  guardModule(server, "campaigns"); // plan Pro (crm-planes)
   // GET /campaigns
   server.get("/campaigns", { preHandler: [requireRole("ADMIN")] },
     async (request: FastifyRequest, reply: FastifyReply) => {

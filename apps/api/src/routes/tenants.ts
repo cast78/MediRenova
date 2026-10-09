@@ -1,10 +1,11 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireRole } from "../lib/authorization.js";
+import { requireRole, requireFeature } from "../lib/authorization.js";
 import { stripUndefined } from "../lib/utils.js";
 import { email, emailConfigured, emailFrom } from "../lib/email.js";
 import { whatsappConfigured } from "../lib/whatsapp.js";
+import { effectivePlan, features, FEATURES, FEATURE_KEYS } from "../lib/plan.js";
 
 const createTenantSchema = z.object({
   name: z.string().min(2).max(100),
@@ -102,7 +103,73 @@ export async function tenantRoutes(server: FastifyInstance) {
         include: { config: true },
       });
       if (!tenant) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
-      return reply.send({ data: { ...tenant, config: safeConfig(tenant.config) }, errors: null });
+      const centersCount = await prisma.center.count({ where: { tenantId: tenant.id, active: true } });
+      return reply.send({
+        data: {
+          ...tenant,
+          config: safeConfig(tenant.config),
+          // Plan (crm-planes): contratado, efectivo (prueba) y funciones resueltas.
+          effectivePlan: effectivePlan(tenant),
+          features: features(tenant),
+          centersCount,
+        },
+        errors: null,
+      });
+    },
+  );
+
+  // GET /tenants/me/plan — plan y funciones para cualquier usuario autenticado
+  // (el menú y los candados los necesitan también recepción y médicos).
+  server.get(
+    "/tenants/me/plan",
+    { preHandler: [requireRole("DOCTOR")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: request.ctx.tenantId },
+        select: { plan: true, trialUntil: true, featureOverrides: true, maxCenters: true },
+      });
+      if (!tenant) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      const centersCount = await prisma.center.count({ where: { tenantId: request.ctx.tenantId, active: true } });
+      return reply.send({
+        data: {
+          plan: tenant.plan, effectivePlan: effectivePlan(tenant), trialUntil: tenant.trialUntil, features: features(tenant), centersCount, maxCenters: tenant.maxCenters,
+          // Catálogo para que el front pinte "incluye / no incluye" sin duplicarlo.
+          catalog: FEATURE_KEYS.map((k) => ({ key: k, label: FEATURES[k].label, min: FEATURES[k].min })),
+        },
+        errors: null,
+      });
+    },
+  );
+
+  // POST /tenants/me/plan-request — "Quiero pasar a Pro" desde la clínica (ADMIN).
+  // Crea la petición (una abierta por empresa) y avisa al proveedor por email.
+  server.post(
+    "/tenants/me/plan-request",
+    { preHandler: [requireRole("ADMIN")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const body = z.object({ feature: z.string().max(60).optional(), note: z.string().max(500).optional() }).safeParse(request.body ?? {});
+      const note = body.success ? [body.data.feature, body.data.note].filter(Boolean).join(" · ") || null : null;
+      const open = await prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, status: "OPEN" }, select: { id: true } });
+      if (open) return reply.send({ data: { id: open.id, alreadyOpen: true }, errors: null });
+      const created = await prisma.planRequest.create({
+        data: { tenantId: request.ctx.tenantId, requestedPlan: "PRO", byUserId: request.ctx.userId ?? null, note },
+      });
+      // Aviso al proveedor: los superadmin viven en la empresa "system" (se leen por
+      // la relación del tenant para no chocar con el aislamiento por empresa).
+      const [tenant, system] = await Promise.all([
+        prisma.tenant.findUnique({ where: { id: request.ctx.tenantId }, select: { name: true, slug: true } }),
+        prisma.tenant.findUnique({ where: { slug: "system" }, select: { users: { where: { role: "SUPERADMIN", active: true }, select: { email: true } } } }),
+      ]);
+      for (const u of system?.users ?? []) {
+        try {
+          await email.sendEmail({
+            to: u.email,
+            subject: `Petición de plan Pro · ${tenant?.name ?? request.ctx.tenantId}`,
+            body: `La empresa ${tenant?.name ?? ""} (${tenant?.slug ?? ""}) ha pedido pasar al plan Pro.${note ? `\nMotivo: ${note}` : ""}\n\nGestiónala desde el panel de proveedor.`,
+          });
+        } catch (err) { request.log.error(err, "[planes] aviso de petición falló"); }
+      }
+      return reply.status(201).send({ data: { id: created.id, alreadyOpen: false }, errors: null });
     },
   );
 
@@ -182,7 +249,7 @@ export async function tenantRoutes(server: FastifyInstance) {
   // GET /tenants/me/channels — estado real de cada canal de comunicación.
   server.get(
     "/tenants/me/channels",
-    { preHandler: [requireRole("ADMIN")] },
+    { preHandler: [requireRole("ADMIN"), requireFeature("channels")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const config = await prisma.tenantConfig.findUnique({ where: { tenantId: request.ctx.tenantId } });
       const whatsappReady = !!config?.metaWaPhoneNumberId && !!config?.metaWaAccessToken;
@@ -202,7 +269,7 @@ export async function tenantRoutes(server: FastifyInstance) {
   // POST /tenants/me/channels/:channel/test — "Probar conexión".
   server.post<{ Params: { channel: string } }>(
     "/tenants/me/channels/:channel/test",
-    { preHandler: [requireRole("ADMIN")] },
+    { preHandler: [requireRole("ADMIN"), requireFeature("channels")] },
     async (request, reply: FastifyReply) => {
       const channel = request.params.channel;
 
@@ -286,7 +353,7 @@ export async function tenantRoutes(server: FastifyInstance) {
   // GET /tenants/me/api-keys
   server.get(
     "/tenants/me/api-keys",
-    { preHandler: [requireRole("ADMIN")] },
+    { preHandler: [requireRole("ADMIN"), requireFeature("api_public")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const keys = await prisma.apiKey.findMany({
         where: { tenantId: request.ctx.tenantId },
@@ -300,7 +367,7 @@ export async function tenantRoutes(server: FastifyInstance) {
   // POST /tenants/me/api-keys
   server.post(
     "/tenants/me/api-keys",
-    { preHandler: [requireRole("ADMIN")] },
+    { preHandler: [requireRole("ADMIN"), requireFeature("api_public")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { generateApiKey } = await import("../lib/crypto.js");
       const body = z.object({ name: z.string().min(2).max(100) }).safeParse(request.body);
@@ -319,7 +386,7 @@ export async function tenantRoutes(server: FastifyInstance) {
   // DELETE /tenants/me/api-keys/:id
   server.delete<{ Params: { id: string } }>(
     "/tenants/me/api-keys/:id",
-    { preHandler: [requireRole("ADMIN")] },
+    { preHandler: [requireRole("ADMIN"), requireFeature("api_public")] },
     async (request, reply: FastifyReply) => {
       await prisma.apiKey.updateMany({
         where: { id: request.params.id, tenantId: request.ctx.tenantId },

@@ -1,4 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { prisma } from "./prisma.js";
+import { effectivePlan, hasFeature, FEATURES, type FeatureKey, type PlanInput } from "./plan.js";
 
 export type UserRole = "SUPERADMIN" | "ADMIN" | "RECEPTIONIST" | "DOCTOR" | "API_KEY";
 
@@ -45,6 +47,43 @@ export function requireRole(minRole: UserRole) {
     const requiredRank = ROLE_RANK[minRole] ?? 999;
     if (userRank < requiredRank) {
       return reply.status(403).send({ errors: [{ code: "FORBIDDEN", message: "Sin permisos suficientes" }] });
+    }
+  };
+}
+
+// ── Planes (crm-planes) ─────────────────────────────────────────────────────
+// Caché corta del plan por empresa para no leer el tenant en cada petición.
+const PLAN_TTL_MS = 60_000;
+const planCache = new Map<string, { at: number; t: PlanInput }>();
+
+export async function tenantPlan(tenantId: string): Promise<PlanInput | null> {
+  const hit = planCache.get(tenantId);
+  if (hit && Date.now() - hit.at < PLAN_TTL_MS) return hit.t;
+  const t = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: true, trialUntil: true, featureOverrides: true } });
+  if (!t) return null;
+  planCache.set(tenantId, { at: Date.now(), t });
+  return t;
+}
+
+// Llamar al cambiar plan/prueba/excepciones desde el panel de proveedor.
+export function invalidatePlanCache(tenantId?: string): void {
+  if (tenantId) planCache.delete(tenantId); else planCache.clear();
+}
+
+/**
+ * preHandler que exige que la empresa del contexto tenga una función del plan.
+ * El SUPERADMIN actuando como empresa NO está exento (ve lo mismo que ella).
+ * Usage: { preHandler: [requireRole("ADMIN"), requireFeature("campaigns")] }
+ */
+export function requireFeature(key: FeatureKey) {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const ctx = request.ctx;
+    if (!ctx) return reply.status(401).send({ errors: [{ code: "UNAUTHORIZED", message: "No autenticado" }] });
+    const t = await tenantPlan(ctx.tenantId);
+    if (!t || !hasFeature(t, key)) {
+      return reply.status(403).send({
+        errors: [{ code: "FEATURE_NOT_IN_PLAN", message: `"${FEATURES[key].label}" no está incluido en tu plan`, feature: key, plan: t ? effectivePlan(t) : null }],
+      });
     }
   };
 }

@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
+import { guardModule } from "../lib/plan-guards.js";
 import { stripUndefined } from "../lib/utils.js";
 
 const channelEnum = z.enum(["EMAIL", "WHATSAPP", "SMS"]);
@@ -20,6 +21,7 @@ function subjectOk(channel: string | undefined, subject: string | undefined): bo
 }
 
 export async function messageTemplateRoutes(server: FastifyInstance) {
+  guardModule(server, "message-templates"); // plan Pro (crm-planes)
   // GET /message-templates?channel=EMAIL
   server.get("/message-templates", { preHandler: [requireRole("ADMIN")] },
     async (request: FastifyRequest, reply: FastifyReply) => {

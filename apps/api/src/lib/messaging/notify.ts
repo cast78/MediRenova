@@ -9,6 +9,8 @@ import type { MessageDelivery } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { email, emailConfigured } from "../email.js";
 import { whatsapp, whatsappConfigured } from "../whatsapp.js";
+import { tenantPlan } from "../authorization.js";
+import { hasFeature } from "../plan.js";
 import { selectChannel, type Channel } from "./select-channel.js";
 import { renderMessage, EVENT_PREFER, EVENT_SERVICE, EVENT_LABELS, type MessagingEvent } from "./templates.js";
 
@@ -31,6 +33,11 @@ export function liveChannels(): Record<Channel, boolean> {
 
 export async function notify(o: NotifyOptions): Promise<MessageDelivery | null> {
   try {
+    // Plan (crm-planes): los avisos automáticos son Pro. Sin "messaging" no se
+    // registra nada; los botones manuales siguen generando sus enlaces aparte.
+    const plan = await tenantPlan(o.tenantId);
+    if (!plan || !hasFeature(plan, "messaging")) return null;
+
     const customer = await prisma.customer.findFirst({
       where: { id: o.customerId, tenantId: o.tenantId },
       select: { firstName: true, phone: true, email: true, acceptsWhatsapp: true, acceptsSms: true, acceptsEmail: true },

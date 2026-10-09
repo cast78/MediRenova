@@ -1,5 +1,8 @@
 "use client";
 
+import { useFeatures } from "@/lib/use-features";
+import { LockedModule } from "@/components/locked-module";
+
 import { useState, useRef, useEffect, Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -1671,10 +1674,13 @@ function AppointmentsBoard() {
   const episodesCount = episodesData?.meta.total ?? 0;
 
   // Bandeja "Recuperar": no-shows recientes con su estado de seguimiento. Se consulta
-  // siempre (el badge de la pestaña usa counts.pending, calculado sobre toda la ventana).
+  // siempre (el badge de la pestaña usa counts.pending, calculado sobre toda la ventana),
+  // salvo que el plan no incluya la recuperación (crm-planes).
+  const { has: hasPlan } = useFeatures();
   const { data: noShowData, isLoading: noShowLoading } = useQuery<{ data: NoShowRow[]; meta: NoShowMeta }>({
     queryKey: ["appointments-no-shows", recoveryFilter, recoveryWindow, centerId],
     queryFn: () => apiFetch(`/appointments/no-shows?window=${recoveryWindow}&filter=${recoveryFilter}`, { raw: true }),
+    enabled: hasPlan("recovery"),
   });
   const noShowPending = noShowData?.meta.counts.pending ?? 0;
 
@@ -1923,7 +1929,8 @@ function AppointmentsBoard() {
       )}
 
       {/* ── Recuperar: bandeja de no-shows recuperables ─────────────────────── */}
-      {view === "recuperar" && (
+      {view === "recuperar" && !hasPlan("recovery") && <LockedModule feature="recovery" />}
+      {view === "recuperar" && hasPlan("recovery") && (
         <RecoveryInbox
           data={noShowData}
           loading={noShowLoading}

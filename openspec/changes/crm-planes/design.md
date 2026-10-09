@@ -114,6 +114,7 @@ Clínica Demo queda en **Pro**. Se añade una segunda empresa de demo **"Clínic
 - **D6** Superadmin **no exento** de la guardia al actuar como empresa.
 - **D7** Pruebas Pro con vencimiento automático y avisos a 7 y 1 días.
 - **D8** Sin cobro por usuario; sin Stripe en esta iteración.
+- **D9** "Entrar como esta empresa" muestra la empresa **tal cual** (con sus candados). Solo el superadmin dispone de un conmutador **"Ver como Pro"** (vista previa, no cambia el plan ni se persiste; se señala con una banda visible) para enseñar en vivo lo que tendría la clínica. Implementación: cabecera `x-preview-plan: PRO` que `requireFeature` y `/tenants/me/plan` respetan únicamente cuando el usuario es SUPERADMIN.
 
 ## Riesgos / notas
 

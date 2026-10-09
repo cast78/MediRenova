@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
+import { useFeatures } from "@/lib/use-features";
+import { LockedModule } from "@/components/locked-module";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -204,7 +206,14 @@ function FlowStep({ icon: Icon, circle, color, title, sub, mono }: { icon: typeo
   );
 }
 
+// Plan Pro (crm-planes): sin "workflow" se muestra el módulo bloqueado.
 export default function WorkflowPage() {
+  const { has } = useFeatures();
+  if (!has("workflow")) return <div className="p-6"><LockedModule feature="workflow" /></div>;
+  return <WorkflowInner />;
+}
+
+function WorkflowInner() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPERADMIN";

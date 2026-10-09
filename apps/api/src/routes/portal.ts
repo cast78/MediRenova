@@ -9,6 +9,8 @@ import { setTenantContext } from "../lib/tenant-context.js";
 import { signPortalToken, verifyPortalToken } from "../lib/jwt.js";
 import { hashDni } from "../lib/dni.js";
 import { emailConfigured } from "../lib/email.js";
+import { tenantPlan } from "../lib/authorization.js";
+import { hasFeature } from "../lib/plan.js";
 import { notify, createPortalLink } from "../lib/messaging/index.js";
 import { ensureRevisionPdf } from "../lib/pdf.js";
 
@@ -89,7 +91,10 @@ export async function portalRoutes(server: FastifyInstance) {
   server.get("/portal/me", { preHandler: [requirePortal] }, async (request: FastifyRequest, reply: FastifyReply) => {
     const c = await prisma.customer.findFirst({ where: { id: request.portal!.cid, tenantId: request.portal!.tid }, select: { firstName: true, lastName: true } });
     const tenant = await prisma.tenant.findUnique({ where: { id: request.portal!.tid }, select: { name: true } });
-    return reply.send({ data: { name: `${c?.firstName ?? ""} ${c?.lastName ?? ""}`.trim() || "Paciente", center: tenant?.name ?? null }, errors: null });
+    // Plan (crm-planes): las citas en el portal son Pro ("portal_full"); los certificados, Esencial.
+    const plan = await tenantPlan(request.portal!.tid);
+    const appointments = !!plan && hasFeature(plan, "portal_full");
+    return reply.send({ data: { name: `${c?.firstName ?? ""} ${c?.lastName ?? ""}`.trim() || "Paciente", center: tenant?.name ?? null, features: { appointments } }, errors: null });
   });
 
   // GET /portal/revisions — mis reconocimientos completados.
@@ -119,6 +124,10 @@ export async function portalRoutes(server: FastifyInstance) {
 
   // GET /portal/appointments — mis citas (próximas + historial).
   server.get("/portal/appointments", { preHandler: [requirePortal] }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const plan = await tenantPlan(request.portal!.tid);
+    if (!plan || !hasFeature(plan, "portal_full")) {
+      return reply.status(403).send({ errors: [{ code: "FEATURE_NOT_IN_PLAN", feature: "portal_full", message: "Las citas no están disponibles en el portal de este centro." }] });
+    }
     const appts = await prisma.appointment.findMany({
       where: { tenantId: request.portal!.tid, customerId: request.portal!.cid },
       select: { id: true, scheduledAt: true, status: true, product: { select: { name: true } }, room: { select: { center: { select: { name: true } } } } },

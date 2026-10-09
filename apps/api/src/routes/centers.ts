@@ -66,6 +66,14 @@ export async function centerRoutes(server: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const body = centerSchema.safeParse(request.body);
       if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
+      // Centros como eje de contratación (crm-planes): si la empresa tiene límite, no se supera.
+      const plan = await prisma.tenant.findUnique({ where: { id: request.ctx.tenantId }, select: { maxCenters: true } });
+      if (plan?.maxCenters != null) {
+        const n = await prisma.center.count({ where: { tenantId: request.ctx.tenantId, active: true } });
+        if (n >= plan.maxCenters) {
+          return reply.status(409).send({ errors: [{ code: "MAX_CENTERS_REACHED", message: `Tu plan incluye ${plan.maxCenters} centro(s). Contrata uno más para añadirlo.` }] });
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const center = await prisma.center.create({ data: { tenantId: request.ctx.tenantId, ...body.data } as any });
       await auditLog({ tenantId: request.ctx.tenantId, userId: request.ctx.userId, ip: request.ip }, "CREATE", "center", center.id, { after: center });

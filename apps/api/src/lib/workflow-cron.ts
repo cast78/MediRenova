@@ -1,6 +1,8 @@
 import cron from "node-cron";
 import { prisma } from "../lib/prisma.js";
 import { notify, createBookingLink } from "./messaging/index.js";
+import { tenantPlan } from "./authorization.js";
+import { hasFeature } from "./plan.js";
 import { runDueCampaigns } from "./campaign-runner.js";
 import { sweepExpiredAppointments } from "./appointment-sweep.js";
 import { runEpisodeAlerts } from "./episode-alerts.js";
@@ -65,6 +67,11 @@ export async function runWorkflowJob(): Promise<void> {
   const rules = await prisma.workflowRule.findMany({ where: { active: true } });
 
   for (const rule of rules) {
+    // Plan (crm-planes): la renovación automática es Pro; las empresas sin la
+    // función se saltan (sus reglas quedan guardadas por si suben de plan).
+    const plan = await tenantPlan(rule.tenantId);
+    if (!plan || !hasFeature(plan, "workflow")) continue;
+
     const targetDate = new Date(today);
     targetDate.setDate(targetDate.getDate() + rule.daysBeforeExpiry);
     const windowStart = new Date(targetDate); windowStart.setHours(0, 0, 0, 0);

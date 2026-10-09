@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ShieldCheck, CalendarDays, Download, LogOut } from "lucide-react";
 import { getPortalToken, portalFetch, openPortalPdf, clearPortalToken } from "../portal";
 
-interface Me { name: string; center: string | null }
+interface Me { name: string; center: string | null; features?: { appointments: boolean } }
 interface Rev { id: string; outcome: string; completedAt: string | null; expiryDate: string | null; product: string | null }
 interface Appt { id: string; scheduledAt: string; status: string; product: string | null; center: string | null }
 
@@ -34,7 +34,9 @@ export default function PanelPage() {
     if (!getPortalToken()) { setAuthed(false); return; }
     (async () => {
       try {
-        const [m, r, a] = await Promise.all([portalFetch<Me>("me"), portalFetch<Rev[]>("revisions"), portalFetch<Appt[]>("appointments")]);
+        const [m, r] = await Promise.all([portalFetch<Me>("me"), portalFetch<Rev[]>("revisions")]);
+        // Las citas en el portal son Pro (crm-planes): solo se piden si el centro las tiene.
+        const a = m.features?.appointments === false ? [] : await portalFetch<Appt[]>("appointments").catch(() => [] as Appt[]);
         setMe(m); setRevs(r); setAppts(a); setAuthed(true);
       } catch { clearPortalToken(); setAuthed(false); }
     })();
@@ -95,6 +97,8 @@ export default function PanelPage() {
         )}
       </section>
 
+      {/* Citas en el portal: plan Pro (crm-planes). En Esencial solo certificados. */}
+      {me?.features?.appointments !== false && (
       <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
         <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-teal-600" /> Mis citas</h2>
         {appts.length === 0 ? (
@@ -116,6 +120,7 @@ export default function PanelPage() {
           </div>
         )}
       </section>
+      )}
 
       <button onClick={() => { clearPortalToken(); setAuthed(false); }} className="w-full inline-flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 py-2"><LogOut className="w-3.5 h-3.5" /> Salir</button>
     </div>

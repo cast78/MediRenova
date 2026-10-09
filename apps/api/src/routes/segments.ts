@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
+import { guardModule } from "../lib/plan-guards.js";
 import { buildCustomerWhere, segmentDefinitionSchema, type SegmentDefinition } from "../lib/segments.js";
 
 const upsertSchema = z.object({
@@ -21,6 +22,7 @@ async function previewDefinition(def: SegmentDefinition) {
 }
 
 export async function segmentRoutes(server: FastifyInstance) {
+  guardModule(server, "segments"); // plan Pro (crm-planes)
   // GET /segments
   server.get("/segments", { preHandler: [requireRole("ADMIN")] },
     async (request: FastifyRequest, reply: FastifyReply) => {

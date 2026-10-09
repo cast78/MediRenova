@@ -51,17 +51,19 @@ async function main() {
   console.log("✓ Demo tenant:", demoTenant.id);
 
   // ─── Superadmin User ──────────────────────────────────────────
-  // NOTE: bcrypt not yet installed. Using SHA-256 placeholder for seed.
-  // Use bcrypt for password hashing
+  // Contraseña de los usuarios de DEMO (pública, solo para la clínica de demo).
   const passwordHash = await hash("Admin1234!", 12);
+  // Contraseña del SUPERADMIN desde el entorno (crm-planes P1.6). En producción
+  // DEBE definirse SUPERADMIN_PASSWORD; el valor de desarrollo es solo local.
+  const superadminPasswordHash = await hash(process.env["SUPERADMIN_PASSWORD"] ?? "Admin1234!", 12);
 
   const superadmin = await prisma.user.upsert({
     where: { tenantId_email: { tenantId: superTenant.id, email: "admin@medirenova.es" } },
-    update: { passwordHash },
+    update: { passwordHash: superadminPasswordHash },
     create: {
       tenantId: superTenant.id,
       email: "admin@medirenova.es",
-      passwordHash,
+      passwordHash: superadminPasswordHash,
       firstName: "Super",
       lastName: "Admin",
       role: UserRole.SUPERADMIN,
@@ -98,6 +100,58 @@ async function main() {
     },
   });
   console.log("✓ Demo doctor:", demoDoctor.email);
+
+  // ─── Segunda empresa de demo en plan ESENCIAL (crm-planes) ────────────
+  // Para enseñar el plan básico y los módulos con candado sin tocar Clínica Demo
+  // (que sigue en Pro). Admin: admin@clinica-esencial.es (contraseña de demo).
+  const essentialTenant = await prisma.tenant.upsert({
+    where: { slug: "clinica-esencial" },
+    update: {},
+    create: {
+      name: "Clínica Esencial",
+      slug: "clinica-esencial",
+      plan: "ESSENTIAL",
+      config: {
+        create: {
+          primaryColor: "#0f766e",
+          secondaryColor: "#64748b",
+          timezone: "Europe/Madrid",
+          defaultSlotDuration: 20,
+        },
+      },
+    },
+  });
+  await prisma.user.upsert({
+    where: { tenantId_email: { tenantId: essentialTenant.id, email: "admin@clinica-esencial.es" } },
+    update: { passwordHash },
+    create: {
+      tenantId: essentialTenant.id,
+      email: "admin@clinica-esencial.es",
+      passwordHash,
+      firstName: "Admin",
+      lastName: "Esencial",
+      role: UserRole.ADMIN,
+    },
+  });
+  await prisma.center.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000101" },
+    update: {},
+    create: {
+      id: "00000000-0000-0000-0000-000000000101",
+      tenantId: essentialTenant.id,
+      name: "Centro Valencia Ruzafa",
+      cif: "B98765432",
+      address: "Calle Sueca 12",
+      city: "Valencia",
+      province: "Valencia",
+      postalCode: "46006",
+      phones: ["+34 96 123 45 67"],
+      emails: ["valencia@clinica-esencial.es"],
+      lat: 39.4623,
+      lng: -0.3745,
+    },
+  });
+  console.log("✓ Essential tenant:", essentialTenant.id);
 
   // ─── Demo Center ──────────────────────────────────────────────
   const demoCenter = await prisma.center.upsert({

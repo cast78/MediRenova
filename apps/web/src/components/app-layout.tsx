@@ -28,8 +28,10 @@ import {
   UserPlus,
   HeartPulse,
   LogOut,
+  Lock,
   type LucideIcon,
 } from "lucide-react";
+import { useFeatures, type FeatureKey } from "@/lib/use-features";
 
 interface NavItem {
   href: string;
@@ -39,6 +41,8 @@ interface NavItem {
   match?: string;
   /** Roles que ven el ítem (SUPERADMIN siempre lo ve). Sin roles = todos. */
   roles?: string[];
+  /** Función de plan que necesita (crm-planes). Sin ella se muestra con candado, no se oculta. */
+  feature?: FeatureKey;
 }
 
 // Perfiles: recepción (agenda/clientes/visitas), médico (visitas + revisiones),
@@ -79,16 +83,16 @@ const navSections: NavSection[] = [
     // Módulos de gestión (KPIs) para admin/superadmin: analítica operativa y captación.
     title: "Gestión",
     items: [
-      { href: "/analitica", label: "Analítica", icon: BarChart3, roles: ["ADMIN"] },
-      { href: "/captacion", label: "Captación", icon: UserPlus, roles: ["ADMIN"] },
+      { href: "/analitica", label: "Analítica", icon: BarChart3, roles: ["ADMIN"], feature: "analytics_pro" },
+      { href: "/captacion", label: "Captación", icon: UserPlus, roles: ["ADMIN"], feature: "captacion" },
     ],
   },
   {
     // Parte comercial: campañas y automatización de retención.
     title: "Comercial",
     items: [
-      { href: "/campaigns", label: "Campañas", icon: Megaphone, roles: ["ADMIN"] },
-      { href: "/workflow", label: "Workflow", icon: Zap, roles: ["ADMIN"] },
+      { href: "/campaigns", label: "Campañas", icon: Megaphone, roles: ["ADMIN"], feature: "campaigns" },
+      { href: "/workflow", label: "Workflow", icon: Zap, roles: ["ADMIN"], feature: "workflow" },
     ],
   },
   {
@@ -143,6 +147,7 @@ function TenantSwitcher() {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
+  const { has: hasFeature } = useFeatures();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -218,6 +223,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full" style={{ backgroundColor: primary }} />}
                         <item.icon size={16} strokeWidth={1.75} />
                         <span className="flex-1">{item.label}</span>
+                        {item.feature && !hasFeature(item.feature) && (
+                          <Lock size={13} className="text-gray-400" aria-label="Disponible en el plan Pro" />
+                        )}
                         {item.href === "/appointments" && episodesCount > 0 && (
                           <span title={`${episodesCount} episodio(s) sin cerrar`} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">{episodesCount}</span>
                         )}

@@ -8,8 +8,10 @@ import { apiFetch, ApiError, authHeaders } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { SignaturePad, type SignaturePadHandle } from "@/components/signature-pad";
 import { CustomerCommunications } from "@/components/customer-communications";
+import { useFeatures } from "@/lib/use-features";
+import { LockedModule } from "@/components/locked-module";
 import { DEFAULT_CONSENT_TEXT, renderConsent } from "@/lib/consent";
-import { FileText, AlertTriangle, MessageCircle, Mail, Copy, Check, Send, Phone, IdCard, Cake, Flag, MapPin, Building2, CalendarPlus, ShieldCheck, Trash2, Pencil, Stethoscope, UserX, Calendar, AlarmClock, Clock, RefreshCw, BarChart3, MessageSquare, PenLine, X, Car, Target } from "lucide-react";
+import { Lock, FileText, AlertTriangle, MessageCircle, Mail, Copy, Check, Send, Phone, IdCard, Cake, Flag, MapPin, Building2, CalendarPlus, ShieldCheck, Trash2, Pencil, Stethoscope, UserX, Calendar, AlarmClock, Clock, RefreshCw, BarChart3, MessageSquare, PenLine, X, Car, Target } from "lucide-react";
 
 interface Customer {
   id: string;
@@ -186,6 +188,7 @@ export default function CustomerDetailPage() {
 
   // Pestaña inicial desde la URL (?tab=rgpd) — permite enlazar directo a una sección.
   const qTab = searchParams.get("tab");
+  const { has: hasPlan } = useFeatures(); // crm-planes: Comunicaciones y enlaces de renovación son Pro
   const [tab, setTab] = useState<Tab>((TABS as readonly string[]).includes(qTab ?? "") ? (qTab as Tab) : "datos");
   const [commOnly, setCommOnly] = useState(false); // filtro "Solo comunicaciones" del historial
   const [revView, setRevView] = useState<"agrupado" | "cronologico">("cronologico"); // vista de Revisiones
@@ -365,6 +368,7 @@ export default function CustomerDetailPage() {
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors ${tab === t ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
             {TAB_LABELS[t]}
+            {t === "comunicaciones" && !hasPlan("messaging") && <Lock className="inline w-3 h-3 ml-1 -mt-0.5 text-gray-400" aria-label="Disponible en el plan Pro" />}
           </button>
         ))}
       </div>
@@ -488,7 +492,8 @@ export default function CustomerDetailPage() {
       )}
 
       {/* ── Comunicaciones (crm-mensajeria): avisos redactados por el sistema ── */}
-      {tab === "comunicaciones" && (
+      {tab === "comunicaciones" && !hasPlan("messaging") && <LockedModule feature="messaging" compact />}
+      {tab === "comunicaciones" && hasPlan("messaging") && (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <CustomerCommunications customerId={id} consent={{ whatsapp: customer.acceptsWhatsapp, sms: customer.acceptsSms, email: customer.acceptsEmail }} />
         </div>
@@ -695,9 +700,11 @@ export default function CustomerDetailPage() {
                       </div>
                       <button
                         onClick={() => remind(r)}
-                        disabled={remindingId === r.productId}
-                        className="shrink-0 rounded-lg bg-blue-600 text-white text-xs font-medium px-3 py-2 hover:bg-blue-700 disabled:opacity-50"
+                        disabled={remindingId === r.productId || !hasPlan("public_booking")}
+                        title={hasPlan("public_booking") ? undefined : "El enlace de auto-reserva está disponible en el plan Pro"}
+                        className="shrink-0 rounded-lg bg-blue-600 text-white text-xs font-medium px-3 py-2 hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1.5"
                       >
+                        {!hasPlan("public_booking") && <Lock className="w-3 h-3" />}
                         {remindingId === r.productId ? "Generando…" : "Recordar renovación"}
                       </button>
                     </div>

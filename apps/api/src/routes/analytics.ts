@@ -6,6 +6,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
+import { guardModule } from "../lib/plan-guards.js";
 import {
   type AnalyticsScope, type AnalyticsFilters, type Granularity, type LeakType,
   MAX_RANGE_DAYS, rangeDays, toCsv, LEAK_TYPES,
@@ -121,6 +122,7 @@ const doc = (summary: string) => ({
 });
 
 export async function analyticsRoutes(server: FastifyInstance) {
+  guardModule(server, "analytics"); // plan Pro: analítica avanzada y captación (crm-planes)
   const guard = { preHandler: [requireRole("ADMIN")] }; // ADMIN + SUPERADMIN (rango); recepción/médico → 403
 
   // GET /analytics/funnel — embudo de conversión + fugas

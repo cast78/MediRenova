@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
+import { guardModule } from "../lib/plan-guards.js";
 import { stripUndefined } from "../lib/utils.js";
 
 const workflowRuleSchema = z.object({
@@ -15,6 +16,7 @@ const workflowRuleSchema = z.object({
 });
 
 export async function workflowRoutes(server: FastifyInstance) {
+  guardModule(server, "workflow"); // plan Pro (crm-planes)
   // GET /workflow-rules
   server.get("/workflow-rules", { preHandler: [requireRole("ADMIN")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
