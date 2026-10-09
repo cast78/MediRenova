@@ -54,12 +54,15 @@ async function main() {
   // Contraseña de los usuarios de DEMO (pública, solo para la clínica de demo).
   const passwordHash = await hash("Admin1234!", 12);
   // Contraseña del SUPERADMIN desde el entorno (crm-planes P1.6). En producción
-  // DEBE definirse SUPERADMIN_PASSWORD; el valor de desarrollo es solo local.
-  const superadminPasswordHash = await hash(process.env["SUPERADMIN_PASSWORD"] ?? "Admin1234!", 12);
+  // DEBE definirse SUPERADMIN_PASSWORD; el valor de desarrollo solo se usa al
+  // CREAR el usuario. Si el usuario ya existe y la variable no está definida, no
+  // se toca: la BD es compartida y un seed local no debe pisar la contraseña real.
+  const superadminEnv = process.env["SUPERADMIN_PASSWORD"];
+  const superadminPasswordHash = await hash(superadminEnv ?? "Admin1234!", 12);
 
   const superadmin = await prisma.user.upsert({
     where: { tenantId_email: { tenantId: superTenant.id, email: "admin@medirenova.es" } },
-    update: { passwordHash: superadminPasswordHash },
+    update: superadminEnv ? { passwordHash: superadminPasswordHash } : {},
     create: {
       tenantId: superTenant.id,
       email: "admin@medirenova.es",

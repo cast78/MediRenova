@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireRole, requireFeature } from "../lib/authorization.js";
+import { requireRole, requireFeature, isProPreview } from "../lib/authorization.js";
 import { stripUndefined } from "../lib/utils.js";
 import { email, emailConfigured, emailFrom } from "../lib/email.js";
 import { whatsappConfigured } from "../lib/whatsapp.js";
@@ -130,9 +130,12 @@ export async function tenantRoutes(server: FastifyInstance) {
       });
       if (!tenant) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
       const centersCount = await prisma.center.count({ where: { tenantId: request.ctx.tenantId, active: true } });
+      // "Ver como Pro" (solo superadmin): todo abierto, marcado como vista previa.
+      const preview = isProPreview(request);
       return reply.send({
         data: {
-          plan: tenant.plan, effectivePlan: effectivePlan(tenant), trialUntil: tenant.trialUntil, features: features(tenant), centersCount, maxCenters: tenant.maxCenters,
+          plan: tenant.plan, effectivePlan: preview ? "PRO" : effectivePlan(tenant), trialUntil: tenant.trialUntil,
+          features: preview ? FEATURE_KEYS : features(tenant), centersCount, maxCenters: tenant.maxCenters, preview,
           // Catálogo para que el front pinte "incluye / no incluye" sin duplicarlo.
           catalog: FEATURE_KEYS.map((k) => ({ key: k, label: FEATURES[k].label, min: FEATURES[k].min })),
         },

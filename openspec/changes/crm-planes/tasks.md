@@ -31,13 +31,13 @@ Rama: `feat/crm-planes` desde `main`, PRs pequeños y frecuentes. Cada fase es d
 
 ## P4. Panel de proveedor (superadmin)
 
-- [ ] P4.1 Rutas `/superadmin/tenants` (lista con contadores), `POST` alta con admin inicial, `GET/PATCH /:id` (plan, `trialUntil`, `featureOverrides` validando `requires`, `maxCenters`, `active`) con auditoría; `GET/PATCH /superadmin/plan-requests`
-- [ ] P4.2 Web `/superadmin/empresas`: cabecera con KPIs (empresas por plan, pruebas que vencen ≤7 días, peticiones abiertas, candidatas a Pro, centros), tabla con filtros (plan · prueba vence ≤7 días · peticiones abiertas · candidatas a Pro · sin actividad), badge de peticiones en el menú
-- [ ] P4.2b Indicador **"Candidata a Pro"**: columnas citas/mes y no-shows/mes por empresa; marca cuando una Esencial supera umbrales (configurables en código, p. ej. ≥5 no-shows o ≥80 citas/mes); "sin actividad" aproximado por última cita creada (no hay `lastLoginAt` todavía)
-- [ ] P4.3 Ficha de empresa: cambio de plan y prueba, overrides, límite de centros, activar/suspender, auditoría, **"Entrar como esta empresa"**
-- [ ] P4.4 Formulario de alta de empresa (datos, slug, zona horaria, admin inicial con contraseña temporal)
-- [ ] P4.5 Bandeja de peticiones de upgrade (abiertas/cerradas, nota, cerrar)
-- [ ] P4.6 Conmutador **"Ver como Pro"** (solo SUPERADMIN, D9): cabecera `x-preview-plan` respetada por `requireFeature` y `/tenants/me/plan`; banda visible "Vista previa Pro" en la app; no persiste ni cambia el plan
+- [x] P4.1 Rutas `/superadmin/tenants` (lista con contadores), `POST` alta con admin inicial, `GET/PATCH /:id` (plan, `trialUntil`, `featureOverrides` validando `requires`, `maxCenters`, `active`) con auditoría; `GET/PATCH /superadmin/plan-requests`
+- [x] P4.2 Web `/superadmin/empresas`: cabecera con KPIs (empresas por plan, pruebas que vencen ≤7 días, peticiones abiertas, candidatas a Pro, centros), tabla con filtros (plan · prueba vence ≤7 días · peticiones abiertas · candidatas a Pro · sin actividad), badge de peticiones en el menú
+- [x] P4.2b Indicador **"Candidata a Pro"**: columnas citas/mes y no-shows/mes por empresa; marca cuando una Esencial supera umbrales (configurables en código, p. ej. ≥5 no-shows o ≥80 citas/mes); "sin actividad" aproximado por última cita creada (no hay `lastLoginAt` todavía)
+- [x] P4.3 Ficha de empresa: cambio de plan y prueba, overrides, límite de centros, activar/suspender, auditoría, **"Entrar como esta empresa"**
+- [x] P4.4 Formulario de alta de empresa (datos, slug, zona horaria, admin inicial con contraseña temporal)
+- [x] P4.5 Bandeja de peticiones de upgrade (abiertas/cerradas, nota, cerrar)
+- [x] P4.6 Conmutador **"Ver como Pro"** (solo SUPERADMIN, D9): cabecera `x-preview-plan` respetada por `requireFeature` y `/tenants/me/plan`; banda visible "Vista previa Pro" en la app; no persiste ni cambia el plan
 
 ## P5. Pruebas con vencimiento
 

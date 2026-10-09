@@ -75,10 +75,17 @@ export function invalidatePlanCache(tenantId?: string): void {
  * El SUPERADMIN actuando como empresa NO está exento (ve lo mismo que ella).
  * Usage: { preHandler: [requireRole("ADMIN"), requireFeature("campaigns")] }
  */
+// "Ver como Pro" (D9): vista previa solo para el SUPERADMIN, vía cabecera; no
+// cambia el plan ni se persiste. Una clínica no puede usarla (se ignora el rol).
+export function isProPreview(request: FastifyRequest): boolean {
+  return request.ctx?.role === "SUPERADMIN" && request.headers["x-preview-plan"] === "PRO";
+}
+
 export function requireFeature(key: FeatureKey) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const ctx = request.ctx;
     if (!ctx) return reply.status(401).send({ errors: [{ code: "UNAUTHORIZED", message: "No autenticado" }] });
+    if (isProPreview(request)) return;
     const t = await tenantPlan(ctx.tenantId);
     if (!t || !hasFeature(t, key)) {
       return reply.status(403).send({
