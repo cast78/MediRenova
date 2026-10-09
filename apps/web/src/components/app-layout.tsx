@@ -32,6 +32,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useFeatures, type FeatureKey } from "@/lib/use-features";
+import { getPreviewPlan, setPreviewPlan } from "@/lib/api";
 
 interface NavItem {
   href: string;
@@ -107,6 +108,13 @@ const navSections: NavSection[] = [
       { href: "/settings", label: "Configuración", icon: Settings, roles: ["ADMIN"] },
     ],
   },
+  {
+    // Panel de proveedor (crm-planes P4): solo el SUPERADMIN, por encima de las empresas.
+    title: "Proveedor",
+    items: [
+      { href: "/superadmin/empresas", label: "Empresas", icon: Building2, roles: ["SUPERADMIN"] },
+    ],
+  },
 ];
 
 interface TenantOption { id: string; name: string; slug: string }
@@ -115,7 +123,13 @@ interface TenantOption { id: string; name: string; slug: string }
 // (la lee apiFetch para mandar `x-act-as-tenant`) y recarga para refrescar todo.
 function TenantSwitcher() {
   const [selected, setSelected] = useState<string>("");
-  useEffect(() => { setSelected(getActAsTenant() ?? ""); }, []);
+  // "Ver como Pro" (D9): vista previa del plan Pro sobre la empresa elegida; no persiste.
+  const [preview, setPreview] = useState(false);
+  useEffect(() => { setSelected(getActAsTenant() ?? ""); setPreview(getPreviewPlan() === "PRO"); }, []);
+  function togglePreview(on: boolean) {
+    setPreviewPlan(on ? "PRO" : null);
+    window.location.reload();
+  }
 
   const { data: tenants } = useQuery<TenantOption[]>({
     queryKey: ["admin-tenants"],
@@ -141,6 +155,12 @@ function TenantSwitcher() {
           <option key={t.id} value={t.id}>{t.name}</option>
         ))}
       </select>
+      {selected && (
+        <label className={`mt-2 flex items-center gap-2 text-xs rounded-md px-2 py-1.5 cursor-pointer ${preview ? "bg-blue-600 text-white" : "text-amber-800"}`}>
+          <input type="checkbox" checked={preview} onChange={(e) => togglePreview(e.target.checked)} className="accent-blue-600" />
+          {preview ? "Vista previa Pro activa · nada se guarda" : "Ver como Pro (vista previa)"}
+        </label>
+      )}
     </div>
   );
 }

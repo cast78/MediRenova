@@ -37,6 +37,20 @@ function setActAsTenant(tenantId: string | null): void {
   else localStorage.removeItem(ACT_AS_KEY);
 }
 
+// "Ver como Pro" (solo superadmin): vista previa del plan Pro sobre la empresa en
+// la que actúa. Se manda como cabecera `x-preview-plan`; el backend la ignora si
+// el usuario no es SUPERADMIN. No cambia el plan real.
+const PREVIEW_KEY = "preview_plan";
+function getPreviewPlan(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(PREVIEW_KEY);
+}
+function setPreviewPlan(plan: "PRO" | null): void {
+  if (typeof window === "undefined") return;
+  if (plan) localStorage.setItem(PREVIEW_KEY, plan);
+  else localStorage.removeItem(PREVIEW_KEY);
+}
+
 async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = localStorage.getItem("refresh_token");
   if (!refreshToken) return null;
@@ -70,6 +84,7 @@ export async function apiFetch<T>(
   const { raw, ...fetchOptions } = options ?? {};
   const token = getAccessToken();
   const actAs = getActAsTenant();
+  const preview = getPreviewPlan();
   const headers: Record<string, string> = {
     // Solo con cuerpo: Fastify responde 400 si llega Content-Type: application/json
     // con cuerpo vacío (FST_ERR_CTP_EMPTY_JSON_BODY) en POST/DELETE sin body.
@@ -77,6 +92,7 @@ export async function apiFetch<T>(
     ...(fetchOptions.headers as Record<string, string>),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(actAs ? { "x-act-as-tenant": actAs } : {}),
+    ...(preview ? { "x-preview-plan": preview } : {}),
   };
 
   const res = await fetch(`${API_BASE}${path}`, { ...fetchOptions, headers });
@@ -120,4 +136,4 @@ function authHeaders(base?: Record<string, string>): Record<string, string> {
   };
 }
 
-export { setTokens, clearTokens, getAccessToken, getActAsTenant, setActAsTenant, authHeaders };
+export { setTokens, clearTokens, getAccessToken, getActAsTenant, setActAsTenant, getPreviewPlan, setPreviewPlan, authHeaders };

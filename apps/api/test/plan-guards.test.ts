@@ -42,7 +42,8 @@ describe("guardias de plan (cobertura)", () => {
     const files = readdirSync(ROUTES).filter((f) => f.endsWith(".ts")).map((f) => f.replace(/\.ts$/, ""));
     // Esencial (sin guardia de módulo): todo lo que no sea Pro entero ni mixto.
     const known = new Set([...PRO_MODULES, ...Object.keys(PER_ROUTE).map((f) => f.replace(/\.ts$/, "")),
-      "index", "auth", "centers", "products", "forms", "customers", "visits", "revisions", "dashboard", "users", "doctors"]);
+      "index", "auth", "centers", "products", "forms", "customers", "visits", "revisions", "dashboard", "users", "doctors",
+      "superadmin" /* solo SUPERADMIN, fuera de los planes */]);
     const unknown = files.filter((f) => !known.has(f));
     expect(unknown, `clasifica estos módulos como Esencial o Pro: ${unknown.join(", ")}`).toEqual([]);
   });
