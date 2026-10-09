@@ -1,12 +1,9 @@
 import cron from "node-cron";
 import { prisma } from "../lib/prisma.js";
-import { signMagicLinkToken } from "./jwt.js";
-import { whatsapp } from "./whatsapp.js";
+import { notify, createBookingLink } from "./messaging/index.js";
 import { runDueCampaigns } from "./campaign-runner.js";
 import { sweepExpiredAppointments } from "./appointment-sweep.js";
 import { runEpisodeAlerts } from "./episode-alerts.js";
-
-const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
 
 /**
  * Daily cron job: detects expiring revisions and sends workflow notifications.
@@ -133,25 +130,29 @@ export async function runWorkflowJob(): Promise<void> {
 
 async function sendWorkflowNotification(
   rule: { id: string; actionType: string; templateName: string; retryEveryDays: number },
-  revision: { id: string; customerId: string; productId: string; customer: { phone: string | null } },
+  revision: { id: string; customerId: string; productId: string; expiryDate: Date | null; customer: { phone: string | null } },
   executionId: string,
 ): Promise<void> {
   try {
-    // Generate magic link
     const tenant = await prisma.workflowRule.findUnique({ where: { id: rule.id }, select: { tenantId: true } });
     if (!tenant) return;
 
-    const token = signMagicLinkToken({ cid: revision.customerId, pid: revision.productId, tid: tenant.tenantId, type: "magic_link" });
-    // Página pública de auto-reserva: /booking/:token (consume la API /link/:token).
-    const magicUrl = `${PUBLIC_URL}/booking/${token}`;
+    // Enlace de auto-reserva de 30 días + corto (/b/CODE): el paciente puede abrirlo
+    // días después del aviso (antes caducaba en 24 h). Ver crm-mensajeria.
+    const { token, url } = await createBookingLink(tenant.tenantId, revision.customerId, revision.productId);
+    const product = await prisma.product.findUnique({ where: { id: revision.productId }, select: { name: true } });
+    const exp = revision.expiryDate?.toISOString() ?? "";
+    const caduca = exp ? `${exp.slice(8, 10)}/${exp.slice(5, 7)}/${exp.slice(0, 4)}` : "";
 
-    if (rule.actionType === "WHATSAPP") {
-      if (!revision.customer.phone) throw new Error("El cliente no tiene teléfono");
-      await whatsapp.sendTemplate({
-        to: revision.customer.phone,
-        templateName: rule.templateName,
-        bodyParams: [magicUrl],
-      });
+    // El aviso pasa por `notify`: consentimiento, canal (WhatsApp → SMS → Email),
+    // traza en Comunicaciones y envío real solo si hay proveedor configurado.
+    const delivery = await notify({
+      tenantId: tenant.tenantId, customerId: revision.customerId, event: "renewal_reminder", link: url,
+      vars: { producto: product?.name ?? "", caduca },
+      prefer: rule.actionType === "WHATSAPP" ? ["WHATSAPP", "SMS", "EMAIL"] : undefined,
+    });
+    if (!delivery || delivery.status === "SKIPPED" || delivery.status === "FAILED") {
+      throw new Error(delivery?.reason ?? "No se pudo avisar al cliente");
     }
 
     const nextAttemptAt = new Date();

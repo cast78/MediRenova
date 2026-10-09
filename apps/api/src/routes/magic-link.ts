@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { randomBytes } from "node:crypto";
-import { signConfirmationToken, verifyMagicLinkToken } from "../lib/jwt.js";
+import { verifyMagicLinkToken } from "../lib/jwt.js";
+import { createBookingLink, notifyAppointment } from "../lib/messaging/index.js";
 import { requireRole } from "../lib/authorization.js";
 import { markWorkflowConverted } from "../lib/workflow-cron.js";
 import { markCampaignConverted } from "../lib/campaign-attribution.js";
@@ -159,6 +159,8 @@ export async function magicLinkRoutes(server: FastifyInstance) {
           });
           await markWorkflowConverted(payload.tid, payload.cid, payload.pid).catch(() => {});
           await markCampaignConverted(payload.tid, payload.cid, appointment.id, appointment.createdAt).catch(() => {});
+          // Aviso al paciente con enlace de confirmar / "no podré ir" (crm-mensajeria).
+          await notifyAppointment(appointment.id, "appointment_created", null);
           return reply.status(201).send({ data: { appointmentId: appointment.id, scheduledAt: appointment.scheduledAt }, errors: null });
         } catch (err: unknown) {
           if (err instanceof Error && err.message.includes("unique constraint")) {
@@ -327,6 +329,8 @@ export async function magicLinkRoutes(server: FastifyInstance) {
           });
           await markWorkflowConverted(payload.tid, payload.cid, payload.pid).catch(() => {});
           await markCampaignConverted(payload.tid, payload.cid, appointment.id, appointment.createdAt).catch(() => {});
+          // Aviso al paciente con enlace de confirmar / "no podré ir" (crm-mensajeria).
+          await notifyAppointment(appointment.id, "appointment_created", null);
           return reply.status(201).send({ data: { appointmentId: appointment.id, scheduledAt: appointment.scheduledAt }, errors: null });
         } catch (err: unknown) {
           if (err instanceof Error && err.message.includes("unique constraint")) {
@@ -351,24 +355,18 @@ export async function magicLinkRoutes(server: FastifyInstance) {
       const customer = await prisma.customer.findFirst({ where: { id: body.data.customerId, tenantId: request.ctx.tenantId, deletedAt: null }, select: { id: true } });
       if (!customer) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
 
-      // Token de auto-reserva de larga duración (30 días): el cliente puede recibir el
-      // mensaje y actuar días después (recuperación de no-show, recordatorios…).
-      const token = signConfirmationToken({ cid: body.data.customerId, pid: body.data.productId, tid: request.ctx.tenantId, type: "magic_link" });
-      // Enlace corto: code aleatorio → token, para mandar una URL corta y de confianza
-      // (…/b/CODE) en vez del token largo. La página /b/:code del web redirige a /booking.
-      const code = randomBytes(6).toString("base64url"); // ~8 chars, inadivinable
-      const expiresAt = new Date(Date.now() + 30 * 86_400_000);
-      await prisma.shortLink.create({ data: { code, token, expiresAt } });
-      const base = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
-      return reply.send({ data: { token, url: `${base}/b/${code}` }, errors: null });
+      // Token de auto-reserva de larga duración (30 días) + enlace corto …/b/CODE
+      // (el cliente puede recibir el mensaje y actuar días después).
+      const { token, url } = await createBookingLink(request.ctx.tenantId, body.data.customerId, body.data.productId);
+      return reply.send({ data: { token, url }, errors: null });
     });
 
   // GET /link/short/:code — resuelve un enlace corto a su token (público, sin auth,
   // como el resto de /link/). Lo consume la página /b/:code del web para redirigir.
   server.get<{ Params: { code: string } }>("/link/short/:code",
     async (request: FastifyRequest<{ Params: { code: string } }>, reply: FastifyReply) => {
-      const sl = await prisma.shortLink.findUnique({ where: { code: request.params.code }, select: { token: true, expiresAt: true } });
+      const sl = await prisma.shortLink.findUnique({ where: { code: request.params.code }, select: { token: true, kind: true, expiresAt: true } });
       if (!sl || sl.expiresAt.getTime() < Date.now()) return reply.status(404).send({ errors: [{ code: "NOT_FOUND", message: "Enlace no válido o caducado" }] });
-      return reply.send({ data: { token: sl.token }, errors: null });
+      return reply.send({ data: { token: sl.token, kind: sl.kind }, errors: null });
     });
 }

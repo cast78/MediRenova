@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { encryptDni } from "../lib/crypto.js";
+import { notifyAppointment } from "../lib/messaging/index.js";
 import { validateSpanishDni, hashDni } from "../lib/dni.js";
 import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/availability.js";
 import { roomHasOverlap, enforceSingleBooking, bookingLabel } from "../lib/booking.js";
@@ -190,6 +191,8 @@ export async function publicApiRoutes(server: FastifyInstance) {
       },
       select: { id: true, scheduledAt: true, status: true },
     });
+    // Aviso al paciente con enlace de confirmar / "no podré ir" (crm-mensajeria).
+    await notifyAppointment(appointment.id, "appointment_created", null);
     return ok(reply, appointment, 201);
   });
 }

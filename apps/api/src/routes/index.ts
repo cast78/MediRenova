@@ -19,6 +19,7 @@ import { userRoutes } from "./users.js";
 import { doctorRoutes } from "./doctors.js";
 import { publicApiRoutes } from "./public.js";
 import { portalRoutes } from "./portal.js";
+import { deliveryRoutes } from "./deliveries.js";
 
 export async function registerRoutes(server: FastifyInstance) {
   server.get("/health", async () => ({ status: "ok" }));
@@ -43,4 +44,5 @@ export async function registerRoutes(server: FastifyInstance) {
   await server.register(doctorRoutes, { prefix });
   await server.register(publicApiRoutes, { prefix });
   await server.register(portalRoutes, { prefix });
+  await server.register(deliveryRoutes, { prefix });
 }

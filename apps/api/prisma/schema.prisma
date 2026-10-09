@@ -197,6 +197,7 @@ model User {
   auditLogs       AuditLog[]
   rooms           RoomDoctor[]
   noShowRecoveries NoShowRecovery[]
+  messageDeliveries MessageDelivery[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -398,6 +399,7 @@ model Customer {
   visits              Visit[]
   workflowExecutions  WorkflowExecution[]
   campaignRecipients  CampaignRecipient[]
+  messageDeliveries   MessageDelivery[]
 
   @@unique([tenantId, dniHash])
   @@index([tenantId])
@@ -449,6 +451,7 @@ model Appointment {
   revision        Revision?
   visit           Visit?
   noShowRecovery  NoShowRecovery?
+  messageDeliveries MessageDelivery[]
   rescheduledFrom Appointment?  @relation("Reschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
   rescheduledTo   Appointment?  @relation("Reschedule")
   // Recuperación de un no-show: esta cita (nueva) recuperó el no-show `recoveredFrom`.
@@ -784,9 +787,54 @@ model AuditLog {
 model ShortLink {
   code      String   @id
   token     String
+  // Destino del enlace corto: booking (auto-reserva) | confirm (confirmar cita) | portal (acceso Mi área)
+  kind      String   @default("booking")
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([expiresAt])
   @@map("short_links")
+}
+
+// Comunicaciones al paciente (crm-mensajeria, Fase 0): cada aviso que el sistema
+// redacta queda aquí con su canal, texto renderizado y estado. En modo demo
+// (`provider = "demo"`) solo se guarda; con proveedor real se envía y se actualiza.
+enum MessageDeliveryStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED
+}
+
+model MessageDelivery {
+  id            String                @id @default(uuid())
+  tenantId      String                @map("tenant_id")
+  customerId    String                @map("customer_id")
+  appointmentId String?               @map("appointment_id")
+  event         String // appointment_created | appointment_rescheduled | confirmation_requested | noshow_invite | renewal_reminder | portal_access
+  channel       MessageChannel?
+  provider      String                @default("demo") // demo | resend | meta | sms
+  status        MessageDeliveryStatus @default(SENT)
+  to            String?
+  subject       String?
+  body          String
+  cta           String?
+  link          String?
+  templateName  String?               @map("template_name")
+  vars          Json?
+  reason        String? // motivo cuando SKIPPED / FAILED
+  byUserId      String?               @map("by_user_id") // null = sistema
+  sentAt        DateTime?             @map("sent_at")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  byUser      User?        @relation(fields: [byUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, customerId, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@map("message_deliveries")
 }

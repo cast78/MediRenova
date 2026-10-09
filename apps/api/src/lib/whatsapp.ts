@@ -72,3 +72,5 @@ function createWhatsAppClient(): WhatsAppClient {
 }
 
 export const whatsapp: WhatsAppClient = createWhatsAppClient();
+// true solo cuando hay credenciales reales de Meta (env); si no, los envíos son de consola/demo.
+export const whatsappConfigured: boolean = whatsapp instanceof MetaWhatsAppClient;

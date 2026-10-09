@@ -9,6 +9,7 @@ import { buildIcs } from "../lib/ics.js";
 import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/availability.js";
 import { roomHasOverlap, enforceSingleBooking, bookingLabel, findBlockingBooking } from "../lib/booking.js";
 import { signConfirmationToken } from "../lib/jwt.js";
+import { notifyAppointment, notifyNoShowInvite } from "../lib/messaging/index.js";
 import { appointmentEvents } from "../lib/appointment-timeline.js";
 import { classifyStuckEpisode, episodeAgeDays, STUCK_LABELS } from "../lib/episodes.js";
 import { buildTenantAlert, sendTenantAlert } from "../lib/episode-alerts.js";
@@ -372,6 +373,10 @@ export async function appointmentRoutes(server: FastifyInstance) {
         create: { tenantId: request.ctx.tenantId, appointmentId: appt.id, state, channel, byUserId: request.ctx.userId ?? null, note: body.data.note ?? null },
         update: { state, channel, at: new Date(), byUserId: request.ctx.userId ?? null, note: body.data.note ?? null },
       });
+      // La invitación enviada por WhatsApp/email queda en Comunicaciones (la llamada no).
+      if (body.data.state === "contacted" && (channel === "WHATSAPP" || channel === "EMAIL")) {
+        await notifyNoShowInvite(appt.id, request.ctx.userId, [channel]);
+      }
       await prisma.customerEvent.create({ data: {
         tenantId: request.ctx.tenantId, customerId: appt.customerId, appointmentId: appt.id,
         type: body.data.state === "contacted" ? "noshow_contactado" : "noshow_descartado",
@@ -657,6 +662,9 @@ export async function appointmentRoutes(server: FastifyInstance) {
           request.log.error(err, "[captacion] markCampaignConverted failed");
         });
 
+        // Aviso al paciente con enlace de confirmar / "no podré ir" (crm-mensajeria).
+        await notifyAppointment(appointment.id, "appointment_created", request.ctx.userId);
+
         return reply.status(201).send({ data: appointment, errors: null });
       } catch (err: unknown) {
         if (err instanceof Error && err.message.includes("unique constraint")) {
@@ -833,6 +841,9 @@ export async function appointmentRoutes(server: FastifyInstance) {
         { reschedule: { from: existing.scheduledAt.toISOString(), to: created.scheduledAt.toISOString(), newId: created.id } },
       );
 
+      // Aviso al paciente de la nueva fecha (crm-mensajeria).
+      await notifyAppointment(created.id, "appointment_rescheduled", request.ctx.userId);
+
       return reply.status(201).send({ data: created, errors: null });
     });
 
@@ -848,11 +859,15 @@ export async function appointmentRoutes(server: FastifyInstance) {
         },
       });
       if (!appt) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      // Registra el aviso (enlace corto de 30 días) en Comunicaciones; si falla, el
+      // enlace largo de respaldo mantiene operativo el botón.
+      const notified = await notifyAppointment(appt.id, "confirmation_requested", request.ctx.userId);
       const token = signConfirmationToken({ cid: appt.customerId, pid: appt.productId, tid: appt.tenantId, aid: appt.id, type: "magic_link" });
+      const url = notified?.url ?? `${PUBLIC_URL}/confirmar/${token}`;
       // Registra la acción en el historial del cliente (intención de solicitud).
       await prisma.customerEvent.create({ data: { tenantId: request.ctx.tenantId, customerId: appt.customerId, appointmentId: appt.id, type: "confirmacion_solicitada", actor: "recepcion" } }).catch(() => {});
       return reply.send({
-        data: { url: `${PUBLIC_URL}/confirmar/${token}`, customer: appt.customer, product: appt.product, scheduledAt: appt.scheduledAt },
+        data: { url, customer: appt.customer, product: appt.product, scheduledAt: appt.scheduledAt },
         errors: null,
       });
     });
