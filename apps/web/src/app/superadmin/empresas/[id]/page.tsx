@@ -43,15 +43,21 @@ export default function EmpresaPage() {
   const qc = useQueryClient();
   const { data: t, isLoading } = useQuery<Detail>({ queryKey: ["superadmin-tenant", id], queryFn: () => apiFetch<Detail>(`/superadmin/tenants/${id}`) });
 
-  const [form, setForm] = useState<{ plan: PlanTier; trialUntil: string; maxCenters: string; active: boolean; add: FeatureKey[]; remove: FeatureKey[]; reason: string } | null>(null);
+  type Form = { plan: PlanTier; trialUntil: string; maxCenters: string; active: boolean; add: FeatureKey[]; remove: FeatureKey[]; reason: string };
+  type Saved = { plan: PlanTier; trialUntil: string | null; maxCenters: number | null; active: boolean; featureOverrides: { add?: FeatureKey[]; remove?: FeatureKey[] } | null };
+  // Formulario a partir de los valores guardados (ficha cargada o respuesta del PATCH).
+  const toForm = (v: Saved): Form => ({ plan: v.plan, trialUntil: toDateInput(v.trialUntil), maxCenters: v.maxCenters != null ? String(v.maxCenters) : "", active: v.active, add: v.featureOverrides?.add ?? [], remove: v.featureOverrides?.remove ?? [], reason: "" });
+
+  const [form, setForm] = useState<Form | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (t && !form) setForm({ plan: t.plan, trialUntil: toDateInput(t.trialUntil), maxCenters: t.maxCenters != null ? String(t.maxCenters) : "", active: t.active, add: t.featureOverrides?.add ?? [], remove: t.featureOverrides?.remove ?? [], reason: "" });
+    if (t && !form) setForm(toForm(t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t, form]);
 
   const save = useMutation({
-    mutationFn: () => apiFetch(`/superadmin/tenants/${id}`, { method: "PATCH", body: JSON.stringify({
+    mutationFn: () => apiFetch<Saved>(`/superadmin/tenants/${id}`, { method: "PATCH", body: JSON.stringify({
       plan: form!.plan,
       trialUntil: form!.trialUntil ? new Date(`${form!.trialUntil}T23:59:59`).toISOString() : null,
       maxCenters: form!.maxCenters ? Number(form!.maxCenters) : null,
@@ -59,7 +65,9 @@ export default function EmpresaPage() {
       featureOverrides: form!.add.length || form!.remove.length ? { add: form!.add, remove: form!.remove } : null,
       reason: form!.reason || undefined,
     }) }),
-    onSuccess: () => { setMsg("Cambios guardados"); setError(null); setForm(null); setTimeout(() => setMsg(null), 2500); void qc.invalidateQueries({ queryKey: ["superadmin-tenant", id] }); void qc.invalidateQueries({ queryKey: ["superadmin-tenants"] }); },
+    // El formulario se rellena con la RESPUESTA del guardado, no con la caché (que
+    // aún tendría los valores viejos y haría que un segundo Guardar los restaurase).
+    onSuccess: (saved) => { setForm(toForm(saved)); setMsg("Cambios guardados"); setError(null); setTimeout(() => setMsg(null), 2500); void qc.invalidateQueries({ queryKey: ["superadmin-tenant", id] }); void qc.invalidateQueries({ queryKey: ["superadmin-tenants"] }); void qc.invalidateQueries({ queryKey: ["tenant-plan"] }); },
     onError: (e: unknown) => setError(errorMessage(e)),
   });
   const closeReq = useMutation({
