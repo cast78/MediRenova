@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
 import { stripUndefined } from "../lib/utils.js";
 import { email, emailConfigured, emailFrom } from "../lib/email.js";
+import { whatsappConfigured } from "../lib/whatsapp.js";
 
 const createTenantSchema = z.object({
   name: z.string().min(2).max(100),
@@ -187,9 +188,11 @@ export async function tenantRoutes(server: FastifyInstance) {
       const whatsappReady = !!config?.metaWaPhoneNumberId && !!config?.metaWaAccessToken;
       return reply.send({
         data: {
-          whatsapp: { status: whatsappReady ? "connected" : "pending", detail: whatsappReady ? "Credenciales presentes" : "Faltan Phone Number ID y/o Access Token" },
-          email: { status: emailConfigured ? "connected" : "pending", from: emailConfigured ? emailFrom : null, detail: emailConfigured ? "Servidor de email configurado" : "Falta RESEND_API_KEY / EMAIL_FROM en el servidor" },
-          sms: { status: "off", detail: "Sin proveedor de SMS integrado" },
+          // `mode`: "live" = el aviso sale de verdad por el proveedor; "demo" = se
+          // redacta y se registra en Comunicaciones sin enviarse (crm-mensajeria).
+          whatsapp: { status: whatsappReady ? "connected" : "pending", mode: whatsappConfigured ? "live" : "demo", detail: whatsappReady ? "Credenciales presentes" : "Faltan Phone Number ID y/o Access Token" },
+          email: { status: emailConfigured ? "connected" : "pending", mode: emailConfigured ? "live" : "demo", from: emailConfigured ? emailFrom : null, detail: emailConfigured ? "Servidor de email configurado" : "Falta RESEND_API_KEY / EMAIL_FROM en el servidor" },
+          sms: { status: "off", mode: "demo", detail: "Sin proveedor de SMS integrado" },
         },
         errors: null,
       });

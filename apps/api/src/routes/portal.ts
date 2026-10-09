@@ -8,7 +8,8 @@ import { prisma } from "../lib/prisma.js";
 import { setTenantContext } from "../lib/tenant-context.js";
 import { signPortalToken, verifyPortalToken } from "../lib/jwt.js";
 import { hashDni } from "../lib/dni.js";
-import { email, emailConfigured } from "../lib/email.js";
+import { emailConfigured } from "../lib/email.js";
+import { notify, createPortalLink } from "../lib/messaging/index.js";
 import { ensureRevisionPdf } from "../lib/pdf.js";
 
 const PUBLIC_URL = process.env["PUBLIC_URL"] ?? "http://localhost:3000";
@@ -63,27 +64,24 @@ export async function portalRoutes(server: FastifyInstance) {
 
       const token = signPortalToken({ cid: customer.id, tid: tenant.id });
       const url = `${PUBLIC_URL}/mi-area/entrar?token=${token}`;
+      // Enlace corto (/b/CODE, caduca con la sesión) para que quepa en SMS/WhatsApp.
+      let shortUrl = url;
+      try { shortUrl = (await createPortalLink(token)).url; } catch (e) { request.log.error(e, "[portal] enlace corto falló"); }
+
+      // Aviso por `notify` (crm-mensajeria): email preferente; es un mensaje de
+      // servicio pedido por el propio paciente, así que no exige consentimiento de
+      // marketing. Con proveedor real se envía; sin él queda registrado (modo demo).
+      await notify({ tenantId: tenant.id, customerId: customer.id, event: "portal_access", link: shortUrl });
+      await portalAudit(tenant.id, "customer", customer.id, { kind: "portal_access_requested" }, request.ip);
 
       // Modo transitorio "revelar enlace": mientras el email NO esté configurado
       // (sin RESEND_API_KEY/EMAIL_FROM) no hay forma de hacer llegar el enlace, así
-      // que se devuelve para copiarlo y enviarlo a mano (WhatsApp/email). Se desactiva
-      // solo en cuanto el email quede configurado, y entonces vuelve al envío normal.
-      // AVISO: en este modo se salta la anti-enumeración (revela si el DNI+fecha existe).
+      // que se devuelve para copiarlo y enviarlo a mano. Se desactiva solo en cuanto
+      // el email quede configurado. AVISO: salta la anti-enumeración (Fase A lo cierra).
       if (!emailConfigured) {
         await portalAudit(tenant.id, "customer", customer.id, { kind: "portal_access_link_revealed" }, request.ip);
         return reply.send({ data: { ok: true, link: url }, errors: null });
       }
-
-      // Modo normal: enviar el enlace al email de la ficha (requiere email válido).
-      if (!customer.email?.includes("@")) return reply.send(generic);
-      try {
-        await email.sendEmail({
-          to: customer.email,
-          subject: `Acceso a tu área de paciente · ${tenant.name}`,
-          body: `Has solicitado acceso a tu área de paciente.\nEntra desde este enlace (válido 60 minutos):\n${url}\n\nSi no lo has solicitado, ignora este mensaje.`,
-        });
-      } catch (e) { request.log.error(e, "[portal] email de acceso falló"); }
-      await portalAudit(tenant.id, "customer", customer.id, { kind: "portal_access_requested" }, request.ip);
       return reply.send(generic);
     });
 

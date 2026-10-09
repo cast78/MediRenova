@@ -32,6 +32,7 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   "Center",
   "Customer",
   "CustomerEvent",
+  "MessageDelivery",
   "MessageTemplate",
   "NoShowRecovery",
   "Product",

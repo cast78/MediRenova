@@ -7,6 +7,7 @@ import Link from "next/link";
 import { apiFetch, ApiError, authHeaders } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { SignaturePad, type SignaturePadHandle } from "@/components/signature-pad";
+import { CustomerCommunications } from "@/components/customer-communications";
 import { DEFAULT_CONSENT_TEXT, renderConsent } from "@/lib/consent";
 import { FileText, AlertTriangle, MessageCircle, Mail, Copy, Check, Send, Phone, IdCard, Cake, Flag, MapPin, Building2, CalendarPlus, ShieldCheck, Trash2, Pencil, Stethoscope, UserX, Calendar, AlarmClock, Clock, RefreshCw, BarChart3, MessageSquare, PenLine, X, Car, Target } from "lucide-react";
 
@@ -144,9 +145,9 @@ function Toggle({ checked, onChange, label, icon: Icon }: { checked: boolean; on
   );
 }
 
-const TABS = ["datos", "historial", "revisiones", "acciones", "rgpd"] as const;
+const TABS = ["datos", "historial", "comunicaciones", "revisiones", "acciones", "rgpd"] as const;
 type Tab = (typeof TABS)[number];
-const TAB_LABELS: Record<Tab, string> = { datos: "Datos", historial: "Historial", revisiones: "Revisiones", acciones: "Acciones", rgpd: "RGPD" };
+const TAB_LABELS: Record<Tab, string> = { datos: "Datos", historial: "Historial", comunicaciones: "Comunicaciones", revisiones: "Revisiones", acciones: "Acciones", rgpd: "RGPD" };
 
 interface TimelineEvent { at: string; kind: string; title: string; detail: string; tone: string }
 const TONE_DOT: Record<string, string> = { book: "bg-gray-400", arrive: "bg-yellow-400", clinic: "bg-teal-500", comm: "bg-sky-500", confirm: "bg-emerald-500", reprog: "bg-violet-500", negative: "bg-red-500" };
@@ -483,6 +484,13 @@ export default function CustomerDetailPage() {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Comunicaciones (crm-mensajeria): avisos redactados por el sistema ── */}
+      {tab === "comunicaciones" && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <CustomerCommunications customerId={id} consent={{ whatsapp: customer.acceptsWhatsapp, sms: customer.acceptsSms, email: customer.acceptsEmail }} />
         </div>
       )}
 

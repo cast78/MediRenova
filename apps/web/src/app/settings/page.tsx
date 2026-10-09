@@ -2,17 +2,21 @@
 
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/page-header";
+import { CommunicationsOutbox } from "@/components/communications-outbox";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError, authHeaders } from "@/lib/api";
 import { DEFAULT_CONSENT_TEXT, renderConsent } from "@/lib/consent";
-import { Building2, Palette, CalendarClock, MessagesSquare, ShieldCheck, Code2, History, MessageCircle, Mail, MessageSquare, CheckCircle2, AlertTriangle, KeyRound, Lock, PlugZap, Loader2, Upload, Trash2, Download, Search, UserCircle } from "lucide-react";
+import { Building2, Palette, CalendarClock, MessagesSquare, ShieldCheck, Code2, History, MessageCircle, Mail, MessageSquare, CheckCircle2, AlertTriangle, KeyRound, Lock, PlugZap, FlaskConical, Loader2, Upload, Trash2, Download, Search, UserCircle } from "lucide-react";
 
 type ChannelState = "connected" | "pending" | "off";
+// `mode`: "live" = los avisos salen por el proveedor; "demo" = se redactan y se
+// registran en Comunicaciones sin enviarse (crm-mensajeria, Fase 0).
+type ChannelMode = "live" | "demo";
 interface ChannelStatus {
-  whatsapp: { status: ChannelState; detail: string };
-  email: { status: ChannelState; from: string | null; detail: string };
-  sms: { status: ChannelState; detail: string };
+  whatsapp: { status: ChannelState; mode?: ChannelMode; detail: string };
+  email: { status: ChannelState; mode?: ChannelMode; from: string | null; detail: string };
+  sms: { status: ChannelState; mode?: ChannelMode; detail: string };
 }
 
 interface TenantConfig {
@@ -314,11 +318,15 @@ function RgpdTools() {
 
 // ── Tarjeta de canal (Comunicaciones) ─────────────────────────────────────────
 
-function ChannelCard({ icon: Icon, name, sub, status, children }: {
+function ChannelCard({ icon: Icon, name, sub, status, mode, children }: {
   icon: typeof Mail; name: string; sub: string;
-  status: "connected" | "pending" | "off"; children: React.ReactNode;
+  status: "connected" | "pending" | "off"; mode?: "live" | "demo" | undefined; children: React.ReactNode;
 }) {
-  const tone = status === "connected"
+  // En modo demo el canal se muestra "Simulado" aunque haya credenciales guardadas:
+  // lo que manda es si el aviso sale de verdad o no.
+  const tone = mode === "demo"
+    ? { circle: "bg-amber-50 text-amber-600", pill: "bg-amber-50 text-amber-700 border border-amber-200", label: "Simulado", dot: false }
+    : status === "connected"
     ? { circle: "bg-emerald-50 text-emerald-600", pill: "bg-emerald-50 text-emerald-700", label: "Conectado", dot: true }
     : status === "pending"
       ? { circle: "bg-amber-50 text-amber-600", pill: "bg-amber-50 text-amber-700", label: "Pendiente", dot: false }
@@ -334,7 +342,7 @@ function ChannelCard({ icon: Icon, name, sub, status, children }: {
           </div>
         </div>
         <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${tone.pill}`}>
-          {tone.dot ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> : status === "pending" ? <AlertTriangle className="w-3 h-3" /> : null}
+          {tone.dot ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> : mode === "demo" ? <FlaskConical className="w-3 h-3" /> : status === "pending" ? <AlertTriangle className="w-3 h-3" /> : null}
           {tone.label}
         </span>
       </div>
@@ -709,10 +717,16 @@ export default function SettingsPage() {
 
       {/* Comunicaciones */}
       {tab === "comunicaciones" && form && (
-        <div className="space-y-4">
-          <p className="text-sm text-gray-500">Canales para avisar a los clientes. Las credenciales se guardan cifradas y no se muestran.</p>
+        <div className="space-y-6">
+          <CommunicationsOutbox />
 
-          <ChannelCard icon={MessageCircle} name="WhatsApp" sub="Meta Cloud API" status={channels?.whatsapp.status ?? (cfg?.hasMetaWaToken ? "connected" : "pending")}>
+          <div className="space-y-4">
+          <div>
+            <h2 className="font-semibold text-gray-900">Canales</h2>
+            <p className="text-sm text-gray-500">Canales para avisar a los clientes. Mientras un canal esté en modo "Simulado", los avisos se redactan y se registran arriba sin enviarse.</p>
+          </div>
+
+          <ChannelCard icon={MessageCircle} name="WhatsApp" sub="Meta Cloud API" status={channels?.whatsapp.status ?? (cfg?.hasMetaWaToken ? "connected" : "pending")} mode={channels?.whatsapp.mode}>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number ID</label>
@@ -738,7 +752,7 @@ export default function SettingsPage() {
             <TestRow ch="whatsapp" />
           </ChannelCard>
 
-          <ChannelCard icon={Mail} name="Email" sub="Resend" status={channels?.email.status ?? "pending"}>
+          <ChannelCard icon={Mail} name="Email" sub="Resend" status={channels?.email.status ?? "pending"} mode={channels?.email.mode}>
             <div className="text-sm text-gray-600">
               {channels?.email.status === "connected"
                 ? <>Configurado en el servidor. Remitente: <span className="font-mono text-gray-800">{channels.email.from}</span>. Pulsa "Probar conexión" para recibir un email de prueba en tu bandeja.</>
@@ -747,9 +761,10 @@ export default function SettingsPage() {
             <TestRow ch="email" />
           </ChannelCard>
 
-          <ChannelCard icon={MessageSquare} name="SMS" sub="Proveedor español" status={channels?.sms.status ?? "off"}>
-            <p className="text-sm text-gray-600">Elige un proveedor (LabsMobile, Esendex, Twilio…) para enviar SMS de recordatorio. Aún sin proveedor integrado (backlog de envío real).</p>
+          <ChannelCard icon={MessageSquare} name="SMS" sub="Proveedor español" status={channels?.sms.status ?? "off"} mode={channels?.sms.mode}>
+            <p className="text-sm text-gray-600">Canal de respaldo cuando el paciente no tiene WhatsApp. Elige un proveedor (LabsMobile, Esendex, Twilio…); aún sin proveedor integrado.</p>
           </ChannelCard>
+          </div>
         </div>
       )}
 
