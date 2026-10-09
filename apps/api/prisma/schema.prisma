@@ -130,17 +130,54 @@ model Tenant {
   legalName      String?  @map("legal_name")
   taxId          String?  @map("tax_id")
   billingAddress String?  @map("billing_address")
+  // Plan comercial (crm-planes). PRO por defecto: las empresas existentes no
+  // cambian al desplegar. La resolución (prueba, excepciones) está en lib/plan.ts.
+  plan             PlanTier  @default(PRO)
+  trialUntil       DateTime? @map("trial_until")
+  featureOverrides Json?     @map("feature_overrides") // { "add": [...], "remove": [...] }
+  maxCenters       Int?      @map("max_centers") // null = sin límite
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  config    TenantConfig?
-  apiKeys   ApiKey[]
-  users     User[]
-  centers   Center[]
-  products  Product[]
-  customers Customer[]
+  config       TenantConfig?
+  apiKeys      ApiKey[]
+  users        User[]
+  centers      Center[]
+  products     Product[]
+  customers    Customer[]
+  planRequests PlanRequest[]
 
   @@map("tenants")
+}
+
+enum PlanTier {
+  ESSENTIAL
+  PRO
+}
+
+enum PlanRequestStatus {
+  OPEN
+  CLOSED
+}
+
+// Petición "quiero pasar a Pro" hecha desde la clínica; la atiende el proveedor
+// desde su panel. No es tenant-scoped (el proveedor la lista entre empresas);
+// las rutas de clínica filtran por tenantId explícitamente.
+model PlanRequest {
+  id            String            @id @default(uuid())
+  tenantId      String            @map("tenant_id")
+  requestedPlan PlanTier          @map("requested_plan")
+  byUserId      String?           @map("by_user_id")
+  note          String?
+  status        PlanRequestStatus @default(OPEN)
+  createdAt     DateTime          @default(now()) @map("created_at")
+  closedAt      DateTime?         @map("closed_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([tenantId])
+  @@map("plan_requests")
 }
 
 model TenantConfig {

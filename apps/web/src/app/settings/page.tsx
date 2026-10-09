@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/page-header";
 import { CommunicationsOutbox } from "@/components/communications-outbox";
+import { PlanCard } from "@/components/plan-card";
+import { LockedModule } from "@/components/locked-module";
+import { useFeatures } from "@/lib/use-features";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError, authHeaders } from "@/lib/api";
@@ -360,6 +363,7 @@ export default function SettingsPage() {
   const qTab = searchParams.get("tab");
   const initialTab: TabKey = TABS.some((t) => t.key === qTab) ? (qTab as TabKey) : "empresa";
   const [tab, setTab] = useState<TabKey>(initialTab);
+  const { has: hasPlan } = useFeatures(); // crm-planes: Comunicaciones y API son Pro
 
   const { data: tenant } = useQuery<TenantMe>({ queryKey: ["tenant-me"], queryFn: () => apiFetch<TenantMe>("/tenants/me") });
   const [form, setForm] = useState<ConfigForm | null>(null);
@@ -525,6 +529,7 @@ export default function SettingsPage() {
       {/* Empresa */}
       {tab === "empresa" && empresa && (
         <div className="space-y-5">
+          <PlanCard />
           <section className={CARD}>
             <h2 className="font-semibold text-gray-900 mb-4">Datos de la empresa</h2>
             <div className="grid grid-cols-2 gap-3">
@@ -716,7 +721,8 @@ export default function SettingsPage() {
       )}
 
       {/* Comunicaciones */}
-      {tab === "comunicaciones" && form && (
+      {tab === "comunicaciones" && !hasPlan("messaging") && <LockedModule feature="messaging" />}
+      {tab === "comunicaciones" && form && hasPlan("messaging") && (
         <div className="space-y-6">
           <CommunicationsOutbox />
 
@@ -804,7 +810,7 @@ export default function SettingsPage() {
       )}
 
       {/* API */}
-      {tab === "api" && <ApiKeysSection />}
+      {tab === "api" && (hasPlan("api_public") ? <ApiKeysSection /> : <LockedModule feature="api_public" />)}
 
       {/* Auditoría */}
       {tab === "auditoria" && <AuditSection />}

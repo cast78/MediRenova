@@ -2,6 +2,8 @@ import { prisma } from "./prisma.js";
 import { email, renderTemplate } from "./email.js";
 import { buildCustomerWhere, type SegmentDefinition } from "./segments.js";
 import type { MessageChannel } from "@prisma/client";
+import { tenantPlan } from "./authorization.js";
+import { hasFeature } from "./plan.js";
 
 // Cliente resuelto para el envío (con consentimiento y datos para variables).
 interface Recip {
@@ -121,6 +123,9 @@ export async function runDueCampaigns(): Promise<void> {
     select: { id: true, tenantId: true },
   });
   for (const c of due) {
+    // Plan (crm-planes): campañas solo para empresas con la función.
+    const plan = await tenantPlan(c.tenantId);
+    if (!plan || !hasFeature(plan, "campaigns")) continue;
     try { await sendCampaign(c.id, c.tenantId); }
     catch (err) { console.error(`[campaign-cron] Error en ${c.id}:`, err); }
   }

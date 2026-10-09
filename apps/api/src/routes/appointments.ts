@@ -10,6 +10,7 @@ import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/ava
 import { roomHasOverlap, enforceSingleBooking, bookingLabel, findBlockingBooking } from "../lib/booking.js";
 import { signConfirmationToken } from "../lib/jwt.js";
 import { notifyAppointment, notifyNoShowInvite } from "../lib/messaging/index.js";
+import { requireFeature } from "../lib/authorization.js";
 import { appointmentEvents } from "../lib/appointment-timeline.js";
 import { classifyStuckEpisode, episodeAgeDays, STUCK_LABELS } from "../lib/episodes.js";
 import { buildTenantAlert, sendTenantAlert } from "../lib/episode-alerts.js";
@@ -253,7 +254,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
   // GET /appointments/no-shows — bandeja de recuperación: citas NO_SHOW recientes con
   // su estado de seguimiento (pendiente/contactado/descartado) y si ya se recuperaron
   // (el cliente tiene una cita nueva del MISMO producto creada tras el no-show).
-  server.get("/appointments/no-shows", { preHandler: [requireRole("RECEPTIONIST")] },
+  server.get("/appointments/no-shows", { preHandler: [requireRole("RECEPTIONIST"), requireFeature("recovery")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const q = z.object({
         window: z.coerce.number().int().min(1).max(180).default(30),
@@ -350,7 +351,7 @@ export async function appointmentRoutes(server: FastifyInstance) {
 
   // POST /appointments/:id/recovery — fija el seguimiento de un no-show (contactado /
   // descartado) o lo reinicia (vuelve a pendiente). Deja traza en la ficha del cliente.
-  server.post<{ Params: { id: string } }>("/appointments/:id/recovery", { preHandler: [requireRole("RECEPTIONIST")] },
+  server.post<{ Params: { id: string } }>("/appointments/:id/recovery", { preHandler: [requireRole("RECEPTIONIST"), requireFeature("recovery")] },
     async (request, reply: FastifyReply) => {
       const body = z.object({
         state: z.enum(["contacted", "dismissed", "reset"]),

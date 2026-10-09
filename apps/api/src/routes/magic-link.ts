@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { verifyMagicLinkToken } from "../lib/jwt.js";
 import { createBookingLink, notifyAppointment } from "../lib/messaging/index.js";
-import { requireRole } from "../lib/authorization.js";
+import { requireRole, tenantPlan } from "../lib/authorization.js";
+import { hasFeature } from "../lib/plan.js";
 import { markWorkflowConverted } from "../lib/workflow-cron.js";
 import { markCampaignConverted } from "../lib/campaign-attribution.js";
 import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/availability.js";
@@ -24,12 +25,23 @@ type MagicRoomSchedule = {
   slotsByDay?: Record<string, string[]>;
 };
 
+// La auto-reserva por enlace es Pro ("public_booking"). Las rutas son públicas
+// (sin usuario), así que el plan se resuelve con el tenant del token. Confirmar /
+// "no podré ir" una cita existente NO pasa por aquí: es Esencial.
+async function assertPublicBooking(tenantId: string, reply: FastifyReply): Promise<boolean> {
+  const t = await tenantPlan(tenantId);
+  if (t && hasFeature(t, "public_booking")) return true;
+  await reply.status(403).send({ errors: [{ code: "FEATURE_NOT_IN_PLAN", feature: "public_booking", message: "La reserva por enlace no está disponible en este centro. Contacta con ellos para reservar." }] });
+  return false;
+}
+
 export async function magicLinkRoutes(server: FastifyInstance) {
   // GET /link/:token — validate and return booking context
   server.get<{ Params: { token: string } }>("/link/:token",
     async (request, reply: FastifyReply) => {
       try {
         const payload = verifyMagicLinkToken(request.params.token);
+        if (!(await assertPublicBooking(payload.tid, reply))) return;
 
         const [customer, product] = await Promise.all([
           prisma.customer.findFirst({ where: { id: payload.cid, tenantId: payload.tid, deletedAt: null } }),
@@ -123,6 +135,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
     async (request, reply: FastifyReply) => {
       try {
         const payload = verifyMagicLinkToken(request.params.token);
+        if (!(await assertPublicBooking(payload.tid, reply))) return;
         const body = confirmSchema.safeParse(request.body);
         if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
 
@@ -179,6 +192,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
     async (request, reply: FastifyReply) => {
       try {
         const payload = verifyMagicLinkToken(request.params.token);
+        if (!(await assertPublicBooking(payload.tid, reply))) return;
         const { roomId, date } = request.query as { roomId?: string; date?: string };
 
         if (!roomId || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -231,6 +245,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
     async (request, reply: FastifyReply) => {
       try {
         const payload = verifyMagicLinkToken(request.params.token);
+        if (!(await assertPublicBooking(payload.tid, reply))) return;
         const { roomId } = request.query as { roomId?: string };
         if (!roomId) return reply.status(400).send({ errors: [{ code: "BAD_REQUEST", message: "roomId requerido" }] });
 
@@ -293,6 +308,7 @@ export async function magicLinkRoutes(server: FastifyInstance) {
     async (request, reply: FastifyReply) => {
       try {
         const payload = verifyMagicLinkToken(request.params.token);
+        if (!(await assertPublicBooking(payload.tid, reply))) return;
         const body = rescheduleSchema.safeParse(request.body);
         if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
 

@@ -1,3 +1,5 @@
+> **Estado (2026-10-09):** Fase 0 (modo demo) **completada y en producción** (PR #15). Las Fases A–D (envío real por Resend/Meta/SMS, cola, webhooks, avisos automáticos) quedan **pospuestas a la fase de madurez del producto**, tras `crm-planes` (Esencial/Pro). Requisito previo para retomarlas: dominio propio (ver `docs/mensajeria.md`).
+
 Leyenda: **(tú)** = paso manual del administrador fuera del código · sin marca = implementación.
 
 ## 0. Decisiones previas

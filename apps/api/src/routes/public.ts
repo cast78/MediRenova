@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { encryptDni } from "../lib/crypto.js";
 import { notifyAppointment } from "../lib/messaging/index.js";
+import { guardModule } from "../lib/plan-guards.js";
 import { validateSpanishDni, hashDni } from "../lib/dni.js";
 import { computeDaySlots, productAllowedInRoom, nowInTimezone } from "../lib/availability.js";
 import { roomHasOverlap, enforceSingleBooking, bookingLabel } from "../lib/booking.js";
@@ -50,6 +51,7 @@ const publicAppointmentSchema = z.object({
 type Sched = { slotsByDay?: Record<string, string[]> };
 
 export async function publicApiRoutes(server: FastifyInstance) {
+  guardModule(server, "public"); // plan Pro: reserva pública por API (crm-planes)
   // Rate limit (la auth por API Key ya la garantiza el plugin global).
   server.addHook("preHandler", async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.url.startsWith("/api/v1/public/")) return;

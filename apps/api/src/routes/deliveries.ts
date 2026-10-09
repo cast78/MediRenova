@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
+import { guardModule } from "../lib/plan-guards.js";
 import { EVENT_LABELS, type MessagingEvent } from "../lib/messaging/index.js";
 
 const SELECT = {
@@ -37,6 +38,7 @@ const listQuery = z.object({
 });
 
 export async function deliveryRoutes(server: FastifyInstance) {
+  guardModule(server, "deliveries"); // plan Pro: Comunicaciones (crm-planes)
   // GET /customers/:id/deliveries — avisos de un paciente (ficha → Comunicaciones).
   server.get<{ Params: { id: string } }>("/customers/:id/deliveries", { preHandler: [requireRole("RECEPTIONIST")] },
     async (request, reply: FastifyReply) => {

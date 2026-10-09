@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
+import { useFeatures } from "@/lib/use-features";
+import { LockedModule } from "@/components/locked-module";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -90,7 +92,14 @@ function errMsg(e: unknown): string {
 // ── Página ───────────────────────────────────────────────────────────────────
 type Tab = "templates" | "segments" | "campaigns";
 
+// Plan Pro (crm-planes): sin "campaigns" se muestra el módulo bloqueado.
 export default function CampaignsPage() {
+  const { has } = useFeatures();
+  if (!has("campaigns")) return <div className="p-6"><LockedModule feature="campaigns" /></div>;
+  return <CampaignsInner />;
+}
+
+function CampaignsInner() {
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>("campaigns");
   const [creatingCampaign, setCreatingCampaign] = useState(false); // botón "Nueva campaña" en el encabezado
