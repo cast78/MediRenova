@@ -5,12 +5,14 @@
 // lateral con acciones rápidas y diálogo de confirmación de cambio de plan.
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building2, Clock, Inbox, Flame, Moon, Plus, Search, LogIn, Check, X, Loader2, Sparkles } from "lucide-react";
 import { apiFetch, ApiError, setActAsTenant } from "@/lib/api";
 import { PLAN_LABEL, trialTone, type PlanTier } from "@/lib/use-features";
 import { PlanChip } from "@/components/plan-chip";
 import { PlanChangeDialog, type CatalogEntry } from "@/components/plan-change-dialog";
+import { ConfirmDialog, type ConfirmSpec } from "@/components/confirm-dialog";
 
 interface Row {
   id: string; name: string; slug: string; active: boolean; plan: PlanTier; effectivePlan: PlanTier;
@@ -26,7 +28,7 @@ interface Meta {
   catalog: CatalogEntry[]; months: string[];
 }
 interface PlanRequest {
-  id: string; tenantId: string; note: string | null; status: "OPEN" | "CLOSED"; createdAt: string; closedAt: string | null;
+  id: string; tenantId: string; kind: "UPGRADE" | "TRIAL" | "CENTER"; note: string | null; status: "OPEN" | "APPROVED" | "REJECTED" | "CLOSED"; createdAt: string; closedAt: string | null;
   tenant: { name: string; slug: string; plan: PlanTier }; byUser: { email: string; firstName: string; lastName: string } | null;
 }
 
@@ -84,12 +86,18 @@ export default function EmpresasPage() {
   const [selId, setSelId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [dialog, setDialog] = useState<{ row: Row; to: PlanTier } | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
+  // Notificación flotante de las acciones (éxito en verde, error en rojo); se va sola.
+  const [toast, setToast] = useState<{ msg: string; kind: "ok" | "error" } | null>(null);
+  const notify = (msg: string, kind: "ok" | "error" = "ok") => { setToast({ msg, kind }); setTimeout(() => setToast((t) => (t?.msg === msg ? null : t)), kind === "ok" ? 3500 : 5000); };
+  const setFlash = (msg: string | null) => { if (msg) notify(msg); };
   // Resalte breve de lo que acaba de cambiar en el panel lateral (plan / prueba).
   const [pulse, setPulse] = useState<"plan" | "trial" | null>(null);
   const highlight = (what: "plan" | "trial") => { setPulse(what); setTimeout(() => setPulse(null), 1200); };
-  // Filtro inicial por URL (?filter=requests desde el menú "Peticiones").
-  useEffect(() => { const f = new URLSearchParams(window.location.search).get("filter"); if (f === "requests") setFilter("requests"); }, []);
+  // Filtro por URL (?filter=requests desde el menú "Peticiones"): reactivo a la
+  // navegación entre "Empresas" y "Peticiones" sin remontar la página.
+  const sp = useSearchParams();
+  const urlFilter = sp.get("filter");
+  useEffect(() => { setFilter(urlFilter === "requests" ? "requests" : "all"); }, [urlFilter]);
 
   const m = data?.meta;
   const rows = useMemo(() => {
@@ -111,22 +119,76 @@ export default function EmpresasPage() {
 
   const patch = useMutation({
     mutationFn: (v: { id: string; body: Record<string, unknown>; msg: string }) => apiFetch(`/superadmin/tenants/${v.id}`, { method: "PATCH", body: JSON.stringify(v.body) }).then(() => v.msg),
-    onSuccess: (msg) => { setFlash(msg); setTimeout(() => setFlash(null), 3500); highlight("trial"); void qc.invalidateQueries({ queryKey: ["superadmin-tenants"] }); void qc.invalidateQueries({ queryKey: ["superadmin-tenant"] }); },
-    onError: (e: unknown) => { setFlash(errorMessage(e)); setTimeout(() => setFlash(null), 4000); },
+    onSuccess: (msg) => { notify(msg); highlight("trial"); void qc.invalidateQueries({ queryKey: ["superadmin-tenants"] }); void qc.invalidateQueries({ queryKey: ["superadmin-tenant"] }); },
+    onError: (e: unknown) => notify(errorMessage(e), "error"),
   });
-  const closeRequest = useMutation({
-    mutationFn: (id: string) => apiFetch(`/superadmin/plan-requests/${id}`, { method: "PATCH", body: JSON.stringify({ status: "CLOSED" }) }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["superadmin-plan-requests"] }); void qc.invalidateQueries({ queryKey: ["superadmin-tenants"] }); },
+  // Decidir una petición: aprobar la prueba (activa 14 días), rechazar (con nota) o cerrar.
+  const decide = useMutation({
+    mutationFn: (v: { id: string; status: "APPROVED" | "REJECTED" | "CLOSED"; note?: string | undefined; msg: string }) =>
+      apiFetch(`/superadmin/plan-requests/${v.id}`, { method: "PATCH", body: JSON.stringify({ status: v.status, note: v.note, trialDays: 14 }) }).then(() => v.msg),
+    onSuccess: (msg) => { notify(msg); void qc.invalidateQueries({ queryKey: ["superadmin-plan-requests"] }); void qc.invalidateQueries({ queryKey: ["superadmin-tenants"] }); void qc.invalidateQueries({ queryKey: ["superadmin-tenant"] }); },
+    onError: (e: unknown) => notify(errorMessage(e), "error"),
   });
+  const KIND_LABEL = { TRIAL: "la prueba Pro de 14 días", UPGRADE: "pasar a Pro", CENTER: "un centro adicional" } as const;
+  function reject(r: PlanRequest) {
+    setConfirm({
+      title: "Rechazar la petición",
+      text: <>Vas a <b>rechazar</b> la petición de <b>{r.tenant.name}</b> ({KIND_LABEL[r.kind]}). La clínica verá el motivo en su pantalla. ¿Estás seguro?</>,
+      confirmLabel: "Rechazar petición",
+      tone: "red",
+      noteLabel: "Motivo del rechazo (lo verá la clínica)",
+      noteRequired: true,
+      onConfirm: (note) => decide.mutateAsync({ id: r.id, status: "REJECTED", note, msg: `Petición de ${r.tenant.name} rechazada` }).then(() => undefined),
+    });
+  }
+  function approve(r: PlanRequest) {
+    const isTrial = r.kind === "TRIAL";
+    setConfirm({
+      title: isTrial ? "Aprobar la prueba Pro" : "Ampliar el límite de centros",
+      text: isTrial
+        ? <>Vas a aprobar la <b>prueba Pro de 14 días</b> para <b>{r.tenant.name}</b>: se activa ahora mismo y tendrá abiertos todos los módulos Pro hasta que venza. ¿Estás seguro?</>
+        : <>Vas a <b>ampliar en 1</b> el límite de centros contratados de <b>{r.tenant.name}</b>. Podrá crear un centro más desde ya. ¿Estás seguro?</>,
+      confirmLabel: isTrial ? "Aprobar prueba (14 d)" : "Ampliar límite (+1 centro)",
+      tone: "green",
+      onConfirm: () => decide.mutateAsync({ id: r.id, status: "APPROVED", msg: isTrial ? `Prueba Pro de 14 días aprobada para ${r.tenant.name}` : `Límite de centros de ${r.tenant.name} ampliado en 1` }).then(() => undefined),
+    });
+  }
+  function closeReq(r: PlanRequest) {
+    setConfirm({
+      title: "Cerrar la petición",
+      text: <>Vas a <b>cerrar</b> la petición de <b>{r.tenant.name}</b> ({KIND_LABEL[r.kind]}) sin cambiar su plan (p. ej. porque la has atendido por otra vía). ¿Estás seguro?</>,
+      confirmLabel: "Cerrar petición",
+      tone: "blue",
+      onConfirm: () => decide.mutateAsync({ id: r.id, status: "CLOSED", msg: `Petición de ${r.tenant.name} cerrada` }).then(() => undefined),
+    });
+  }
+  // Confirmación previa de cada acción rápida (texto según la acción).
+  const [confirm, setConfirm] = useState<ConfirmSpec | null>(null);
+
   // Dar o ampliar la prueba: si ya hay una vigente, los días se suman a su fin.
   function trial(r: Row, days: number) {
     const base = r.trialDaysLeft != null && r.trialUntil ? new Date(r.trialUntil).getTime() : Date.now();
     const until = new Date(base + days * 86_400_000);
     const extend = r.trialDaysLeft != null;
-    patch.mutate({ id: r.id, body: { trialUntil: until.toISOString(), reason: extend ? `Prueba Pro ampliada ${days} días` : `Prueba Pro de ${days} días` }, msg: `${extend ? "Prueba ampliada" : "Prueba Pro activada"} hasta el ${until.toLocaleDateString("es-ES")}` });
+    const untilTxt = until.toLocaleDateString("es-ES");
+    setConfirm({
+      title: extend ? "Ampliar la prueba Pro" : "Activar una prueba Pro",
+      text: extend
+        ? <>Vas a <b>ampliar {days} días</b> la prueba Pro de <b>{r.name}</b>: pasará a vencer el <b>{untilTxt}</b>. ¿Estás seguro?</>
+        : <>Vas a activar una <b>prueba Pro de {days} días</b> para <b>{r.name}</b> (hasta el <b>{untilTxt}</b>). Mientras dure, tendrá abiertos todos los módulos Pro. ¿Estás seguro?</>,
+      confirmLabel: extend ? `Ampliar ${days} días` : `Activar prueba de ${days} días`,
+      tone: "amber",
+      onConfirm: () => patch.mutateAsync({ id: r.id, body: { trialUntil: until.toISOString(), reason: extend ? `Prueba Pro ampliada ${days} días` : `Prueba Pro de ${days} días` }, msg: `${extend ? "Prueba ampliada" : "Prueba Pro activada"} hasta el ${untilTxt}` }).then(() => undefined),
+    });
   }
   function removeTrial(r: Row) {
-    patch.mutate({ id: r.id, body: { trialUntil: null, reason: "Prueba retirada" }, msg: `Prueba retirada: ${r.name} vuelve a ${PLAN_LABEL[r.plan]}` });
+    setConfirm({
+      title: "Retirar la prueba Pro",
+      text: <>Vas a <b>retirar la prueba Pro</b> de <b>{r.name}</b>: desde ahora volverá al plan <b>{PLAN_LABEL[r.plan]}</b> y los módulos Pro quedarán bloqueados (sus datos se conservan). ¿Estás seguro?</>,
+      confirmLabel: "Retirar prueba",
+      tone: "red",
+      onConfirm: () => patch.mutateAsync({ id: r.id, body: { trialUntil: null, reason: "Prueba retirada" }, msg: `Prueba retirada: ${r.name} vuelve a ${PLAN_LABEL[r.plan]}` }).then(() => undefined),
+    });
   }
   function enterAs(id: string) { setActAsTenant(id); window.location.href = "/dashboard"; }
 
@@ -152,7 +214,7 @@ export default function EmpresasPage() {
 
       {/* KPIs = filtros */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-2.5">
-        {kpi("all", "Empresas", m?.total, m ? `${m.byPlan.ESSENTIAL} Esencial · ${m.byPlan.PRO} Pro` : "", null, "bg-gray-900 border-gray-900 text-white [&_span]:text-white")}
+        {kpi("all", "Empresas", m?.total, m ? `${m.byPlan.ESSENTIAL} Esencial · ${m.byPlan.PRO} Pro` : "", null, "bg-blue-600 border-blue-600 text-white [&_span]:text-white")}
         {kpi("requests", "Peticiones", m?.openRequests, "quieren pasar a Pro", <Inbox className="w-3.5 h-3.5 text-blue-600" />, "bg-blue-100 border-blue-300")}
         {kpi("trial", "En prueba", m?.trials, m && m.trialsEndingSoon > 0 ? `${m.trialsEndingSoon} vencen en ≤7 días` : "ninguna vence pronto", <Clock className="w-3.5 h-3.5 text-amber-600" />, "bg-amber-100 border-amber-300")}
         {kpi("candidates", "Candidatas a Pro", m?.candidates, m ? `≥${m.thresholds.noShows30d} no-shows o ≥${m.thresholds.appointments30d} citas/mes` : "", <Flame className="w-3.5 h-3.5 text-emerald-600" />, "bg-emerald-100 border-emerald-300")}
@@ -164,19 +226,37 @@ export default function EmpresasPage() {
         </div>
       </div>
 
+      {/* Notificación flotante de acciones */}
+      {toast && (
+        <div role="status" className={`fixed top-4 right-4 z-[60] max-w-sm shadow-lg rounded-xl border px-4 py-3 text-sm flex items-start gap-2.5 ${toast.kind === "ok" ? "bg-emerald-50 border-emerald-200 text-emerald-900" : "bg-red-50 border-red-200 text-red-900"}`}>
+          {toast.kind === "ok" ? <Check className="w-4 h-4 mt-0.5 text-emerald-600 shrink-0" /> : <X className="w-4 h-4 mt-0.5 text-red-600 shrink-0" />}
+          <span className="flex-1">{toast.msg}</span>
+          <button type="button" onClick={() => setToast(null)} aria-label="Cerrar" className="text-current opacity-50 hover:opacity-100"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
       {/* Peticiones abiertas (cuando el filtro es Peticiones o hay alguna y no se filtra otra cosa) */}
       {requests && requests.length > 0 && (filter === "requests" || filter === "all") && (
         <section className={`${CARD} border-blue-200`}>
-          <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3"><Inbox className="w-4 h-4 text-blue-600" /> Peticiones abiertas</h2>
+          <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-1"><Inbox className="w-4 h-4 text-blue-600" /> Peticiones abiertas</h2>
+          <p className="text-xs text-gray-500 mb-3">Nada se activa sin tu autorización: aprueba la prueba (14 días), pasa a Pro o rechaza con un motivo que verá la clínica.</p>
           <div className="divide-y divide-gray-100">
             {requests.map((r) => (
               <div key={r.id} className="py-2.5 flex items-center gap-3 flex-wrap">
+                <span className={`inline-flex text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${r.kind === "TRIAL" ? "bg-amber-100 text-amber-800 border-amber-300" : r.kind === "CENTER" ? "bg-violet-100 text-violet-800 border-violet-300" : "bg-blue-100 text-blue-800 border-blue-300"}`}>{r.kind === "TRIAL" ? "Prueba 14 días" : r.kind === "CENTER" ? "Centro adicional" : "Pasar a Pro"}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900">{r.tenant.name} <span className="text-xs text-gray-400">· {PLAN_LABEL[r.tenant.plan]} → Pro</span></p>
+                  <p className="text-sm font-medium text-gray-900">{r.tenant.name} <span className="text-xs text-gray-400">· {PLAN_LABEL[r.tenant.plan]}{r.kind === "UPGRADE" ? " → Pro" : ""}</span></p>
                   <p className="text-xs text-gray-500">{fmt(r.createdAt)}{r.byUser ? ` · ${r.byUser.firstName} ${r.byUser.lastName} (${r.byUser.email})` : ""}{r.note ? ` · ${r.note}` : ""}</p>
                 </div>
-                <button type="button" onClick={() => { const row = data?.data.find((x) => x.id === r.tenantId); if (row) setDialog({ row, to: "PRO" }); }} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><Sparkles className="w-3.5 h-3.5" /> Pasar a Pro</button>
-                <button type="button" onClick={() => closeRequest.mutate(r.id)} className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"><Check className="w-3.5 h-3.5" /> Cerrar</button>
+                {r.kind === "TRIAL" ? (
+                  <button type="button" onClick={() => approve(r)} disabled={decide.isPending} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"><Check className="w-3.5 h-3.5" /> Aprobar prueba (14 d)</button>
+                ) : r.kind === "CENTER" ? (
+                  <button type="button" onClick={() => approve(r)} disabled={decide.isPending} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60"><Check className="w-3.5 h-3.5" /> Ampliar límite (+1 centro)</button>
+                ) : (
+                  <button type="button" onClick={() => { const row = data?.data.find((x) => x.id === r.tenantId); if (row) setDialog({ row, to: "PRO" }); }} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><Sparkles className="w-3.5 h-3.5" /> Pasar a Pro</button>
+                )}
+                <button type="button" onClick={() => reject(r)} disabled={decide.isPending} className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-60"><X className="w-3.5 h-3.5" /> Rechazar</button>
+                {r.kind === "UPGRADE" && <button type="button" onClick={() => closeReq(r)} disabled={decide.isPending} className="text-xs font-medium px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cerrar</button>}
               </div>
             ))}
           </div>
@@ -201,7 +281,9 @@ export default function EmpresasPage() {
                 {isLoading ? <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Cargando…</td></tr>
                 : rows.length === 0 ? (
                   <tr><td colSpan={8} className="px-3 py-10 text-center text-gray-400">
-                    {(data?.data.length ?? 0) === 0 ? <>Aún no hay empresas. <button type="button" onClick={() => setCreating(true)} className="text-blue-600 font-semibold hover:underline">Crea la primera</button>.</> : "Ninguna empresa con este filtro."}
+                    {(data?.data.length ?? 0) === 0 ? <>Aún no hay empresas. <button type="button" onClick={() => setCreating(true)} className="text-blue-600 font-semibold hover:underline">Crea la primera</button>.</>
+                      : filter === "requests" ? "No hay peticiones abiertas ahora mismo. Cuando una clínica pulse «Quiero pasar a Pro», aparecerá aquí y en el badge del menú."
+                      : "Ninguna empresa con este filtro."}
                   </td></tr>
                 ) : rows.map((r) => {
                   const a = attention(r);
@@ -285,14 +367,14 @@ export default function EmpresasPage() {
                 : <button type="button" onClick={() => setDialog({ row: sel, to: "PRO" })} className="w-full text-sm font-semibold px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 inline-flex items-center justify-center gap-1.5"><Sparkles className="w-4 h-4" /> Pasar a Pro…</button>}
               <button type="button" onClick={() => enterAs(sel.id)} className="w-full inline-flex items-center justify-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><LogIn className="w-4 h-4" /> Entrar como esta empresa</button>
               <Link href={`/superadmin/empresas/${sel.id}`} className="block text-center text-[12.5px] font-semibold text-blue-600 hover:underline py-1">Ver ficha completa →</Link>
-              {flash && <div className="text-xs px-2.5 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-start gap-1.5"><Check className="w-3.5 h-3.5 mt-0.5 shrink-0" /><span>{flash}</span></div>}
             </div>
           </aside>
         )}
       </div>
 
       {creating && <NewTenantModal onClose={() => setCreating(false)} onCreated={() => { setCreating(false); void qc.invalidateQueries({ queryKey: ["superadmin-tenants"] }); }} />}
-      {dialog && m && <PlanChangeDialog tenant={{ id: dialog.row.id, name: dialog.row.name, plan: dialog.row.plan, centersCount: dialog.row.centersCount, openRequests: dialog.row.openRequests, adminName: dialog.row.admin?.name ?? null }} to={dialog.to} catalog={m.catalog} onClose={() => setDialog(null)} onDone={() => { setSelId(dialog.row.id); setFlash(`${dialog.row.name} ahora es ${PLAN_LABEL[dialog.to]}${dialog.to === "PRO" && dialog.row.openRequests > 0 ? " · petición cerrada" : ""}`); setTimeout(() => setFlash(null), 3500); highlight("plan"); }} />}
+      {confirm && <ConfirmDialog spec={confirm} onClose={() => setConfirm(null)} />}
+      {dialog && m && <PlanChangeDialog tenant={{ id: dialog.row.id, name: dialog.row.name, plan: dialog.row.plan, centersCount: dialog.row.centersCount, openRequests: dialog.row.openRequests, adminName: dialog.row.admin?.name ?? null }} to={dialog.to} catalog={m.catalog} onClose={() => setDialog(null)} onDone={() => { setSelId(dialog.row.id); setFlash(`${dialog.row.name} ahora es ${PLAN_LABEL[dialog.to]}${dialog.to === "PRO" && dialog.row.openRequests > 0 ? " · petición cerrada" : ""}`); highlight("plan"); }} />}
     </div>
   );
 }

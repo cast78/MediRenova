@@ -157,15 +157,27 @@ enum PlanTier {
 
 enum PlanRequestStatus {
   OPEN
+  APPROVED
+  REJECTED
   CLOSED
 }
 
-// Petición "quiero pasar a Pro" hecha desde la clínica; la atiende el proveedor
-// desde su panel. No es tenant-scoped (el proveedor la lista entre empresas);
-// las rutas de clínica filtran por tenantId explícitamente.
+// Tipo de petición: contratar Pro (UPGRADE), pedir la prueba de 14 días (TRIAL)
+// o pedir un centro adicional sobre el límite contratado (CENTER).
+enum PlanRequestKind {
+  UPGRADE
+  TRIAL
+  CENTER
+}
+
+// Petición hecha desde la clínica ("Quiero pasar a Pro" o "Pedir prueba Pro");
+// la atiende el proveedor desde su panel: nada se activa sin su autorización.
+// No es tenant-scoped (el proveedor la lista entre empresas); las rutas de
+// clínica filtran por tenantId explícitamente.
 model PlanRequest {
   id            String            @id @default(uuid())
   tenantId      String            @map("tenant_id")
+  kind          PlanRequestKind   @default(UPGRADE)
   requestedPlan PlanTier          @map("requested_plan")
   byUserId      String?           @map("by_user_id")
   note          String?

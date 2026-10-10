@@ -59,14 +59,17 @@ export function PlanChangeDialog({ tenant, to, catalog, onClose, onDone }: {
         </div>
 
         <label className="block">
-          <span className="text-xs font-medium text-gray-600">Motivo (queda en la auditoría)</span>
+          <span className="text-xs font-medium text-gray-600">Motivo <span className="text-red-600">*</span> <span className="text-gray-400 font-normal">(queda en la auditoría)</span></span>
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={toPro ? "p. ej. contrato Pro firmado el 10/10" : "p. ej. fin de contrato Pro"} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <span className={`block mt-1 text-[11px] ${reason.trim().length > 0 && reason.trim().length < 3 ? "text-amber-700" : "text-gray-400"}`}>
+            {reason.trim().length > 0 && reason.trim().length < 3 ? "Escribe un motivo un poco más explicativo (mínimo 3 caracteres)." : "Obligatorio: así sabrás dentro de meses por qué se hizo este cambio."}
+          </span>
         </label>
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={onClose} className="text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
-          <button type="button" onClick={() => { setError(null); save.mutate(); }} disabled={save.isPending || reason.trim().length < 3}
+          <button type="button" onClick={() => { setError(null); save.mutate(); }} disabled={save.isPending || reason.trim().length < 3} title={reason.trim().length < 3 ? "Escribe el motivo para poder confirmar" : undefined}
             className={`inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg text-white disabled:opacity-50 ${toPro ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"}`}>
             {save.isPending && <Loader2 className="w-4 h-4 animate-spin" />} {toPro ? "Confirmar: pasar a Pro" : "Confirmar: cambiar a Esencial"}
           </button>

@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch, getActAsTenant, setActAsTenant, getPreviewPlan, setPreviewPlan } from "@/lib/api";
 import { ContextBarProvider, ContextBar } from "@/components/context-bar";
 import { useFeatures, PLAN_LABEL, trialTone, trialDaysLeft, type FeatureKey } from "@/lib/use-features";
+import { PlanChip } from "@/components/plan-chip";
 import {
   LayoutDashboard,
   CalendarCheck,
@@ -161,7 +162,7 @@ function SuperadminBar({ tenantName }: { tenantName: string }) {
           {preview ? "Salir de la vista previa" : "Ver como Pro (vista previa)"}
         </label>
       )}
-      <button type="button" onClick={back} className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-current/30 bg-white/60 hover:bg-white ${canPreview ? "" : "ml-auto"}`}>Volver al panel</button>
+      <button type="button" onClick={back} className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 text-white shadow-sm hover:bg-blue-700 ${canPreview ? "" : "ml-auto"}`}><LogOut className="w-3.5 h-3.5 rotate-180" /> Volver al panel</button>
     </div>
   );
 }
@@ -172,12 +173,11 @@ function SuperadminBar({ tenantName }: { tenantName: string }) {
 function PlanBadge() {
   const { info } = useFeatures();
   if (!info) return null;
-  const days = trialDaysLeft(info.trialUntil);
-  const cls = days != null ? trialTone(days).chip : info.effectivePlan === "PRO" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-600 border-gray-200";
-  const text = days != null ? `Prueba Pro · ${days} d` : `Plan ${PLAN_LABEL[info.effectivePlan]}`;
+  // Mismo chip que en "Tu plan" y en el panel de proveedor (Esencial verde · Pro azul · prueba ámbar).
   return (
-    <Link href="/settings?tab=empresa" title="Ver tu plan" className={`mt-2 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border hover:opacity-80 ${cls}`}>
-      {text}
+    <Link href="/settings?tab=empresa" title="Ver tu plan" className="mt-3 inline-flex items-center gap-1.5 hover:opacity-80 transition-opacity">
+      <span className="text-[11px] font-medium text-gray-500">Tu plan</span>
+      <PlanChip plan={info.effectivePlan} trialDaysLeft={trialDaysLeft(info.trialUntil)} />
     </Link>
   );
 }
@@ -266,8 +266,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 : branding?.name && <span className="block text-[11px] text-gray-400 truncate">{branding.name}</span>}
             </div>
           </div>
-          {providerMode && <span className="mt-2.5 inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-900 text-white uppercase tracking-wide">Modo proveedor</span>}
-          {user.role === "ADMIN" && <PlanBadge />}
+          {providerMode && <div className="flex justify-center"><span className="mt-4 inline-block text-[9px] font-semibold uppercase tracking-[0.14em] text-blue-700 border-b border-blue-400 pb-0.5">Modo proveedor</span></div>}
+          {user.role === "ADMIN" && <div className="flex justify-center"><PlanBadge /></div>}
         </div>
 
         <nav className="flex-1 p-3 overflow-y-auto">
@@ -335,6 +335,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             durante el instante previo a la redirección); en modo proveedor solo se
             oculta la barra Empresa › Centro. */}
         <ContextBarProvider>
+          {providerMode && (
+            // Barra del modo proveedor: simétrica a la del modo empresa, con cierre de
+            // sesión a mano (el del menú lateral queda abajo, fuera de vista en pantallas bajas).
+            <div className="border-b border-gray-200 bg-white px-6 py-2 flex items-center gap-3 text-sm min-h-[44px]">
+              <span className="inline-flex items-center gap-1.5 font-medium text-blue-600"><Building2 size={15} strokeWidth={2} /> Panel de proveedor</span>
+              <span className="ml-auto text-xs text-gray-500 truncate">{user.email}</span>
+              <button type="button" onClick={logout} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"><LogOut className="w-3.5 h-3.5" /> Cerrar sesión</button>
+            </div>
+          )}
           {!providerMode && <ContextBar empresaName={branding?.name ?? "MediRenova"} primaryColor={primary} />}
           <div className="flex-1 overflow-y-auto">{children}</div>
         </ContextBarProvider>

@@ -8,11 +8,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, LogIn, Save, Loader2, Check, Lock, Sparkles, Inbox, Flame } from "lucide-react";
+import { ArrowLeft, LogIn, Save, Loader2, Check, Lock, Sparkles, Inbox, Flame, History } from "lucide-react";
 import { apiFetch, ApiError, setActAsTenant } from "@/lib/api";
 import { PLAN_LABEL, type PlanTier, type FeatureKey } from "@/lib/use-features";
 import { PlanChip } from "@/components/plan-chip";
 import { PlanChangeDialog } from "@/components/plan-change-dialog";
+import { ConfirmDialog, type ConfirmSpec } from "@/components/confirm-dialog";
 
 interface Detail {
   id: string; name: string; slug: string; active: boolean; plan: PlanTier; effectivePlan: PlanTier;
@@ -24,7 +25,7 @@ interface Detail {
   centers: { id: string; name: string; city: string | null; active: boolean }[];
   users: { id: string; email: string; firstName: string; lastName: string; role: string; active: boolean }[];
   history: { id: string; action: string; meta: Record<string, unknown> | null; createdAt: string; user: { email: string; firstName: string; lastName: string } | null }[];
-  requests: { id: string; status: "OPEN" | "CLOSED"; note: string | null; createdAt: string; closedAt: string | null }[];
+  requests: { id: string; kind: "UPGRADE" | "TRIAL" | "CENTER"; status: "OPEN" | "APPROVED" | "REJECTED" | "CLOSED"; note: string | null; createdAt: string; closedAt: string | null }[];
   activity: { monthly: number[]; months: string[]; appointments30d: number; noShows30d: number; lastActivityAt: string | null; candidate: boolean; thresholds: { noShows30d: number; appointments30d: number } };
 }
 type Saved = { plan: PlanTier; trialUntil: string | null; maxCenters: number | null; active: boolean; featureOverrides: { add?: FeatureKey[]; remove?: FeatureKey[] } | null };
@@ -39,6 +40,17 @@ const fmtDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("
 const toDateInput = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
 const toForm = (v: Saved): Form => ({ trialUntil: toDateInput(v.trialUntil), maxCenters: v.maxCenters != null ? String(v.maxCenters) : "", active: v.active, add: v.featureOverrides?.add ?? [], remove: v.featureOverrides?.remove ?? [], reason: "" });
 const ROLE: Record<string, string> = { ADMIN: "Admin", RECEPTIONIST: "Recepción", DOCTOR: "Médico", SUPERADMIN: "Superadmin" };
+
+// Línea legible de un cambio de licencia a partir del meta de la auditoría.
+function historyLine(h: Detail["history"][number]): React.ReactNode {
+  const mm = (h.meta ?? {}) as { before?: { plan?: string; trialUntil?: string | null }; after?: { plan?: string; trialUntil?: string | null }; plan?: string; reason?: string | null };
+  const line = h.action === "CREATE"
+    ? `Alta en ${PLAN_LABEL[(mm.plan as PlanTier) ?? "PRO"]}`
+    : mm.before && mm.after
+      ? `${PLAN_LABEL[(mm.before.plan as PlanTier) ?? "PRO"]} → ${PLAN_LABEL[(mm.after.plan as PlanTier) ?? "PRO"]}${mm.after.trialUntil ? ` · prueba hasta ${toDateInput(mm.after.trialUntil)}` : mm.before.trialUntil && !mm.after.trialUntil ? " · prueba retirada" : ""}`
+      : h.action;
+  return <>{line}{mm.reason ? <span className="text-gray-500"> · {mm.reason}</span> : null}</>;
+}
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -72,10 +84,41 @@ export default function EmpresaPage() {
     onSuccess: (saved) => { setForm(toForm(saved)); setMsg("Cambios guardados"); setError(null); setTimeout(() => setMsg(null), 2500); void qc.invalidateQueries({ queryKey: ["superadmin-tenant", id] }); void qc.invalidateQueries({ queryKey: ["superadmin-tenants"] }); void qc.invalidateQueries({ queryKey: ["tenant-plan"] }); },
     onError: (e: unknown) => setError(errorMessage(e)),
   });
-  const closeReq = useMutation({
-    mutationFn: (rid: string) => apiFetch(`/superadmin/plan-requests/${rid}`, { method: "PATCH", body: JSON.stringify({ status: "CLOSED" }) }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["superadmin-tenant", id] }); void qc.invalidateQueries({ queryKey: ["superadmin-plan-requests"] }); },
+  // Decidir la petición abierta: aprobar la prueba (14 días), rechazar con motivo o cerrar.
+  const decide = useMutation({
+    mutationFn: (v: { rid: string; status: "APPROVED" | "REJECTED" | "CLOSED"; note?: string | undefined }) => apiFetch(`/superadmin/plan-requests/${v.rid}`, { method: "PATCH", body: JSON.stringify({ status: v.status, note: v.note, trialDays: 14 }) }),
+    onSuccess: () => { setForm(null); void qc.invalidateQueries({ queryKey: ["superadmin-tenant", id] }); void qc.invalidateQueries({ queryKey: ["superadmin-plan-requests"] }); void qc.invalidateQueries({ queryKey: ["superadmin-tenants"] }); },
   });
+  // Confirmación previa de cada decisión (texto según la acción).
+  const [confirm, setConfirm] = useState<ConfirmSpec | null>(null);
+  const KIND_LABEL = { TRIAL: "la prueba Pro de 14 días", UPGRADE: "pasar a Pro", CENTER: "un centro adicional" } as const;
+  function rejectReq(req: Detail["requests"][number]) {
+    setConfirm({
+      title: "Rechazar la petición",
+      text: <>Vas a <b>rechazar</b> la petición de <b>{t?.name}</b> ({KIND_LABEL[req.kind]}). La clínica verá el motivo en su pantalla. ¿Estás seguro?</>,
+      confirmLabel: "Rechazar petición", tone: "red", noteLabel: "Motivo del rechazo (lo verá la clínica)", noteRequired: true,
+      onConfirm: (note) => decide.mutateAsync({ rid: req.id, status: "REJECTED", note }).then(() => undefined),
+    });
+  }
+  function approveReq(req: Detail["requests"][number]) {
+    const isTrial = req.kind === "TRIAL";
+    setConfirm({
+      title: isTrial ? "Aprobar la prueba Pro" : "Ampliar el límite de centros",
+      text: isTrial
+        ? <>Vas a aprobar la <b>prueba Pro de 14 días</b> para <b>{t?.name}</b>: se activa ahora mismo y tendrá abiertos todos los módulos Pro hasta que venza. ¿Estás seguro?</>
+        : <>Vas a <b>ampliar en 1</b> el límite de centros contratados de <b>{t?.name}</b>. Podrá crear un centro más desde ya. ¿Estás seguro?</>,
+      confirmLabel: isTrial ? "Aprobar prueba (14 d)" : "Ampliar límite (+1 centro)", tone: "green",
+      onConfirm: () => decide.mutateAsync({ rid: req.id, status: "APPROVED" }).then(() => undefined),
+    });
+  }
+  function closeReqConfirm(req: Detail["requests"][number]) {
+    setConfirm({
+      title: "Cerrar la petición",
+      text: <>Vas a <b>cerrar</b> la petición de <b>{t?.name}</b> ({KIND_LABEL[req.kind]}) sin cambiar su plan. ¿Estás seguro?</>,
+      confirmLabel: "Cerrar petición", tone: "blue",
+      onConfirm: () => decide.mutateAsync({ rid: req.id, status: "CLOSED" }).then(() => undefined),
+    });
+  }
 
   if (isLoading || !t || !form) return <div className="p-6 text-sm text-gray-400">Cargando…</div>;
 
@@ -178,10 +221,32 @@ export default function EmpresaPage() {
               <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-2"><Inbox className="w-4 h-4 text-blue-500" /> {openReq ? "Petición abierta" : "Peticiones"}</h2>
               {openReq ? (
                 <>
-                  <p className="text-sm text-gray-700">{t.admin ? <b>{t.admin.name}</b> : "La clínica"} pidió pasar a Pro el {fmtDay(openReq.createdAt)}{openReq.note ? <>: <i>“{openReq.note}”</i></> : "."}</p>
-                  {t.plan === "ESSENTIAL" && <div className="flex gap-2 mt-3"><button type="button" onClick={() => setDialogTo("PRO")} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><Sparkles className="w-3.5 h-3.5" /> Pasar a Pro</button><button type="button" onClick={() => closeReq.mutate(openReq.id)} className="text-xs font-medium px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cerrar petición</button></div>}
+                  <span className={`inline-flex text-[11px] font-semibold px-2 py-0.5 rounded-full border mb-2 ${openReq.kind === "TRIAL" ? "bg-amber-100 text-amber-800 border-amber-300" : openReq.kind === "CENTER" ? "bg-violet-100 text-violet-800 border-violet-300" : "bg-blue-100 text-blue-800 border-blue-300"}`}>{openReq.kind === "TRIAL" ? "Prueba 14 días" : openReq.kind === "CENTER" ? "Centro adicional" : "Pasar a Pro"}</span>
+                  <p className="text-sm text-gray-700">{t.admin ? <b>{t.admin.name}</b> : "La clínica"} {openReq.kind === "TRIAL" ? "pidió la prueba Pro" : openReq.kind === "CENTER" ? "pidió un centro adicional" : "pidió pasar a Pro"} el {fmtDay(openReq.createdAt)}{openReq.note && openReq.kind !== "TRIAL" ? <>: <i>“{openReq.note}”</i></> : "."}</p>
+                  <div className="flex gap-2 mt-3 flex-wrap">
+                    {openReq.kind === "TRIAL"
+                      ? <button type="button" onClick={() => approveReq(openReq)} disabled={decide.isPending} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"><Check className="w-3.5 h-3.5" /> Aprobar prueba (14 d)</button>
+                      : openReq.kind === "CENTER"
+                      ? <button type="button" onClick={() => approveReq(openReq)} disabled={decide.isPending} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60"><Check className="w-3.5 h-3.5" /> Ampliar límite (+1 centro)</button>
+                      : t.plan === "ESSENTIAL" && <button type="button" onClick={() => setDialogTo("PRO")} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><Sparkles className="w-3.5 h-3.5" /> Pasar a Pro</button>}
+                    <button type="button" onClick={() => rejectReq(openReq)} disabled={decide.isPending} className="text-xs font-medium px-3 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-60">Rechazar</button>
+                    {openReq.kind === "UPGRADE" && <button type="button" onClick={() => closeReqConfirm(openReq)} disabled={decide.isPending} className="text-xs font-medium px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cerrar</button>}
+                  </div>
                 </>
-              ) : <p className="text-sm text-gray-400">Ninguna abierta.{t.requests.length > 0 ? ` ${t.requests.length} cerrada(s).` : ""}</p>}
+              ) : <p className="text-sm text-gray-400">Ninguna abierta.{t.requests.length > 0 ? ` ${t.requests.length} anterior(es): ${t.requests.map((r) => r.status === "APPROVED" ? "aprobada" : r.status === "REJECTED" ? "rechazada" : "cerrada").join(", ")}.` : ""}</p>}
+            </section>
+
+            {/* Últimos cambios de licencia (resumen; el historial completo está en Auditoría) */}
+            <section className={CARD}>
+              <div className="flex items-baseline justify-between mb-2">
+                <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><History className="w-4 h-4 text-gray-400" /> Últimos cambios</h2>
+                {t.history.length > 5 && <button type="button" onClick={() => setTab("auditoria")} className="text-xs font-semibold text-blue-600 hover:underline">Ver todo ({t.history.length}) →</button>}
+              </div>
+              {t.history.length === 0 ? <p className="text-sm text-gray-400">Sin cambios registrados.</p> : (
+                <ul className="text-xs space-y-1.5">{t.history.slice(0, 5).map((h) => (
+                  <li key={h.id} className="flex gap-2"><span className="text-gray-400 whitespace-nowrap tabular-nums">{fmt(h.createdAt).slice(0, 10)}</span><span className="text-gray-800 min-w-0">{historyLine(h)}</span></li>
+                ))}</ul>
+              )}
             </section>
           </div>
         </div>
@@ -237,16 +302,15 @@ export default function EmpresaPage() {
         <section className={CARD}>
           <h2 className="text-sm font-semibold text-gray-900 mb-3">Historial de licencia</h2>
           {t.history.length === 0 ? <p className="text-sm text-gray-400">Sin cambios registrados.</p> : (
-            <ul className="text-sm space-y-2">{t.history.map((h) => {
-              const mm = (h.meta ?? {}) as { before?: { plan?: string; trialUntil?: string | null }; after?: { plan?: string; trialUntil?: string | null }; plan?: string; reason?: string | null };
-              const line = h.action === "CREATE" ? `Alta en ${PLAN_LABEL[(mm.plan as PlanTier) ?? "PRO"]}` : mm.before && mm.after ? `${PLAN_LABEL[(mm.before.plan as PlanTier) ?? "PRO"]} → ${PLAN_LABEL[(mm.after.plan as PlanTier) ?? "PRO"]}${mm.after.trialUntil ? ` · prueba hasta ${toDateInput(mm.after.trialUntil)}` : mm.before.trialUntil && !mm.after.trialUntil ? " · prueba retirada" : ""}` : h.action;
-              return <li key={h.id} className="flex gap-3"><span className="text-gray-400 whitespace-nowrap tabular-nums">{fmt(h.createdAt)}</span><span className="text-gray-800">{line}{mm.reason ? <span className="text-gray-500"> · {mm.reason}</span> : null}{h.user ? <span className="text-gray-400"> · {h.user.email}</span> : null}</span></li>;
-            })}</ul>
+            <ul className="text-sm space-y-2">{t.history.map((h) => (
+              <li key={h.id} className="flex gap-3"><span className="text-gray-400 whitespace-nowrap tabular-nums">{fmt(h.createdAt)}</span><span className="text-gray-800">{historyLine(h)}{h.user ? <span className="text-gray-400"> · {h.user.email}</span> : null}</span></li>
+            ))}</ul>
           )}
         </section>
       )}
 
       {dialogTo && <PlanChangeDialog tenant={{ id: t.id, name: t.name, plan: t.plan, centersCount: t.centers.filter((c) => c.active).length, openRequests: t.requests.filter((r) => r.status === "OPEN").length, adminName: t.admin?.name ?? null }} to={dialogTo} catalog={t.catalog} onClose={() => setDialogTo(null)} onDone={() => setForm(null)} />}
+      {confirm && <ConfirmDialog spec={confirm} onClose={() => setConfirm(null)} />}
     </div>
   );
 }

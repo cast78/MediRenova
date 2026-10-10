@@ -5,11 +5,12 @@ import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
 import { hashPassword } from "../lib/password.js";
 import { storage, sanitizeFileName } from "../lib/storage.js";
+import { loginEmail } from "../lib/utils.js";
 
 const SIGNATURE_MIME = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 const createDoctorSchema = z.object({
-  email: z.string().email(),
+  email: loginEmail,
   firstName: z.string().min(1).max(80),
   lastName: z.string().min(1).max(80),
   dni: z.string().max(20).optional(),

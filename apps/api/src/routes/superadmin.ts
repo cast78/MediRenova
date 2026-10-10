@@ -10,6 +10,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireRole, invalidatePlanCache } from "../lib/authorization.js";
 import { auditLog } from "../lib/audit.js";
 import { effectivePlan, features, validateOverrides, FEATURES, FEATURE_KEYS, type PlanInput } from "../lib/plan.js";
+import { loginEmail } from "../lib/utils.js";
 
 const DAY_MS = 86_400_000;
 
@@ -124,7 +125,7 @@ export async function superadminRoutes(server: FastifyInstance) {
       plan: z.enum(["ESSENTIAL", "PRO"]).default("ESSENTIAL"),
       trialUntil: z.string().datetime().nullable().optional(),
       maxCenters: z.number().int().min(1).nullable().optional(),
-      admin: z.object({ email: z.string().email(), firstName: z.string().min(1).max(60), lastName: z.string().min(1).max(80), password: z.string().min(8).max(100) }),
+      admin: z.object({ email: loginEmail, firstName: z.string().min(1).max(60), lastName: z.string().min(1).max(80), password: z.string().min(8).max(100) }),
     }).safeParse(request.body);
     if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
     const d = body.data;
@@ -154,7 +155,7 @@ export async function superadminRoutes(server: FastifyInstance) {
     const [centers, history, requests, usersList, monthly, appts30, noShows30, lastAppt] = await Promise.all([
       prisma.center.findMany({ where: { tenantId: t.id }, select: { id: true, name: true, city: true, active: true }, orderBy: { name: "asc" } }),
       prisma.auditLog.findMany({ where: { tenantId: t.id, resourceType: "tenant_plan" }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, action: true, meta: true, createdAt: true, user: { select: { email: true, firstName: true, lastName: true } } } }),
-      prisma.planRequest.findMany({ where: { tenantId: t.id }, orderBy: { createdAt: "desc" }, take: 20 }),
+      prisma.planRequest.findMany({ where: { tenantId: t.id }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, kind: true, status: true, note: true, createdAt: true, closedAt: true } }),
       prisma.user.findMany({ where: { tenantId: t.id }, select: { id: true, email: true, firstName: true, lastName: true, role: true, active: true }, orderBy: [{ role: "asc" }, { createdAt: "asc" }] }),
       monthlyAppointments([t.id], now),
       prisma.appointment.count({ where: { tenantId: t.id, createdAt: { gte: since } } }),
@@ -222,13 +223,14 @@ export async function superadminRoutes(server: FastifyInstance) {
     return reply.send({ data: { ...after, effectivePlan: effectivePlan(input), features: features(input) }, errors: null });
   });
 
-  // GET /superadmin/plan-requests?status=OPEN|CLOSED — bandeja de peticiones "Quiero pasar a Pro".
+  // GET /superadmin/plan-requests?status=OPEN|APPROVED|REJECTED|CLOSED — bandeja de
+  // peticiones de las clínicas (contratar Pro o pedir la prueba de 14 días).
   server.get("/superadmin/plan-requests", guard, async (request: FastifyRequest, reply: FastifyReply) => {
-    const q = z.object({ status: z.enum(["OPEN", "CLOSED"]).optional() }).safeParse(request.query);
+    const q = z.object({ status: z.enum(["OPEN", "APPROVED", "REJECTED", "CLOSED"]).optional() }).safeParse(request.query);
     const status = q.success ? q.data.status : undefined;
     const rows = await prisma.planRequest.findMany({
       where: status ? { status } : {}, orderBy: { createdAt: "desc" }, take: 100,
-      select: { id: true, tenantId: true, requestedPlan: true, byUserId: true, note: true, status: true, createdAt: true, closedAt: true, tenant: { select: { name: true, slug: true, plan: true } } },
+      select: { id: true, tenantId: true, kind: true, requestedPlan: true, byUserId: true, note: true, status: true, createdAt: true, closedAt: true, tenant: { select: { name: true, slug: true, plan: true, trialUntil: true } } },
     });
     const userIds = [...new Set(rows.map((r) => r.byUserId).filter((x): x is string => !!x))];
     const users = userIds.length
@@ -238,17 +240,58 @@ export async function superadminRoutes(server: FastifyInstance) {
     return reply.send({ data: rows.map((r) => ({ ...r, byUser: r.byUserId ? uMap.get(r.byUserId) ?? null : null })), errors: null });
   });
 
-  // PATCH /superadmin/plan-requests/:id — cerrar (con nota opcional) o reabrir.
+  // PATCH /superadmin/plan-requests/:id — decidir una petición: APPROVED (en una
+  // petición de prueba activa la prueba Pro: `trialDays`, 14 por defecto),
+  // REJECTED (con nota), CLOSED (atendida de otra forma) u OPEN (reabrir).
   server.patch<{ Params: { id: string } }>("/superadmin/plan-requests/:id", guard, async (request, reply: FastifyReply) => {
-    const body = z.object({ status: z.enum(["OPEN", "CLOSED"]), note: z.string().max(500).optional() }).safeParse(request.body);
+    const body = z.object({
+      status: z.enum(["OPEN", "APPROVED", "REJECTED", "CLOSED"]),
+      note: z.string().max(500).optional(),
+      trialDays: z.number().int().min(1).max(180).optional(),
+      // Petición de centro adicional aprobada: cuántos centros se añaden al límite (1 por defecto).
+      extraCenters: z.number().int().min(1).max(50).optional(),
+    }).safeParse(request.body);
     if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
     const existing = await prisma.planRequest.findUnique({ where: { id: request.params.id } });
     if (!existing) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
-    const note = body.data.note ? [existing.note, `Cierre: ${body.data.note}`].filter(Boolean).join(" · ") : existing.note;
+    const d = body.data;
+    const now = new Date();
+    const prefix = d.status === "APPROVED" ? "Aprobada" : d.status === "REJECTED" ? "Rechazada" : d.status === "CLOSED" ? "Cierre" : "Reabierta";
+    const note = d.note ? [existing.note, `${prefix}: ${d.note}`].filter(Boolean).join(" · ") : existing.note;
+
+    let trialUntil: Date | null = null;
+    let maxCenters: number | null = null;
+    if (d.status === "APPROVED" && existing.kind === "CENTER") {
+      const tenant = await prisma.tenant.findUnique({ where: { id: existing.tenantId }, select: { plan: true, trialUntil: true, maxCenters: true } });
+      if (!tenant) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      const active = await prisma.center.count({ where: { tenantId: existing.tenantId, active: true } });
+      // Sin límite definido se parte de los activos; así "uno más" significa lo que el admin espera.
+      maxCenters = (tenant.maxCenters ?? active) + (d.extraCenters ?? 1);
+      await prisma.tenant.update({ where: { id: existing.tenantId }, data: { maxCenters } });
+      invalidatePlanCache(existing.tenantId);
+      await auditLog(
+        { tenantId: existing.tenantId, userId: request.ctx.userId, ip: request.ip },
+        "UPDATE", "tenant_plan", existing.tenantId,
+        { before: { plan: tenant.plan, trialUntil: tenant.trialUntil, maxCenters: tenant.maxCenters }, after: { plan: tenant.plan, trialUntil: tenant.trialUntil, maxCenters }, reason: d.note ?? `Límite de centros ampliado a ${maxCenters} a petición de la clínica`, requestId: existing.id },
+      );
+    }
+    if (d.status === "APPROVED" && existing.kind === "TRIAL") {
+      const tenant = await prisma.tenant.findUnique({ where: { id: existing.tenantId }, select: { plan: true, trialUntil: true } });
+      if (!tenant) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      const days = d.trialDays ?? 14;
+      trialUntil = new Date(now.getTime() + days * 86_400_000);
+      await prisma.tenant.update({ where: { id: existing.tenantId }, data: { trialUntil } });
+      invalidatePlanCache(existing.tenantId);
+      await auditLog(
+        { tenantId: existing.tenantId, userId: request.ctx.userId, ip: request.ip },
+        "UPDATE", "tenant_plan", existing.tenantId,
+        { before: { plan: tenant.plan, trialUntil: tenant.trialUntil }, after: { plan: tenant.plan, trialUntil }, reason: d.note ?? `Prueba Pro de ${days} días aprobada a petición de la clínica`, requestId: existing.id },
+      );
+    }
     const updated = await prisma.planRequest.update({
       where: { id: existing.id },
-      data: { status: body.data.status, closedAt: body.data.status === "CLOSED" ? new Date() : null, note },
+      data: { status: d.status, closedAt: d.status === "OPEN" ? null : now, note },
     });
-    return reply.send({ data: updated, errors: null });
+    return reply.send({ data: { ...updated, trialUntil, maxCenters }, errors: null });
   });
 }

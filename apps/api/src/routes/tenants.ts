@@ -132,10 +132,21 @@ export async function tenantRoutes(server: FastifyInstance) {
       const centersCount = await prisma.center.count({ where: { tenantId: request.ctx.tenantId, active: true } });
       // "Ver como Pro" (solo superadmin): todo abierto, marcado como vista previa.
       const preview = isProPreview(request);
+      // Petición pendiente (prueba o contratación) y si aún puede pedir la prueba
+      // (P4c, opción B): Esencial, sin prueba en curso, sin petición abierta y sin
+      // prueba aprobada antes. Nada se activa sin el proveedor.
+      const trialActive = !!tenant.trialUntil && tenant.trialUntil > new Date();
+      const [pending, approvedTrial] = await Promise.all([
+        prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, status: "OPEN" }, select: { id: true, kind: true, createdAt: true }, orderBy: { createdAt: "desc" } }),
+        prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, kind: "TRIAL", status: "APPROVED" }, select: { id: true } }),
+      ]);
+      const lastDecision = await prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, status: "REJECTED" }, select: { kind: true, closedAt: true, note: true }, orderBy: { closedAt: "desc" } });
+      const selfTrialAvailable = tenant.plan === "ESSENTIAL" && !trialActive && !pending && !approvedTrial;
       return reply.send({
         data: {
           plan: tenant.plan, effectivePlan: preview ? "PRO" : effectivePlan(tenant), trialUntil: tenant.trialUntil,
-          features: preview ? FEATURE_KEYS : features(tenant), centersCount, maxCenters: tenant.maxCenters, preview,
+          features: preview ? FEATURE_KEYS : features(tenant), centersCount, maxCenters: tenant.maxCenters, preview, selfTrialAvailable,
+          pendingRequest: pending, lastRejected: lastDecision,
           // Catálogo para que el front pinte "incluye / no incluye" sin duplicarlo.
           catalog: FEATURE_KEYS.map((k) => ({ key: k, label: FEATURES[k].label, min: FEATURES[k].min })),
         },
@@ -155,7 +166,7 @@ export async function tenantRoutes(server: FastifyInstance) {
       const open = await prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, status: "OPEN" }, select: { id: true } });
       if (open) return reply.send({ data: { id: open.id, alreadyOpen: true }, errors: null });
       const created = await prisma.planRequest.create({
-        data: { tenantId: request.ctx.tenantId, requestedPlan: "PRO", byUserId: request.ctx.userId ?? null, note },
+        data: { tenantId: request.ctx.tenantId, kind: "UPGRADE", requestedPlan: "PRO", byUserId: request.ctx.userId ?? null, note },
       });
       // Aviso al proveedor: los superadmin viven en la empresa "system" (se leen por
       // la relación del tenant para no chocar con el aislamiento por empresa).
@@ -173,6 +184,88 @@ export async function tenantRoutes(server: FastifyInstance) {
         } catch (err) { request.log.error(err, "[planes] aviso de petición falló"); }
       }
       return reply.status(201).send({ data: { id: created.id, alreadyOpen: false }, errors: null });
+    },
+  );
+
+  // POST /tenants/me/center-request — pedir un centro adicional sobre el límite
+  // contratado (crm-planes P4c): petición de tipo CENTER que el proveedor aprueba
+  // (sube el límite) o rechaza. Nada cambia hasta entonces.
+  server.post(
+    "/tenants/me/center-request",
+    { preHandler: [requireRole("ADMIN")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const tid = request.ctx.tenantId;
+      const body = z.object({ note: z.string().max(300).optional() }).safeParse(request.body ?? {});
+      const tenant = await prisma.tenant.findUnique({ where: { id: tid }, select: { name: true, slug: true, maxCenters: true } });
+      if (!tenant) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      const pending = await prisma.planRequest.findFirst({ where: { tenantId: tid, status: "OPEN" }, select: { id: true, kind: true } });
+      if (pending) return reply.send({ data: { id: pending.id, kind: pending.kind, alreadyOpen: true }, errors: null });
+      const centers = await prisma.center.count({ where: { tenantId: tid, active: true } });
+      const created = await prisma.planRequest.create({
+        data: { tenantId: tid, kind: "CENTER", requestedPlan: "PRO", byUserId: request.ctx.userId ?? null, note: `Centro adicional (${centers} de ${tenant.maxCenters ?? "∞"} contratados)${body.success && body.data.note ? ` · ${body.data.note}` : ""}` },
+      });
+      const system = await prisma.tenant.findUnique({ where: { slug: "system" }, select: { users: { where: { role: "SUPERADMIN", active: true }, select: { email: true } } } });
+      for (const u of system?.users ?? []) {
+        try {
+          await email.sendEmail({ to: u.email, subject: `Petición de centro adicional · ${tenant.name}`, body: `La empresa ${tenant.name} (${tenant.slug}) pide un centro adicional (tiene ${centers} de ${tenant.maxCenters ?? "sin límite"} contratados).\n\nApruébala o recházala desde el panel de proveedor (Peticiones).` });
+        } catch (err) { request.log.error(err, "[planes] aviso de petición de centro falló"); }
+      }
+      return reply.status(201).send({ data: { id: created.id, kind: "CENTER", alreadyOpen: false }, errors: null });
+    },
+  );
+
+  // GET /tenants/me/plan-teasers — cifras propias y seguras para las páginas
+  // bloqueadas (crm-planes P4c.2): una cifra por módulo, nunca su contenido.
+  server.get(
+    "/tenants/me/plan-teasers",
+    { preHandler: [requireRole("ADMIN")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const tid = request.ctx.tenantId;
+      const now = new Date();
+      const since30 = new Date(now.getTime() - 30 * 86_400_000);
+      const in60 = new Date(now.getTime() + 60 * 86_400_000);
+      const [noShows30d, appointments30d, created30d, expiring60d, consented, newCustomers30d] = await Promise.all([
+        prisma.appointment.count({ where: { tenantId: tid, status: "NO_SHOW", scheduledAt: { gte: since30 } } }),
+        prisma.appointment.count({ where: { tenantId: tid, scheduledAt: { gte: since30, lte: now } } }),
+        prisma.appointment.count({ where: { tenantId: tid, createdAt: { gte: since30 } } }),
+        prisma.revision.count({ where: { tenantId: tid, outcome: "APTO", expiryDate: { gte: now, lte: in60 } } }),
+        prisma.customer.count({ where: { tenantId: tid, deletedAt: null, OR: [{ acceptsEmail: true }, { acceptsWhatsapp: true }, { acceptsSms: true }] } }),
+        prisma.customer.count({ where: { tenantId: tid, deletedAt: null, createdAt: { gte: since30 } } }),
+      ]);
+      return reply.send({ data: { noShows30d, appointments30d, created30d, expiring60d, consented, newCustomers30d }, errors: null });
+    },
+  );
+
+  // POST /tenants/me/trial — pedir la prueba Pro de 14 días (crm-planes P4c.1,
+  // opción B): crea una petición de tipo TRIAL que el proveedor aprueba o rechaza
+  // desde su panel. NADA se activa aquí. Una prueba aprobada por empresa.
+  server.post(
+    "/tenants/me/trial",
+    { preHandler: [requireRole("ADMIN")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const tid = request.ctx.tenantId;
+      const now = new Date();
+      const tenant = await prisma.tenant.findUnique({ where: { id: tid }, select: { name: true, slug: true, plan: true, trialUntil: true } });
+      if (!tenant) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
+      if (tenant.plan === "PRO") return reply.status(409).send({ errors: [{ code: "ALREADY_PRO", message: "Tu empresa ya tiene el plan Pro." }] });
+      if (tenant.trialUntil && tenant.trialUntil > now) return reply.status(409).send({ errors: [{ code: "TRIAL_ACTIVE", message: "Ya tienes una prueba Pro en curso." }] });
+      const [approvedBefore, pending] = await Promise.all([
+        prisma.planRequest.findFirst({ where: { tenantId: tid, kind: "TRIAL", status: "APPROVED" }, select: { id: true } }),
+        prisma.planRequest.findFirst({ where: { tenantId: tid, status: "OPEN" }, select: { id: true, kind: true } }),
+      ]);
+      if (approvedBefore) return reply.status(409).send({ errors: [{ code: "TRIAL_USED", message: "La prueba gratuita ya se usó. Pide pasar a Pro y te contactaremos." }] });
+      if (pending) return reply.send({ data: { id: pending.id, kind: pending.kind, alreadyOpen: true }, errors: null });
+
+      const created = await prisma.planRequest.create({
+        data: { tenantId: tid, kind: "TRIAL", requestedPlan: "PRO", byUserId: request.ctx.userId ?? null, note: "Prueba Pro de 14 días" },
+      });
+      const system = await prisma.tenant.findUnique({ where: { slug: "system" }, select: { users: { where: { role: "SUPERADMIN", active: true }, select: { email: true } } } });
+      for (const u of system?.users ?? []) {
+        try {
+          await email.sendEmail({ to: u.email, subject: `Petición de prueba Pro · ${tenant.name}`, body: `La empresa ${tenant.name} (${tenant.slug}) pide la prueba Pro de 14 días.\n\nApruébala o recházala desde el panel de proveedor (Peticiones).` });
+        } catch (err) { request.log.error(err, "[planes] aviso de petición de prueba falló"); }
+      }
+      return reply.status(201).send({ data: { id: created.id, kind: "TRIAL", alreadyOpen: false }, errors: null });
     },
   );
 
