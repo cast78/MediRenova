@@ -4,7 +4,9 @@ import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
-import { Building2, MapPin, Phone, Mail, DoorOpen, Clock, CalendarDays, MoreVertical, Plus, Search, Package, Tag } from "lucide-react";
+import { useFeatures } from "@/lib/use-features";
+import { CenterRequestButton } from "@/components/center-request-button";
+import { Building2, MapPin, Phone, Mail, DoorOpen, Clock, CalendarDays, MoreVertical, Plus, Search, Package, Tag, Lock } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -648,6 +650,11 @@ function CenterDetail({ center }: { center: Center }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CentersPage() {
+  // Límite de centros contratados (crm-planes): si está al tope, no se abre el
+  // formulario; se explica y se remite a "Tu plan". La API lo vuelve a comprobar.
+  const { info: planInfo } = useFeatures();
+  const planQc = useQueryClient();
+  const atCenterLimit = planInfo?.maxCenters != null && planInfo.centersCount >= planInfo.maxCenters;
   const [showModal, setShowModal] = useState(false);
   const [filter, setFilter] = useState<"all" | "active" | "inactive">("all");
   const [search, setSearch] = useState("");
@@ -668,13 +675,25 @@ export default function CentersPage() {
 
   return (
     <div className="p-6 max-w-5xl">
-      {showModal && <CenterModal onClose={() => setShowModal(false)} />}
+      {showModal && <CenterModal onClose={() => { setShowModal(false); void planQc.invalidateQueries({ queryKey: ["tenant-plan"] }); }} />}
 
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <PageHeader page="centros" />
-        <button onClick={() => setShowModal(true)} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">
-          + Nuevo centro
-        </button>
+        {atCenterLimit ? (
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            <span className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 inline-flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5" /> Límite de centros alcanzado: {planInfo?.centersCount} de {planInfo?.maxCenters} contratados.
+            </span>
+            <CenterRequestButton compact />
+            <button disabled title="Tu plan no admite más centros. Desactiva uno o contrata otro." className="px-4 py-2 text-sm rounded-lg bg-gray-200 text-gray-500 font-medium cursor-not-allowed inline-flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5" /> Nuevo centro
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setShowModal(true)} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">
+            + Nuevo centro
+          </button>
+        )}
       </div>
 
       {/* KPI bar */}

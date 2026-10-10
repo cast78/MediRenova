@@ -106,7 +106,7 @@ Puro y testeado (matriz plan × prueba × overrides × dependencias).
 - **Lista como centro de mando**: KPIs que filtran, columna "Atención" y orden por atención necesaria; panel lateral con resumen, gráfica de 6 meses y acciones rápidas; la ficha completa queda a un clic.
 - **Cambio de plan con confirmación**: diálogo que resume qué gana/pierde la clínica, la facturación resultante y cierra la petición abierta; motivo obligatorio para la auditoría.
 - **Ficha por pestañas** con la licencia reducida a lo esencial y las excepciones plegadas.
-- **Antojo del Pro para la clínica (P4c)**: NO se abre la vista previa a la clínica (un modo solo-lectura filtraría datos de módulos Pro, daría una experiencia a medias y computaría analítica gratis). En su lugar: (1) **prueba Pro en autoservicio** de 14 días, una vez por empresa, auditada y notificada al proveedor; (2) **cebos con datos propios** en las páginas bloqueadas: una cifra segura por módulo ("este mes 14 no-shows"), nunca el contenido del módulo.
+- **Antojo del Pro para la clínica (P4c)**: NO se abre la vista previa a la clínica (un modo solo-lectura filtraría datos de módulos Pro, daría una experiencia a medias y computaría analítica gratis). En su lugar: (1) **petición de prueba Pro** de 14 días que el proveedor **aprueba o rechaza** desde Peticiones (nada se activa sin su autorización; cada petición es un motivo de contacto comercial; una prueba aprobada por empresa); (2) **cebos con datos propios** en las páginas bloqueadas: una cifra segura por módulo ("este mes 14 no-shows"), nunca el contenido del módulo.
 
 ## Demo
 

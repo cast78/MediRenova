@@ -3,10 +3,22 @@
 // Página/tarjeta de módulo bloqueado por plan (crm-planes P3). No se esconde el
 // módulo: se explica qué aporta y se puede pedir el cambio a Pro con un clic.
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { Lock, Sparkles, Check, Send, Loader2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Lock, Sparkles, Check, Send, Loader2, Flame } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import type { FeatureKey } from "@/lib/use-features";
+import { useFeatures, type FeatureKey } from "@/lib/use-features";
+import { SelfTrialButton } from "@/components/self-trial-button";
+
+// Cifras propias (P4c.2): una por módulo, nunca el contenido del módulo.
+interface Teasers { noShows30d: number; appointments30d: number; created30d: number; expiring60d: number; consented: number; newCustomers30d: number }
+const TEASER: Partial<Record<FeatureKey, (t: Teasers) => string | null>> = {
+  recovery: (t) => t.noShows30d > 0 ? `Este mes has tenido ${t.noShows30d} no-show${t.noShows30d === 1 ? "" : "s"}: Recuperar te ayuda a traerlos de vuelta a la agenda.` : null,
+  workflow: (t) => t.expiring60d > 0 ? `${t.expiring60d} certificado${t.expiring60d === 1 ? "" : "s"} caduca${t.expiring60d === 1 ? "" : "n"} en los próximos 60 días: Workflow avisaría a cada paciente solo.` : null,
+  campaigns: (t) => t.consented > 0 ? `Tienes ${t.consented} paciente${t.consented === 1 ? "" : "s"} con email, WhatsApp o SMS consentido a los que podrías escribir hoy.` : null,
+  analytics_pro: (t) => t.appointments30d > 0 ? `${t.appointments30d} cita${t.appointments30d === 1 ? "" : "s"} en los últimos 30 días: verías de dónde vienen y dónde se pierden.` : null,
+  captacion: (t) => t.newCustomers30d > 0 ? `${t.newCustomers30d} paciente${t.newCustomers30d === 1 ? "" : "s"} nuevo${t.newCustomers30d === 1 ? "" : "s"} este mes: sabrías qué canal los trajo.` : null,
+  messaging: (t) => t.created30d > 0 ? `${t.created30d} cita${t.created30d === 1 ? "" : "s"} creada${t.created30d === 1 ? "" : "s"} este mes sin aviso automático: cada una sería un recordatorio enviado solo.` : null,
+};
 
 interface Copy { title: string; intro: string; benefits: string[] }
 
@@ -70,8 +82,14 @@ export function LockedModule({ feature, compact = false }: { feature: FeatureKey
   const [sent, setSent] = useState(false);
   const request = useMutation({
     mutationFn: () => apiFetch("/tenants/me/plan-request", { method: "POST", body: JSON.stringify({ feature }) }),
-    onSuccess: () => setSent(true),
+    onSuccess: () => { setSent(true); void qc.invalidateQueries({ queryKey: ["tenant-plan"] }); },
   });
+  const qc = useQueryClient();
+  const { data: teasers } = useQuery<Teasers>({ queryKey: ["plan-teasers"], queryFn: () => apiFetch<Teasers>("/tenants/me/plan-teasers"), staleTime: 5 * 60_000 });
+  const teaser = teasers ? (TEASER[feature]?.(teasers) ?? null) : null;
+  // Con una petición pendiente (prueba o Pro) se muestra su estado, no más botones.
+  const { info } = useFeatures();
+  const pending = !!info?.pendingRequest;
 
   return (
     <div className={`bg-white rounded-xl border border-gray-200 ${compact ? "p-5" : "p-8"} max-w-3xl`}>
@@ -83,6 +101,9 @@ export function LockedModule({ feature, compact = false }: { feature: FeatureKey
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200"><Sparkles className="w-3 h-3" /> Plan Pro</span>
           </div>
           <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">{c.intro}</p>
+          {teaser && (
+            <p className="mt-3 text-sm text-emerald-900 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 inline-flex items-start gap-2"><Flame className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />{teaser}</p>
+          )}
           {c.benefits.length > 0 && (
             <ul className="mt-4 space-y-2">
               {c.benefits.map((b) => (
@@ -91,7 +112,8 @@ export function LockedModule({ feature, compact = false }: { feature: FeatureKey
             </ul>
           )}
           <div className="mt-5 flex items-center gap-3 flex-wrap">
-            {sent ? (
+            <SelfTrialButton compact />
+            {pending ? null : sent ? (
               <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"><Check className="w-4 h-4" /> Petición enviada. Te contactaremos en breve.</span>
             ) : (
               <button type="button" onClick={() => request.mutate()} disabled={request.isPending}
