@@ -5,10 +5,9 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { apiFetch, getActAsTenant, setActAsTenant } from "@/lib/api";
+import { apiFetch, getActAsTenant, setActAsTenant, getPreviewPlan, setPreviewPlan } from "@/lib/api";
 import { ContextBarProvider, ContextBar } from "@/components/context-bar";
-
-interface Branding { name: string; logoUrl: string | null; primaryColor: string; secondaryColor: string }
+import { useFeatures, PLAN_LABEL, trialTone, trialDaysLeft, type FeatureKey } from "@/lib/use-features";
 import {
   LayoutDashboard,
   CalendarCheck,
@@ -29,10 +28,13 @@ import {
   HeartPulse,
   LogOut,
   Lock,
+  Inbox,
+  LogIn,
+  Eye,
   type LucideIcon,
 } from "lucide-react";
-import { useFeatures, type FeatureKey } from "@/lib/use-features";
-import { getPreviewPlan, setPreviewPlan } from "@/lib/api";
+
+interface Branding { name: string; logoUrl: string | null; primaryColor: string; secondaryColor: string }
 
 interface NavItem {
   href: string;
@@ -57,9 +59,9 @@ interface NavSection {
   items: NavItem[];
 }
 
-// Menú agrupado. La cabecera de cada sección solo se pinta si el perfil tiene ≥1
-// ítem visible dentro (así médico/recepción ven un menú corto y sin títulos vacíos).
-const navSections: NavSection[] = [
+// Menú de la clínica, agrupado. La cabecera de cada sección solo se pinta si el
+// perfil tiene ≥1 ítem visible dentro (así médico/recepción ven un menú corto).
+const clinicSections: NavSection[] = [
   {
     // Landing.
     items: [
@@ -108,60 +110,75 @@ const navSections: NavSection[] = [
       { href: "/settings", label: "Configuración", icon: Settings, roles: ["ADMIN"] },
     ],
   },
+];
+
+// Modo proveedor (crm-planes P4b): el SUPERADMIN sin empresa seleccionada ve un
+// menú propio y corto, por encima de las clínicas.
+const providerSections: NavSection[] = [
   {
-    // Panel de proveedor (crm-planes P4): solo el SUPERADMIN, por encima de las empresas.
-    title: "Proveedor",
     items: [
-      { href: "/superadmin/empresas", label: "Empresas", icon: Building2, roles: ["SUPERADMIN"] },
+      { href: "/superadmin/empresas", label: "Empresas", icon: Building2 },
+      { href: "/superadmin/empresas?filter=requests", label: "Peticiones", icon: Inbox, match: "?filter=requests" },
     ],
   },
 ];
 
-interface TenantOption { id: string; name: string; slug: string }
-
-// Selector de empresa para SUPERADMIN: "actuar como" un tenant. Guarda la elección
-// (la lee apiFetch para mandar `x-act-as-tenant`) y recarga para refrescar todo.
-function TenantSwitcher() {
-  const [selected, setSelected] = useState<string>("");
-  // "Ver como Pro" (D9): vista previa del plan Pro sobre la empresa elegida; no persiste.
-  const [preview, setPreview] = useState(false);
-  useEffect(() => { setSelected(getActAsTenant() ?? ""); setPreview(getPreviewPlan() === "PRO"); }, []);
-  function togglePreview(on: boolean) {
-    setPreviewPlan(on ? "PRO" : null);
-    window.location.reload();
-  }
-
-  const { data: tenants } = useQuery<TenantOption[]>({
-    queryKey: ["admin-tenants"],
-    queryFn: () => apiFetch<TenantOption[]>("/admin/tenants"),
-    staleTime: 5 * 60_000,
-  });
-
-  function onChange(id: string) {
-    setActAsTenant(id || null);
-    window.location.reload();
-  }
-
+// Barra superior del modo empresa: el superadmin está "dentro" de una clínica.
+// Dice cuál, su plan y centros; permite "Ver como Pro" y volver al panel.
+function SuperadminBar({ tenantName }: { tenantName: string }) {
+  const { info } = useFeatures();
+  const preview = info?.preview === true;
+  function togglePreview(on: boolean) { setPreviewPlan(on ? "PRO" : null); window.location.reload(); }
+  function back() { setActAsTenant(null); setPreviewPlan(null); window.location.href = "/superadmin/empresas"; }
+  const centers = info ? `${info.centersCount} centro${info.centersCount === 1 ? "" : "s"}` : "";
+  // La vista previa solo tiene sentido si la empresa NO es ya Pro (por contrato o prueba).
+  const trialDays = trialDaysLeft(info?.trialUntil);
+  const trialActive = trialDays != null;
+  const canPreview = preview || (info ? info.effectivePlan === "ESSENTIAL" : false);
+  const planText = !info ? "" : preview ? `Plan real: ${PLAN_LABEL[info.plan]}` : trialActive ? `Pro en prueba · ${trialDays} día${trialDays === 1 ? "" : "s"}` : `Plan ${PLAN_LABEL[info.effectivePlan]}`;
+  // Color de la barra: vista previa azul claro · prueba por días restantes (naranja /
+  // ámbar / verde) · Pro contratado azul oscuro · Esencial gris oscuro.
+  // Tonos pastel (fondo claro, texto oscuro).
+  const bar = preview ? "bg-blue-100 text-blue-900 border-b border-blue-200"
+    : trialActive ? trialTone(trialDays).bar
+    : info?.effectivePlan === "PRO" ? "bg-sky-50 text-sky-900 border-b border-sky-200"
+    : "bg-gray-100 text-gray-800 border-b border-gray-200";
   return (
-    <div className="px-4 py-3 border-b border-gray-200 bg-amber-50/60">
-      <label className="block text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-1">Empresa (superadmin)</label>
-      <select
-        value={selected}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full text-sm border border-amber-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-      >
-        <option value="">— Selecciona empresa —</option>
-        {(tenants ?? []).filter((t) => t.slug !== "system").map((t) => (
-          <option key={t.id} value={t.id}>{t.name}</option>
-        ))}
-      </select>
-      {selected && (
-        <label className={`mt-2 flex items-center gap-2 text-xs rounded-md px-2 py-1.5 cursor-pointer ${preview ? "bg-blue-600 text-white" : "text-amber-800"}`}>
-          <input type="checkbox" checked={preview} onChange={(e) => togglePreview(e.target.checked)} className="accent-blue-600" />
-          {preview ? "Vista previa Pro activa · nada se guarda" : "Ver como Pro (vista previa)"}
+    <div className={`${bar} px-5 py-2 flex items-center gap-3 flex-wrap text-[13px] min-h-[44px]`}>
+      {preview ? (
+        <span className="inline-flex items-center gap-2"><Eye className="w-4 h-4" /><b>Vista previa Pro</b> de <b>{tenantName}</b> · nada se guarda</span>
+      ) : (
+        <span className="inline-flex items-center gap-2"><LogIn className="w-4 h-4 opacity-70" />Estás viendo <b>{tenantName}</b> como superadmin</span>
+      )}
+      {info && (
+        <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs bg-white/70 border border-current/20">
+          {planText}{centers ? ` · ${centers}` : ""}
+        </span>
+      )}
+      {canPreview && (
+        <label className="ml-auto inline-flex items-center gap-2 text-xs cursor-pointer">
+          <input type="checkbox" checked={preview} onChange={(e) => togglePreview(e.target.checked)} className="accent-blue-600 w-4 h-4" />
+          {preview ? "Salir de la vista previa" : "Ver como Pro (vista previa)"}
         </label>
       )}
+      <button type="button" onClick={back} className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-current/30 bg-white/60 hover:bg-white ${canPreview ? "" : "ml-auto"}`}>Volver al panel</button>
     </div>
+  );
+}
+
+// Chip de plan para el ADMIN de la clínica (crm-planes P4b): discreto, bajo el
+// nombre de la empresa; en prueba muestra los días que quedan con la escala de
+// color por días restantes. Lleva a Configuración → Empresa → "Tu plan".
+function PlanBadge() {
+  const { info } = useFeatures();
+  if (!info) return null;
+  const days = trialDaysLeft(info.trialUntil);
+  const cls = days != null ? trialTone(days).chip : info.effectivePlan === "PRO" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-600 border-gray-200";
+  const text = days != null ? `Prueba Pro · ${days} d` : `Plan ${PLAN_LABEL[info.effectivePlan]}`;
+  return (
+    <Link href="/settings?tab=empresa" title="Ver tu plan" className={`mt-2 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border hover:opacity-80 ${cls}`}>
+      {text}
+    </Link>
   );
 }
 
@@ -171,31 +188,52 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  // Modo del superadmin: sin empresa seleccionada = proveedor; con ella = empresa.
+  // Se lee en cliente (localStorage) tras montar, para no desajustar la hidratación.
+  const [ready, setReady] = useState(false);
+  const [actAs, setActAs] = useState<string | null>(null);
+  const [requestsNav, setRequestsNav] = useState(false);
+  useEffect(() => { setActAs(getActAsTenant()); setReady(true); setRequestsNav(window.location.search.includes("filter=requests")); }, [pathname]);
+  const isSuper = user?.role === "SUPERADMIN";
+  const providerMode = isSuper && ready && !actAs;
+
   const { data: branding } = useQuery<Branding>({
     queryKey: ["branding"],
     queryFn: () => apiFetch<Branding>("/tenants/me/branding"),
-    enabled: !!user,
+    enabled: !!user && !providerMode,
     staleTime: 5 * 60_000,
   });
-  const primary = branding?.primaryColor ?? "#2563eb";
+  const primary = providerMode ? "#2563eb" : (branding?.primaryColor ?? "#2563eb");
 
   // Aviso in-app: nº de episodios sin cerrar (badge en "Reservas"). Visible para
   // el personal; se refresca cada minuto.
   const { data: episodesData } = useQuery<{ meta: { total: number } }>({
     queryKey: ["nav-unclosed-episodes"],
     queryFn: () => apiFetch("/appointments/unclosed-episodes", { raw: true }),
-    enabled: !!user,
+    enabled: !!user && ready && !providerMode,
     staleTime: 60_000,
   });
   const episodesCount = episodesData?.meta?.total ?? 0;
 
+  // Badge de peticiones abiertas en el menú del proveedor.
+  const { data: openRequests } = useQuery<{ id: string }[]>({
+    queryKey: ["superadmin-plan-requests"],
+    queryFn: () => apiFetch<{ id: string }[]>("/superadmin/plan-requests?status=OPEN"),
+    enabled: !!providerMode,
+    staleTime: 60_000,
+  });
+  const openRequestsCount = openRequests?.length ?? 0;
+
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
-    }
+    if (!loading && !user) router.push("/login");
   }, [user, loading, router]);
 
-  if (loading) {
+  // En modo proveedor solo tienen sentido las páginas /superadmin: el resto redirige.
+  useEffect(() => {
+    if (providerMode && !pathname.startsWith("/superadmin")) router.replace("/superadmin/empresas");
+  }, [providerMode, pathname, router]);
+
+  if (loading || (isSuper && !ready)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
@@ -204,6 +242,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) return null;
+
+  const sections = providerMode ? providerSections : clinicSections;
+  const isActive = (item: NavItem) => {
+    if (item.match === "?filter=requests") return requestsNav;
+    if (item.href === "/superadmin/empresas") return pathname.startsWith("/superadmin") && !requestsNav;
+    return pathname.startsWith(item.match ?? item.href);
+  };
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -216,15 +261,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="leading-tight min-w-0">
               <span className="block font-bold text-gray-900 tracking-tight truncate">MediRenova</span>
-              {branding?.name && <span className="block text-[11px] text-gray-400 truncate">{branding.name}</span>}
+              {providerMode
+                ? <span className="block text-[11px] text-gray-400 truncate">Panel de proveedor</span>
+                : branding?.name && <span className="block text-[11px] text-gray-400 truncate">{branding.name}</span>}
             </div>
           </div>
+          {providerMode && <span className="mt-2.5 inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-900 text-white uppercase tracking-wide">Modo proveedor</span>}
+          {user.role === "ADMIN" && <PlanBadge />}
         </div>
 
-        {user.role === "SUPERADMIN" && <TenantSwitcher />}
-
         <nav className="flex-1 p-3 overflow-y-auto">
-          {navSections.map((section, si) => {
+          {sections.map((section, si) => {
             const items = section.items.filter((item) => !item.roles || user.role === "SUPERADMIN" || item.roles.includes(user.role));
             if (items.length === 0) return null;
             return (
@@ -232,11 +279,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 {section.title && <p className="text-[11px] font-medium text-gray-400 px-3 pb-1 uppercase tracking-wide">{section.title}</p>}
                 <div className="space-y-0.5">
                   {items.map((item) => {
-                    const active = pathname.startsWith(item.match ?? item.href);
+                    const active = isActive(item);
                     return (
                       <Link
                         key={item.href}
                         href={item.href as string}
+                        onClick={() => setRequestsNav(item.match === "?filter=requests")}
                         className={`relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${active ? "font-medium" : "text-gray-600 hover:bg-gray-100"}`}
                         style={active ? { backgroundColor: `${primary}14`, color: primary } : undefined}
                       >
@@ -248,6 +296,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         )}
                         {item.href === "/appointments" && episodesCount > 0 && (
                           <span title={`${episodesCount} episodio(s) sin cerrar`} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">{episodesCount}</span>
+                        )}
+                        {item.label === "Peticiones" && openRequestsCount > 0 && (
+                          <span title={`${openRequestsCount} petición(es) abierta(s)`} className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">{openRequestsCount}</span>
                         )}
                       </Link>
                     );
@@ -279,8 +330,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="flex-1 flex flex-col overflow-hidden">
+        {isSuper && actAs && <SuperadminBar tenantName={branding?.name ?? "la empresa"} />}
+        {/* El provider siempre envuelve a las páginas (algunas usan useAppContext incluso
+            durante el instante previo a la redirección); en modo proveedor solo se
+            oculta la barra Empresa › Centro. */}
         <ContextBarProvider>
-          <ContextBar empresaName={branding?.name ?? "MediRenova"} primaryColor={primary} />
+          {!providerMode && <ContextBar empresaName={branding?.name ?? "MediRenova"} primaryColor={primary} />}
           <div className="flex-1 overflow-y-auto">{children}</div>
         </ContextBarProvider>
       </main>

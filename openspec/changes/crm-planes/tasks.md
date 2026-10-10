@@ -39,6 +39,22 @@ Rama: `feat/crm-planes` desde `main`, PRs pequeños y frecuentes. Cada fase es d
 - [x] P4.5 Bandeja de peticiones de upgrade (abiertas/cerradas, nota, cerrar)
 - [x] P4.6 Conmutador **"Ver como Pro"** (solo SUPERADMIN, D9): cabecera `x-preview-plan` respetada por `requireFeature` y `/tenants/me/plan`; banda visible "Vista previa Pro" en la app; no persiste ni cambia el plan
 
+## P4b. Experiencia del superadmin (mockup "Panel de proveedor — mockup", aprobado)
+
+- [x] P4b.1 **Dos modos**: sin empresa seleccionada el superadmin ve el **modo proveedor** (menú propio y corto: Empresas · Peticiones; marca MediRenova; etiqueta "Modo proveedor") y aterriza en `/superadmin/empresas` tras el login; con empresa seleccionada, **modo empresa** (menú de la clínica)
+- [x] P4b.2 **Barra superior del modo empresa** (sustituye al selector ámbar): "Estás viendo {empresa} como superadmin · plan · centros", casilla **Ver como Pro** (barra azul "Vista previa Pro · nada se guarda") y **Volver al panel** (limpia empresa y vista previa)
+- [x] P4b.3 Lista: **KPIs clicables** que filtran; columna **Atención** (petición abierta · prueba vence en N días · candidata a Pro · sin actividad · al día) y orden por atención; búsqueda por empresa, slug y email del admin
+- [x] P4b.4 **Panel lateral** al pulsar una fila: resumen, motivo de atención, gráfica de citas de 6 meses (API: `monthly`), atajos de prueba 14/30/60 días, "Pasar a Pro…" / "Cambiar a Esencial…", Entrar como, Ver ficha
+- [x] P4b.5 **Diálogo de confirmación** de cambio de plan: módulos que se abren o se cierran, facturación resultante (plan × centros), cierre automático de la petición abierta, motivo obligatorio (auditoría). API: `PATCH` acepta `closeOpenRequests`
+- [x] P4b.6 **Ficha por pestañas** (Licencia · Actividad · Usuarios · Centros · Auditoría); Licencia reducida a plan + prueba (con atajos y "quitar") + límite, frase "con estos valores tendrá…", excepciones plegadas en "Ajustes avanzados"; tarjeta de petición abierta con acciones
+- [x] P4b.7 Estados vacíos con guía y badge de peticiones abiertas en el menú del proveedor
+
+## P4c. "Antojo" del Pro para clínicas Esencial (sin abrir la vista previa a la clínica)
+
+- [ ] P4c.1 **Prueba Pro en autoservicio**: botón "Probar Pro 14 días" en las páginas con candado y en "Tu plan"; `POST /tenants/me/trial` (ADMIN) activa la prueba **una sola vez por empresa** (`Tenant.selfTrialUsedAt`), audita en `tenant_plan`, cierra/crea la petición como "prueba autoservicio" y avisa al proveedor por email; en el panel aparece como "En prueba (autoservicio)"
+- [ ] P4c.2 **Cebos con datos propios** en `LockedModule`: `GET /tenants/me/plan-teasers` devuelve cifras seguras (no-shows del mes, certificados que caducan en 60 días, citas del mes, pacientes sin consentimiento de canal…) y cada módulo bloqueado muestra la suya: Recuperar → "Este mes has tenido N no-shows"; Workflow → "N certificados caducan en 60 días"; Campañas → "N pacientes con email/WhatsApp consentido"; Analítica → "N citas este mes"; Comunicaciones → "N citas creadas este mes sin aviso automático"
+- [ ] P4c.3 La vista previa "Ver como Pro" sigue siendo **exclusiva del superadmin** (D9); se documenta por qué (fugas de datos en solo-lectura, experiencia a medias, coste)
+
 ## P5. Pruebas con vencimiento
 
 - [ ] P5.1 Cron diario 07:30: avisos a 7 y 1 días (Admin + proveedor) y auditoría del vencimiento
