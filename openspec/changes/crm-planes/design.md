@@ -100,6 +100,14 @@ Puro y testeado (matriz plan × prueba × overrides × dependencias).
 - **Panel de proveedor** `/superadmin/empresas` (solo `SUPERADMIN`, fuera del selector de empresa): tabla con filtros (plan, prueba vence en 7 días, peticiones abiertas, inactivas) y acciones; ficha con cambio de plan/prueba/overrides/centros, auditoría y **"Entrar como esta empresa"** (activa la impersonación existente y navega al dashboard). Formulario de alta de empresa.
 - **Portal del paciente**: sin `portal_full` se oculta la sección de citas y los enlaces de renovación.
 
+## Experiencia del superadmin (P4b, mockup aprobado)
+
+- **Dos modos** en la misma app: *proveedor* (sin empresa seleccionada: menú corto Empresas/Peticiones, aterrizaje en `/superadmin/empresas`) y *empresa* (actuando como una clínica: su menú, con una **barra superior** fija que dice qué empresa es, su plan y centros, con "Ver como Pro" y "Volver al panel"). El selector ámbar del menú desaparece: entrar y salir de una empresa es un gesto explícito.
+- **Lista como centro de mando**: KPIs que filtran, columna "Atención" y orden por atención necesaria; panel lateral con resumen, gráfica de 6 meses y acciones rápidas; la ficha completa queda a un clic.
+- **Cambio de plan con confirmación**: diálogo que resume qué gana/pierde la clínica, la facturación resultante y cierra la petición abierta; motivo obligatorio para la auditoría.
+- **Ficha por pestañas** con la licencia reducida a lo esencial y las excepciones plegadas.
+- **Antojo del Pro para la clínica (P4c)**: NO se abre la vista previa a la clínica (un modo solo-lectura filtraría datos de módulos Pro, daría una experiencia a medias y computaría analítica gratis). En su lugar: (1) **prueba Pro en autoservicio** de 14 días, una vez por empresa, auditada y notificada al proveedor; (2) **cebos con datos propios** en las páginas bloqueadas: una cifra segura por módulo ("este mes 14 no-shows"), nunca el contenido del módulo.
+
 ## Demo
 
 Clínica Demo queda en **Pro**. Se añade una segunda empresa de demo **"Clínica Esencial"** (seed) para enseñar el plan básico y el candado; y desde el panel se cambia el plan en vivo.

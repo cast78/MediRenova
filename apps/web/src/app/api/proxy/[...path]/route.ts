@@ -34,6 +34,9 @@ async function proxyRequest(request: NextRequest, path: string[], method: string
   // Impersonación de empresa por superadmin (el backend solo la respeta si el rol lo es).
   const actAs = request.headers.get("x-act-as-tenant");
   if (actAs) headers["x-act-as-tenant"] = actAs;
+  // "Ver como Pro" (crm-planes D9): vista previa del superadmin; la API la ignora para otros roles.
+  const preview = request.headers.get("x-preview-plan");
+  if (preview) headers["x-preview-plan"] = preview;
 
   const hasBody = method !== "GET" && method !== "DELETE";
   const body = hasBody ? await request.arrayBuffer() : undefined;

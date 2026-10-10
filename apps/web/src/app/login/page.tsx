@@ -19,8 +19,9 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const u = await login(email, password);
-      // El médico aterriza en su cabina (Consulta); el resto, en el panel.
-      router.push(u.role === "DOCTOR" ? "/consulta" : "/dashboard");
+      // El médico aterriza en su cabina (Consulta); el superadmin, en el panel de
+      // proveedor (crm-planes P4b); el resto, en el dashboard.
+      router.push(u.role === "SUPERADMIN" ? "/superadmin/empresas" : u.role === "DOCTOR" ? "/consulta" : "/dashboard");
     } catch {
       setError("Credenciales incorrectas. Inténtalo de nuevo.");
     } finally {
