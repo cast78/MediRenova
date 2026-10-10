@@ -4,9 +4,10 @@ import { prisma } from "../lib/prisma.js";
 import { verifyPassword } from "../lib/password.js";
 import { signAccessToken } from "../lib/jwt.js";
 import { generateRefreshToken } from "../lib/crypto.js";
+import { loginEmail } from "../lib/utils.js";
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: loginEmail,
   password: z.string().min(8),
 });
 

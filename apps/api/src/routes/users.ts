@@ -4,12 +4,13 @@ import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/authorization.js";
 import { hashPassword } from "../lib/password.js";
 import { auditLog } from "../lib/audit.js";
+import { loginEmail } from "../lib/utils.js";
 
 // Roles que un admin puede asignar (SUPERADMIN no se gestiona desde aquí).
 const ASSIGNABLE_ROLES = ["ADMIN", "RECEPTIONIST", "DOCTOR"] as const;
 
 const createUserSchema = z.object({
-  email: z.string().email(),
+  email: loginEmail,
   firstName: z.string().min(1).max(80),
   lastName: z.string().min(1).max(80),
   role: z.enum(ASSIGNABLE_ROLES),

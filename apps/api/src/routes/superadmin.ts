@@ -10,6 +10,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireRole, invalidatePlanCache } from "../lib/authorization.js";
 import { auditLog } from "../lib/audit.js";
 import { effectivePlan, features, validateOverrides, FEATURES, FEATURE_KEYS, type PlanInput } from "../lib/plan.js";
+import { loginEmail } from "../lib/utils.js";
 
 const DAY_MS = 86_400_000;
 
@@ -124,7 +125,7 @@ export async function superadminRoutes(server: FastifyInstance) {
       plan: z.enum(["ESSENTIAL", "PRO"]).default("ESSENTIAL"),
       trialUntil: z.string().datetime().nullable().optional(),
       maxCenters: z.number().int().min(1).nullable().optional(),
-      admin: z.object({ email: z.string().email(), firstName: z.string().min(1).max(60), lastName: z.string().min(1).max(80), password: z.string().min(8).max(100) }),
+      admin: z.object({ email: loginEmail, firstName: z.string().min(1).max(60), lastName: z.string().min(1).max(80), password: z.string().min(8).max(100) }),
     }).safeParse(request.body);
     if (!body.success) return reply.status(400).send({ errors: body.error.flatten().fieldErrors });
     const d = body.data;
