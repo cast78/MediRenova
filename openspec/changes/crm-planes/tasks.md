@@ -59,7 +59,7 @@ Rama: `feat/crm-planes` desde `main`, PRs pequeños y frecuentes. Cada fase es d
 ## P5. Pruebas con vencimiento
 
 - [ ] P5.1 Cron diario 07:30: avisos a 7 y 1 días (Admin + proveedor) y auditoría del vencimiento
-- [ ] P5.2 Tarjeta "Tu plan" y panel muestran cuenta atrás de la prueba
+- [x] P5.2 Tarjeta "Tu plan" y panel muestran cuenta atrás de la prueba (chip "Prueba Pro · N d", barra del superadmin por días restantes, KPI "pruebas que vencen ≤7 días")
 
 ## P6. Verificación y documentación
 
@@ -71,3 +71,38 @@ Rama: `feat/crm-planes` desde `main`, PRs pequeños y frecuentes. Cada fase es d
 
 - [ ] Analítica de uso por clínica para el proveedor (citas/mes, mensajes, usuarios activos, último acceso, fallos)
 - [ ] Autoservicio con Stripe (cambio de plan y centros con cobro automático)
+
+## Punto de continuación (10/10/2026)
+
+**Estado.** P1–P4c y P5.2 en producción. Último merge: PR #20 (`bc3201a` en `main`) con P4c
+completo + `fix(auth)` (email de acceso en minúsculas: esquema `loginEmail` en `lib/utils.ts`,
+usado en login y altas de usuarios/médicos/admins). `feat/crm-planes` está sincronizada con
+`main` y sin cambios pendientes; **no borrar la rama**, se sigue trabajando en ella.
+
+**Siguiente sesión, en este orden.**
+1. **P5.1** — cron diario (07:30, junto a los crons existentes en `server.ts`): empresas con
+   `trialUntil` a 7 y 1 días → aviso al Admin (por el outbox simulado de `lib/messaging`, nivel
+   Fase 0) y email al proveedor; al vencer, entrada de auditoría `tenant_plan` / `TRIAL_EXPIRED`
+   e `invalidatePlanCache`. La vuelta a Esencial ya es automática (`effectivePlan` mira la fecha).
+2. **P6.3** — `docs/planes.md`: qué incluye cada plan (tabla desde `FEATURES`), alta de empresa,
+   asignar plan/prueba, atender peticiones (Prueba / Pasar a Pro / Centro adicional), límite de
+   centros y facturación plan × centros, "Ver como Pro", "Entrar como".
+3. **P6.1–P6.2** — verificación final (E2E manual con `clinica-esencial`).
+4. Menores: **P3.7** (mensaje global del `403 FEATURE_NOT_IN_PLAN` en `apiFetch`); guardia de
+   campos Meta en `PATCH /tenants/me/config` (anotado en P2.1, revisar que esté).
+
+**Decisiones a recordar.** La clínica nunca ve "Ver como Pro" (D9); todo lo que abre funciones
+pasa por una `PlanRequest` que el proveedor aprueba (opción B). Los botones de petición de "Tu
+plan" dependen del plan **contratado** (`info.plan`), no del efectivo: en prueba se ofrece
+"Quedarme en Pro". `PlanRequest` no es tenant-scoped. Emails de clientes/pacientes no se
+normalizan (son contacto, no credencial).
+
+**Entorno local.** API `npx tsx watch src/server.ts` en 3001 (prefijo `/api/v1`), web
+`npx next dev -p 3000`; parar el API antes de `prisma migrate dev` (bloqueo de DLL). La BD
+(Neon) es compartida con producción: las migraciones ya están aplicadas. Usuarios demo:
+`admin|recepcion|doctor@clinica-demo.es`, `recepcionbarcelona@…`, `doctorbarcelona@…`,
+`admin@clinica-esencial.es` (contraseña de demo del seed). **No existe** `backoffice@clinica-demo.es`.
+Superadmin con la contraseña de `SUPERADMIN_PASSWORD` (Railway); el seed local no la pisa.
+
+**Fuera de este change.** Mensajería real (Fases A–D de `crm-mensajeria`) pospuesta hasta
+tener dominio; la PR #1 del bot de Railway ("port 8080") puede cerrarse sin mergear.
