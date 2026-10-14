@@ -8,10 +8,10 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 
 ## T0. Fundamentos
 
-- [ ] T0.1 `tailwind.config`: variantes `touch` (`pointer: coarse`) y `hover-none` (`hover: none`)
-- [ ] T0.2 `globals.css`: reglas táctiles globales (min-height 44 px en controles y filas, 16 px en inputs, tap-highlight, scroll-padding)
-- [ ] T0.3 `app/layout.tsx`: `viewport` con `viewport-fit=cover`; `100dvh` en contenedores a pantalla completa
-- [ ] T0.4 `docs/multidispositivo.md` (borrador): dispositivos, breakpoints, convenciones
+- [x] T0.1 `tailwind.config`: variantes `touch` (`pointer: coarse`) y `hover-none` (`hover: none`)
+- [x] T0.2 `globals.css`: reglas táctiles globales (min-height 44 px en controles y filas, 16 px en inputs, tap-highlight, scroll-padding)
+- [x] T0.3 `app/layout.tsx`: `viewport` con `viewport-fit=cover`; `100dvh` en contenedores a pantalla completa
+- [x] T0.4 `docs/multidispositivo.md` (borrador): dispositivos, breakpoints, convenciones
 
 ## T2. Tablas y listas
 

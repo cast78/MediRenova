@@ -33,3 +33,37 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Reglas táctiles globales (crm-multidispositivo T0). Solo actúan cuando el
+   puntero principal es el dedo (`pointer: coarse`): en escritorio con ratón no
+   cambian nada. Objetivo mínimo de 44 px, texto de 16 px en campos (evita el
+   zoom automático de Safari en iPad) y sin el resalte azul de iOS al tocar.
+   `.touch-exempt` deja fuera un control concreto cuando haga falta.
+   Va FUERA de @layer a propósito: así se emite después de las utilidades de
+   Tailwind y gana a `text-sm`/`h-8` en los campos (misma especificidad, va después). */
+@media (pointer: coarse) {
+  button:not(.touch-exempt),
+  [role="button"]:not(.touch-exempt),
+  [role="tab"]:not(.touch-exempt),
+  select:not(.touch-exempt),
+  textarea:not(.touch-exempt),
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not(.touch-exempt) {
+    min-height: 44px;
+  }
+  /* `:not(.touch-exempt)` también sube la especificidad por encima de `text-sm`. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not(.touch-exempt),
+  select:not(.touch-exempt),
+  textarea:not(.touch-exempt) {
+    font-size: max(1rem, 1em);
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  a,
+  button,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
