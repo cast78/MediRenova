@@ -25,7 +25,7 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 - [x] T3.2 Sustituir acciones solo-hover por `hover-none:opacity-100` (analítica, reservas, clientes, revisiones, consulta, visitas, utilización)
 - [x] T3.3 `components/ui/tabs-scroller.tsx` (scroll-snap, fundido, activa a la vista, role=tab/aria-selected) aplicado a Reservas, Analítica/Captación, Configuración, Revisiones, Campañas, Productos, Utilización y ficha de empresa
 - [x] T3.4 Tooltips como único canal → etiqueta visible o popover al tocar
-- [ ] T3.5 Pulido de controles: `RoomSelect` sin cabecera de centro (`optgroup`) cuando solo hay un centro (Visitas obliga a elegir centro; la cabecera es redundante y ocupa una línea en tablet)
+- [x] T3.5 Pulido de controles: `RoomSelect` sin cabecera de centro (`optgroup`) cuando solo hay un centro (Visitas obliga a elegir centro; la cabecera es redundante y ocupa una línea en tablet)
 
 ## T6a. Verificación de la Fase A
 
