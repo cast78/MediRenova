@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable } from "@/components/ui/data-table";
 import { useState, useEffect, useRef } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -315,12 +316,13 @@ export default function DoctorsPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <DataTable minWidth={760}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
               <th className="text-left px-4 py-2.5 font-medium uppercase tracking-wide">Médico</th>
-              <th className="text-left px-4 py-2.5 font-medium uppercase tracking-wide">DNI</th>
-              <th className="text-left px-4 py-2.5 font-medium uppercase tracking-wide">Nº Colegiado</th>
+              <th className="text-left px-4 py-2.5 font-medium uppercase tracking-wide hidden lg:table-cell">DNI</th>
+              <th className="text-left px-4 py-2.5 font-medium uppercase tracking-wide hidden lg:table-cell">Nº Colegiado</th>
               <th className="text-left px-4 py-2.5 font-medium uppercase tracking-wide">Centros asignados</th>
               <th className="text-left px-4 py-2.5 font-medium uppercase tracking-wide">Firma</th>
               <th className="text-left px-4 py-2.5 font-medium uppercase tracking-wide">Estado</th>
@@ -341,8 +343,8 @@ export default function DoctorsPage() {
                       <span className="font-medium text-gray-900">{fullName}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-2.5 text-gray-600 tabular-nums">{d.dni ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-gray-600 tabular-nums">{d.licenseNumber ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-gray-600 tabular-nums hidden lg:table-cell">{d.dni ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-gray-600 tabular-nums hidden lg:table-cell">{d.licenseNumber ?? "—"}</td>
                   <td className="px-4 py-2.5">
                     {d.centers.length ? (
                       <div className="flex flex-wrap gap-1">
@@ -382,6 +384,7 @@ export default function DoctorsPage() {
             })}
           </tbody>
         </table>
+        </DataTable>
       </div>
     </div>
   );

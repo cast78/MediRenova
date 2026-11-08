@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -213,6 +214,7 @@ function AuditSection() {
       </div>
 
       <div className="border border-gray-100 rounded-lg overflow-hidden">
+        <DataTable minWidth={640}>
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-xs text-gray-500 border-b border-gray-100">
@@ -240,6 +242,7 @@ function AuditSection() {
             })}
           </tbody>
         </table>
+        </DataTable>
         {audit && audit.meta.total > 0 && (
           <div className="flex items-center justify-between px-3 py-2 border-t border-gray-100 text-xs text-gray-500">
             <span>{audit.meta.total} registros{audit.meta.pages > 1 ? ` · página ${audit.meta.page} de ${audit.meta.pages}` : ""}</span>

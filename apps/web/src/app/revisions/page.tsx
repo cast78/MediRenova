@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -432,6 +433,7 @@ export default function RevisionsPage() {
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <DataTable minWidth={720}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
@@ -497,6 +499,7 @@ export default function RevisionsPage() {
             ))}
           </tbody>
         </table>
+        </DataTable>
 
         {/* Pagination */}
         {meta && meta.total > 0 && (

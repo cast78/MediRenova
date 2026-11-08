@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useState, useEffect, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -1047,6 +1048,7 @@ function CampaignDetailModal({ id, onClose }: { id: string; onClose: () => void 
               <Stat label="Fallidos" value={data.failedCount} cls="text-red-600" />
             </div>
             <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <DataTable minWidth={480}>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-400 text-xs">
                   <tr><th className="text-left font-medium px-3 py-2">Cliente</th><th className="text-left font-medium px-3 py-2">Estado</th><th className="text-left font-medium px-3 py-2 hidden sm:table-cell">Detalle</th></tr>
@@ -1061,6 +1063,7 @@ function CampaignDetailModal({ id, onClose }: { id: string; onClose: () => void 
                   ))}
                 </tbody>
               </table>
+              </DataTable>
             </div>
             {data.recipients.length >= 300 && <p className="text-[11px] text-gray-400 mt-2">Mostrando los primeros 300 destinatarios.</p>}
           </>

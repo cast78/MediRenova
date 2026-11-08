@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -387,6 +388,7 @@ export default function UtilizationPage() {
           {listRows.length === 0 ? (
             <p className="text-sm text-gray-400 py-12 text-center">Sin reservas para este filtro.</p>
           ) : (
+            <DataTable minWidth={760}>
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-400 text-xs">
                 <tr>
@@ -451,6 +453,7 @@ export default function UtilizationPage() {
                 })}
               </tbody>
             </table>
+            </DataTable>
           )}
         </div>
       ) : (

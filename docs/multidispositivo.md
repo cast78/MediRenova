@@ -30,7 +30,7 @@ La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de
 - Filas de pestañas: siempre con `<TabsScroller variant="pills" | "underline">` (`components/ui/tabs-scroller.tsx`) y pestañas con `role="tab"` y `aria-selected`. En escritorio se ve igual; si no cabe, se desplaza en horizontal con fundido en los bordes y trae la activa a la vista. Las pestañas obtienen los 44 px táctiles por `[role="tab"]`.
 - El contenedor principal usa `h-dvh`, no `h-screen` (en Safari de iPad `100vh` incluye la barra del navegador).
 - `viewport` con `viewport-fit=cover` en `app/layout.tsx`.
-- Tablas: siempre dentro de un contenedor con `overflow-x-auto` y primera columna fija (`DataTable`, T2).
+- Tablas: siempre envueltas en `<DataTable minWidth={N}>` (`components/ui/data-table.tsx`), que da scroll horizontal propio con fundido, ancho mínimo, primera columna fija al desplazar y filas más altas en táctil, sin tocar el marcado de la tabla. Columnas prescindibles con `hidden lg:table-cell` en `th` y `td` (solo se ocultan por debajo de 1024 px).
 
 ## Cómo probar
 

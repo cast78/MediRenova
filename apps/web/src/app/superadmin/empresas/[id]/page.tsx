@@ -4,6 +4,7 @@
 // Licencia · Actividad · Usuarios · Centros · Auditoría. El cambio de plan pasa
 // por un diálogo de confirmación; prueba, límite, activa y excepciones se guardan
 // con "Guardar". El formulario se rellena con la respuesta del PATCH.
+import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -274,6 +275,7 @@ export default function EmpresaPage() {
 
       {tab === "usuarios" && (
         <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <DataTable minWidth={520}>
           <table className="w-full text-[13px]">
             <thead><tr className="text-[11px] uppercase tracking-wide text-gray-500 bg-gray-50">{["Usuario", "Email", "Rol", "Estado"].map((h) => <th key={h} className="text-left font-semibold px-3 py-2 border-b border-gray-200">{h}</th>)}</tr></thead>
             <tbody>
@@ -287,6 +289,7 @@ export default function EmpresaPage() {
               ))}
             </tbody>
           </table>
+          </DataTable>
         </section>
       )}
 

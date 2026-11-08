@@ -4,6 +4,7 @@
 // la API /analytics/* (sin lógica de métrica en cliente). Filtros persistidos en la
 // URL; resumen orientado a decisión (KPIs + alertas + comparación de periodo);
 // vistas de embudo, ocupación/saturación, médicos, comparativa y volumen; export CSV.
+import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -941,7 +942,7 @@ function MedicosView({ f }: { f: Filters }) {
       {rows.length === 0 ? empty : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[560px]">
+            <DataTable minWidth={560}><table className="w-full text-sm">
               <thead><tr className="text-xs text-gray-400 border-b border-gray-100">
                 <th className="py-2 font-medium text-left">Médico</th>
                 <th className="py-2 font-medium text-right">Carga (visitas)</th>
@@ -994,7 +995,7 @@ function MedicosView({ f }: { f: Filters }) {
                   <td className="py-2 pl-2 text-right tabular-nums">{tiempoGlobal == null ? "—" : <>{tiempoGlobal} min <span className="text-[11px] text-gray-400 font-normal">medio</span></>}</td>
                 </tr>
               </tfoot>
-            </table>
+            </table></DataTable>
           </div>
           <p className="text-[11px] text-gray-400 mt-3">
             <span className="inline-block w-2 h-2 rounded-full bg-amber-300 align-middle mr-1" /> Fila resaltada = requiere atención · umbrales: aptitud &lt; {APT_LOW}% · tiempo medio &gt; {TIME_HIGH} min. Ordenado por carga.
@@ -1026,7 +1027,7 @@ function ComparativaView({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id:
     const maxRes = Math.max(1, ...rows.map((r) => r.reservas));
     return (
       <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[560px]">
+        <DataTable minWidth={560}><table className="w-full text-sm">
           <thead><tr className="text-xs text-gray-400 border-b border-gray-100">
             <th className="py-2 font-medium text-left">Nombre</th><th className="py-2 font-medium text-right">Reservas</th>
             <th className="py-2 font-medium text-right">Atendidas</th><th className="py-2 font-medium text-right">Conversión</th>
@@ -1051,7 +1052,7 @@ function ComparativaView({ f, onDrillCenter }: { f: Filters; onDrillCenter: (id:
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></DataTable>
       </div>
     );
   };
@@ -1351,7 +1352,7 @@ function CampanasView({ f }: { f: Filters }) {
         const tasaCol = (v: number) => v >= 8 ? "text-emerald-600" : v >= 4 ? "text-amber-600" : "text-red-600";
         return (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[560px]">
+            <DataTable minWidth={560}><table className="w-full text-sm">
               <thead><tr className="text-xs text-gray-400 border-b border-gray-100">
                 <th className="py-2 font-medium text-left">Campaña</th><th className="py-2 font-medium text-right">Enviados</th>
                 <th className="py-2 font-medium text-right">Convertidos</th><th className="py-2 font-medium text-right">Tasa</th>
@@ -1390,7 +1391,7 @@ function CampanasView({ f }: { f: Filters }) {
                 <td className="py-2 px-2 text-right tabular-nums">{tRes}</td>
                 <td className="py-2 pl-2 text-right tabular-nums">{tVis}</td>
               </tr></tfoot>
-            </table>
+            </table></DataTable>
           </div>
         );
       })()}

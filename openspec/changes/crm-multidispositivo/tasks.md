@@ -15,8 +15,8 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 
 ## T2. Tablas y listas
 
-- [ ] T2.1 `components/ui/data-table.tsx`: scroll propio con fundido, primera columna fija, `priority` por columna, fila pulsable, menú "⋯" por fila en táctil
-- [ ] T2.2 Migrar las 13 tablas (clientes, visitas, revisiones, médicos, equipo, productos, formularios, campañas, deliveries, utilización, empresas, ficha de empresa, auditoría)
+- [x] T2.1 `components/ui/data-table.tsx`: envoltorio de la `<table>` existente con scroll propio y fundido, ancho mínimo, primera columna fija al desplazar y filas más altas en táctil (sin menú "⋯": las acciones ya miden 44 px tras T3)
+- [x] T2.2 Envueltas las 16 tablas de 13 ficheros (clientes, médicos, formularios, revisiones, equipo, auditoría, agenda de reservas, destinatarios de campañas, comunicaciones, utilización, empresas, usuarios de empresa, 3 de analítica); columnas secundarias ocultas por debajo de `lg` (Alta en clientes; DNI y Nº colegiado en médicos; IP en auditoría)
 - [ ] T2.3 Clientes: vista en tarjetas en `< lg` con conmutador recordado (según D2; Fase B)
 
 ## T3. Táctil

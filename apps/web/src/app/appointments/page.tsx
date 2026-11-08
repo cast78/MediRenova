@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useFeatures } from "@/lib/use-features";
 import { LockedModule } from "@/components/locked-module";
@@ -1967,6 +1968,7 @@ function DayLista({ appts, onManage, onAskConfirm }: { appts: Appointment[]; onM
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <DataTable minWidth={640}>
       <table className="w-full text-sm">
         <thead className="bg-gray-50 text-gray-400 text-xs">
           <tr>
@@ -2052,6 +2054,7 @@ function DayLista({ appts, onManage, onAskConfirm }: { appts: Appointment[]; onM
           })}
         </tbody>
       </table>
+      </DataTable>
       {clientId && <ClientInfoModal customerId={clientId} onClose={() => setClientId(null)} />}
       {noteAppt && <NoteModal name={noteAppt.name} note={noteAppt.note} onClose={() => setNoteAppt(null)} />}
     </div>

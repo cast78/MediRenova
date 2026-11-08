@@ -2,6 +2,7 @@
 
 // Bandeja global de comunicaciones (Configuración → Comunicaciones): KPIs del
 // periodo, filtros y tabla de todos los avisos de la clínica (crm-mensajeria).
+import { DataTable } from "@/components/ui/data-table";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
@@ -113,7 +114,8 @@ export function CommunicationsOutbox() {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <DataTable minWidth={720}>
         <table className="w-full text-[13px] border-collapse">
           <thead>
             <tr className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
@@ -153,6 +155,7 @@ export function CommunicationsOutbox() {
             })}
           </tbody>
         </table>
+        </DataTable>
       </div>
     </div>
   );
