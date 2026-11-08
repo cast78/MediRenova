@@ -1,5 +1,6 @@
 "use client";
 
+import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -381,14 +382,14 @@ export default function RevisionsPage() {
 
       {/* View tabs (izq) · filtro de sala (der, misma posición que Reservas/Visitas) */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+        <TabsScroller>
           {views.map((v) => (
-            <button key={v.key} onClick={() => setView(v.key)}
+            <button key={v.key} role="tab" aria-selected={view === v.key} onClick={() => setView(v.key)}
               className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${view === v.key ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>
               {v.label}
             </button>
           ))}
-        </div>
+        </TabsScroller>
         <div className="ml-auto"><RoomSelect roomCenters={roomCenters} value={roomFilter} onChange={setRoomFilter} /></div>
       </div>
 

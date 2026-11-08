@@ -1,5 +1,6 @@
 "use client";
 
+import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/page-header";
 import { CommunicationsOutbox } from "@/components/communications-outbox";
@@ -514,17 +515,17 @@ export default function SettingsPage() {
       </div>
 
       {/* Pestañas */}
-      <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit max-w-full overflow-x-auto">
+      <TabsScroller className="mb-5">
         {TABS.map((t) => {
           const Icon = t.icon;
           return (
-            <button key={t.key} onClick={() => setTab(t.key)}
+            <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md font-medium transition-colors whitespace-nowrap ${tab === t.key ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>
               <Icon className="w-4 h-4" />{t.label}
             </button>
           );
         })}
-      </div>
+      </TabsScroller>
 
       {/* Empresa */}
       {tab === "empresa" && empresa && (

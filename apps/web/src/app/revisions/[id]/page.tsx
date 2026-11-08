@@ -204,7 +204,7 @@ function AttachmentThumb({
       {canDelete && (
         <button
           onClick={() => onDelete(att.id)}
-          className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 hover-none:opacity-100 touch:w-7 touch:h-7 touch:text-sm touch-exempt transition-opacity"
           aria-label="Eliminar adjunto"
         >
           ×

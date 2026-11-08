@@ -134,7 +134,7 @@ function SortableSection({ section, onToggle, patientExpanded, onExpand, onToggl
 
 function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={`relative w-8 h-[18px] rounded-full transition-colors ${on ? "bg-blue-600" : "bg-gray-300"}`} aria-pressed={on}>
+    <button onClick={onClick} type="button" role="switch" aria-checked={on} className={`relative w-8 h-[18px] rounded-full transition-colors ${on ? "bg-blue-600" : "bg-gray-300"}`}>
       <span className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all ${on ? "right-0.5" : "left-0.5"}`} />
     </button>
   );

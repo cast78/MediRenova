@@ -4,6 +4,7 @@
 // la API /analytics/* (sin lógica de métrica en cliente). Filtros persistidos en la
 // URL; resumen orientado a decisión (KPIs + alertas + comparación de periodo);
 // vistas de embudo, ocupación/saturación, médicos, comparativa y volumen; export CSV.
+import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -426,14 +427,14 @@ function AnaliticaInner({ mod }: { mod: Mod }) {
       {/* Pestañas de vista. overflow-y-hidden evita la barra de scroll vertical
           fantasma que Windows dibuja (overflow-x:auto fuerza overflow-y:auto y las
           pestañas sobresalen ~1px por el subrayado). */}
-      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto overflow-y-hidden">
+      <TabsScroller variant="underline">
         {views.map((v) => (
-          <button key={v.id} onClick={() => setView(v.id)}
+          <button key={v.id} role="tab" aria-selected={view === v.id} onClick={() => setView(v.id)}
             className={`px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors ${view === v.id ? "border-blue-600 text-blue-700 font-medium" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
             {v.label}
           </button>
         ))}
-      </div>
+      </TabsScroller>
 
       {view === "resumen" && (mod === "captacion"
         ? <ResumenCaptacion f={f} onGoTo={setView} />

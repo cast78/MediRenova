@@ -1,5 +1,6 @@
 "use client";
 
+import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -503,14 +504,14 @@ export default function ProductsPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1 w-fit">
+      <TabsScroller className="mb-5">
         {(["all", "active", "inactive"] as const).map((f) => (
-          <button key={f} onClick={() => setFilter(f)}
+          <button key={f} role="tab" aria-selected={filter === f} onClick={() => setFilter(f)}
             className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${filter === f ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>
             {f === "all" ? "Todos" : f === "active" ? "Activos" : "Inactivos"}
           </button>
         ))}
-      </div>
+      </TabsScroller>
 
       {isLoading && <div className="bg-white rounded-xl border border-gray-200 px-4 py-10 text-center text-gray-400">Cargando...</div>}
       {!isLoading && visible.length === 0 && (

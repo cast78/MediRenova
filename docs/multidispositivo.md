@@ -22,9 +22,12 @@ La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de
 ## Convenciones de código (Fase A)
 
 - Variantes Tailwind `touch:` (`pointer: coarse`) y `hover-none:` (`hover: none`), definidas en `tailwind.config.mjs`.
-- `globals.css` aplica bajo `pointer: coarse`: altura mínima de 44 px en botones, pestañas, selects, campos y áreas de texto; texto de 16 px en campos (evita el zoom de Safari); checkboxes y radios de 20 px; sin resalte azul de iOS al tocar. Un control concreto se excluye con la clase `touch-exempt`.
+- `globals.css` aplica bajo `pointer: coarse`: altura mínima de 44 px en botones, pestañas, selects, campos y áreas de texto; checkboxes y radios de 20 px; sin resalte azul de iOS al tocar. Un control concreto se excluye con la clase `touch-exempt`. El texto de 16 px en campos (evita el zoom de Safari al enfocar) se aplica **solo en teléfonos** (táctil y < 768 px): en iPad y Windows ese zoom no existe y las tablets mantienen 14 px.
+- Botones de solo icono (`<button><Icon/></button>`): en táctil miden al menos 44×44 px con icono de 20 px, por una regla global (`button:has(> svg:only-child)`). No hace falta tocar el componente; si uno debe quedar pequeño, `touch-exempt`.
+- Interruptores (toggles): siempre `role="switch"` + `aria-checked`. Conservan su tamaño visual (la regla de 44 px no los estira) y ganan el objetivo táctil con un área invisible alrededor (`[role="switch"]::before`); el botón debe ser `relative`.
 - Una acción que en escritorio aparece al pasar el ratón (`opacity-0 group-hover:opacity-100`) lleva además `hover-none:opacity-100` para que en táctil sea visible siempre.
-- Un tooltip (`title`) nunca es el único canal de una información: va acompañado de etiqueta visible o se abre al tocar.
+- Un tooltip (`title`) nunca es el único canal de una información: va acompañado de etiqueta visible (p. ej. `<span className="hidden touch:inline">Editar</span>`) o se abre al tocar.
+- Filas de pestañas: siempre con `<TabsScroller variant="pills" | "underline">` (`components/ui/tabs-scroller.tsx`) y pestañas con `role="tab"` y `aria-selected`. En escritorio se ve igual; si no cabe, se desplaza en horizontal con fundido en los bordes y trae la activa a la vista. Las pestañas obtienen los 44 px táctiles por `[role="tab"]`.
 - El contenedor principal usa `h-dvh`, no `h-screen` (en Safari de iPad `100vh` incluye la barra del navegador).
 - `viewport` con `viewport-fit=cover` en `app/layout.tsx`.
 - Tablas: siempre dentro de un contenedor con `overflow-x-auto` y primera columna fija (`DataTable`, T2).

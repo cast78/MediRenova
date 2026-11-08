@@ -42,19 +42,13 @@
    Va FUERA de @layer a propósito: así se emite después de las utilidades de
    Tailwind y gana a `text-sm`/`h-8` en los campos (misma especificidad, va después). */
 @media (pointer: coarse) {
-  button:not(.touch-exempt),
+  button:not(.touch-exempt):not([role="switch"]),
   [role="button"]:not(.touch-exempt),
   [role="tab"]:not(.touch-exempt),
   select:not(.touch-exempt),
   textarea:not(.touch-exempt),
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not(.touch-exempt) {
     min-height: 44px;
-  }
-  /* `:not(.touch-exempt)` también sube la especificidad por encima de `text-sm`. */
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not(.touch-exempt),
-  select:not(.touch-exempt),
-  textarea:not(.touch-exempt) {
-    font-size: max(1rem, 1em);
   }
   input[type="checkbox"],
   input[type="radio"] {
@@ -65,5 +59,36 @@
   button,
   [role="button"] {
     -webkit-tap-highlight-color: transparent;
+  }
+  /* Interruptores (role="switch"): conservan su tamaño visual (32×18) y ganan el
+     objetivo de 44 px con un área invisible alrededor; el botón ya es `relative`. */
+  [role="switch"]::before {
+    content: "";
+    position: absolute;
+    inset: -13px -8px;
+  }
+  /* Botones de solo icono (T3.1): la altura ya es 44 px; aquí el ancho y un icono
+     de 20 px, para que el objetivo sea cuadrado y no una franja de 24 px. */
+  button:has(> svg:only-child):not(.touch-exempt) {
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  button:has(> svg:only-child):not(.touch-exempt) > svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+}
+
+/* Solo teléfonos (táctil y < 768 px): texto de 16 px en los campos para que Safari
+   de iPhone no haga zoom al enfocarlos. En iPad y en Windows ese zoom no existe, así
+   que las tablets conservan el tamaño de texto normal (14 px) con los 44 px de alto.
+   `:not(.touch-exempt)` también sube la especificidad por encima de `text-sm`. */
+@media (pointer: coarse) and (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not(.touch-exempt),
+  select:not(.touch-exempt),
+  textarea:not(.touch-exempt) {
+    font-size: max(1rem, 1em);
   }
 }

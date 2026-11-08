@@ -1,5 +1,6 @@
 "use client";
 
+import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -306,11 +307,11 @@ export default function UtilizationPage() {
       </div>
 
       {/* Sub-pestañas Timeline / Lista */}
-      <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
+      <TabsScroller className="mb-4">
         {([["lista", "Lista"], ["timeline", "Timeline"], ["mapa", "Mapa de calor"]] as const).map(([t, l]) => (
-          <button key={t} onClick={() => setTab(t)} className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${tab === t ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>{l}</button>
+          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${tab === t ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>{l}</button>
         ))}
-      </div>
+      </TabsScroller>
 
       {isLoading ? (
         <p className="text-sm text-gray-400">Cargando…</p>

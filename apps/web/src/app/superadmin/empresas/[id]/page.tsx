@@ -4,6 +4,7 @@
 // Licencia · Actividad · Usuarios · Centros · Auditoría. El cambio de plan pasa
 // por un diálogo de confirmación; prueba, límite, activa y excepciones se guardan
 // con "Guardar". El formulario se rellena con la respuesta del PATCH.
+import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -147,13 +148,13 @@ export default function EmpresaPage() {
       <p className="text-sm text-gray-500">{t.slug} · {t.timezone ?? "—"} · {t.centers.filter((c) => c.active).length} centro{t.centers.filter((c) => c.active).length === 1 ? "" : "s"} · {t.usersCount} usuario{t.usersCount === 1 ? "" : "s"} · {t.customersCount} paciente{t.customersCount === 1 ? "" : "s"} · alta {fmtDay(t.createdAt)}{t.admin ? ` · admin: ${t.admin.name} (${t.admin.email})` : ""}</p>
 
       {/* Pestañas */}
-      <div className="flex gap-1 border-b border-gray-200 flex-wrap">
+      <TabsScroller variant="underline">
         {tabs.map((x) => (
-          <button key={x.k} type="button" onClick={() => setTab(x.k)} className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors inline-flex items-center gap-1.5 ${tab === x.k ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+          <button key={x.k} type="button" role="tab" aria-selected={tab === x.k} onClick={() => setTab(x.k)} className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors inline-flex items-center gap-1.5 ${tab === x.k ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
             {x.label}{x.n != null && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">{x.n}</span>}
           </button>
         ))}
-      </div>
+      </TabsScroller>
 
       {tab === "licencia" && (
         <div className="grid lg:grid-cols-[1fr_340px] gap-4 items-start">

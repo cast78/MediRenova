@@ -1,5 +1,6 @@
 "use client";
 
+import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useState, useEffect, useMemo } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useFeatures } from "@/lib/use-features";
@@ -119,14 +120,14 @@ function CampaignsInner() {
       </div>
 
       {/* Sub-vistas — fila propia bajo el encabezado */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-5">
+      <TabsScroller className="mb-5">
         {([["campaigns", "Campañas"], ["templates", "Plantillas"], ["segments", "Segmentos"]] as const).map(([t, l]) => (
-          <button key={t} onClick={() => setTab(t)}
+          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
             className={`px-5 py-1.5 text-sm rounded-md font-medium transition-colors ${tab === t ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>
             {l}
           </button>
         ))}
-      </div>
+      </TabsScroller>
 
       {!isAdmin ? (
         <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-4">
@@ -546,11 +547,12 @@ function SegmentCard({ segment, names, onEdit, confirming, onAskDelete, onConfir
       </div>
 
       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 justify-end">
-        <button onClick={onEdit} title="Editar" aria-label="Editar" className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700"><Pencil className="w-4 h-4" /></button>
+        {/* En táctil no hay tooltip: la etiqueta se muestra junto al icono (T3.4). */}
+        <button onClick={onEdit} title="Editar" aria-label="Editar" className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 inline-flex items-center gap-1.5 touch:px-3"><Pencil className="w-4 h-4" /><span className="hidden touch:inline text-xs font-medium">Editar</span></button>
         {confirming ? (
           <button onClick={onConfirmDelete} disabled={deleting} className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50">Confirmar</button>
         ) : (
-          <button onClick={onAskDelete} title="Borrar" aria-label="Borrar" className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+          <button onClick={onAskDelete} title="Borrar" aria-label="Borrar" className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 hover:text-red-600 inline-flex items-center gap-1.5 touch:px-3"><Trash2 className="w-4 h-4" /><span className="hidden touch:inline text-xs font-medium">Borrar</span></button>
         )}
       </div>
     </div>

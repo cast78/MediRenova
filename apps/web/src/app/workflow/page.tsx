@@ -293,7 +293,7 @@ function WorkflowInner() {
               <span className="inline-flex items-center gap-2 font-medium text-gray-900 min-w-0"><Package className="w-4 h-4 text-gray-400 shrink-0" /><span className="truncate">{r.product.name}</span></span>
               <div className="flex items-center gap-2.5 shrink-0">
                 <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${r.active ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>{r.active ? "Activa" : "Inactiva"}</span>
-                <button onClick={() => toggle.mutate(r)} disabled={toggle.isPending} aria-label={r.active ? "Desactivar" : "Activar"} className={`relative w-8 h-[18px] rounded-full transition-colors ${r.active ? "bg-blue-600" : "bg-gray-300"}`}>
+                <button onClick={() => toggle.mutate(r)} disabled={toggle.isPending} role="switch" aria-checked={r.active} aria-label={r.active ? "Desactivar" : "Activar"} className={`relative w-8 h-[18px] rounded-full transition-colors ${r.active ? "bg-blue-600" : "bg-gray-300"}`}>
                   <span className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all ${r.active ? "right-0.5" : "left-0.5"}`} />
                 </button>
                 <button onClick={() => setEditRule(r)} title="Editar" aria-label="Editar" className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700"><Pencil className="w-4 h-4" /></button>
