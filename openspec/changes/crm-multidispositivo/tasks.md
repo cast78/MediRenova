@@ -8,30 +8,31 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 
 ## T0. Fundamentos
 
-- [ ] T0.1 `tailwind.config`: variantes `touch` (`pointer: coarse`) y `hover-none` (`hover: none`)
-- [ ] T0.2 `globals.css`: reglas táctiles globales (min-height 44 px en controles y filas, 16 px en inputs, tap-highlight, scroll-padding)
-- [ ] T0.3 `app/layout.tsx`: `viewport` con `viewport-fit=cover`; `100dvh` en contenedores a pantalla completa
-- [ ] T0.4 `docs/multidispositivo.md` (borrador): dispositivos, breakpoints, convenciones
+- [x] T0.1 `tailwind.config`: variantes `touch` (`pointer: coarse`) y `hover-none` (`hover: none`)
+- [x] T0.2 `globals.css`: reglas táctiles globales (min-height 44 px en controles y filas, 16 px en inputs, tap-highlight, scroll-padding)
+- [x] T0.3 `app/layout.tsx`: `viewport` con `viewport-fit=cover`; `100dvh` en contenedores a pantalla completa
+- [x] T0.4 `docs/multidispositivo.md` (borrador): dispositivos, breakpoints, convenciones
 
 ## T2. Tablas y listas
 
-- [ ] T2.1 `components/ui/data-table.tsx`: scroll propio con fundido, primera columna fija, `priority` por columna, fila pulsable, menú "⋯" por fila en táctil
-- [ ] T2.2 Migrar las 13 tablas (clientes, visitas, revisiones, médicos, equipo, productos, formularios, campañas, deliveries, utilización, empresas, ficha de empresa, auditoría)
+- [x] T2.1 `components/ui/data-table.tsx`: envoltorio de la `<table>` existente con scroll propio y fundido, ancho mínimo, primera columna fija al desplazar y filas más altas en táctil (sin menú "⋯": las acciones ya miden 44 px tras T3)
+- [x] T2.2 Envueltas las 16 tablas de 13 ficheros (clientes, médicos, formularios, revisiones, equipo, auditoría, agenda de reservas, destinatarios de campañas, comunicaciones, utilización, empresas, usuarios de empresa, 3 de analítica); columnas secundarias ocultas por debajo de `lg` (Alta en clientes; DNI y Nº colegiado en médicos; IP en auditoría)
 - [ ] T2.3 Clientes: vista en tarjetas en `< lg` con conmutador recordado (según D2; Fase B)
 
 ## T3. Táctil
 
-- [ ] T3.1 Alturas y tamaños de icono bajo `touch:` en botones, chips, pestañas e iconos de acción
-- [ ] T3.2 Sustituir acciones solo-hover por `hover-none:opacity-100` (analítica, reservas, clientes, revisiones, consulta, visitas, utilización)
-- [ ] T3.3 `components/ui/tabs-scroller.tsx` (scroll-snap, fundido, activa a la vista) y aplicarlo a Reservas, Analítica, Captación, Configuración, Revisiones y ficha de empresa
-- [ ] T3.4 Tooltips como único canal → etiqueta visible o popover al tocar
+- [x] T3.1 Alturas y tamaños de icono bajo `touch:` en botones, chips, pestañas e iconos de acción
+- [x] T3.2 Sustituir acciones solo-hover por `hover-none:opacity-100` (analítica, reservas, clientes, revisiones, consulta, visitas, utilización)
+- [x] T3.3 `components/ui/tabs-scroller.tsx` (scroll-snap, fundido, activa a la vista, role=tab/aria-selected) aplicado a Reservas, Analítica/Captación, Configuración, Revisiones, Campañas, Productos, Utilización y ficha de empresa
+- [x] T3.4 Tooltips como único canal → etiqueta visible o popover al tocar
+- [x] T3.5 Pulido de controles: `RoomSelect` sin cabecera de centro (`optgroup`) cuando solo hay un centro (Visitas obliga a elegir centro; la cabecera es redundante y ocupa una línea en tablet)
 
 ## T6a. Verificación de la Fase A
 
-- [ ] T6a.1 Script: objetivos táctiles ≥ 44 px y ninguna acción solo-hover, con `pointer: coarse` emulado a 1180×820 y 1376×1032
-- [ ] T6a.2 Capturas antes/después en escritorio con ratón (1280/1440) sin diferencias
+- [x] T6a.1 Comprobación automática (script en el navegador) en 15 páginas con puntero táctil emulado: 0 controles < 44 px, 0 acciones solo-hover, 0 desbordamientos de página, 16/16 tablas dentro de `DataTable`. Nota: el navegador integrado solo emula táctil por debajo de 768 px; las reglas dependen del puntero, no de la anchura, así que el resultado vale para 1180×820 y 1376×1032 (pendiente T6a.3 en dispositivo real)
+- [x] T6a.2 Antes/después en escritorio con ratón a 1440 px: huella de tamaños de todos los botones, campos, selects y tablas en 7 páginas comparada entre `main` (build temporal en :3005) y la rama (:3000): idéntica. Las dos únicas diferencias se debían al centro seleccionado guardado en cada origen, no al código
 - [ ] T6a.3 Prueba en iPad Pro 13 y Surface Pro 10 reales: pulsación, zoom en inputs, scroll de tablas con el dedo
-- [ ] T6a.4 `docs/multidispositivo.md`: dispositivos soportados (declaración "tablet de 11" o más, en horizontal" mientras no haya Fase B)
+- [x] T6a.4 `docs/multidispositivo.md`: estado, dispositivos soportados (declaración "tablet de 11" o más, en horizontal" mientras no haya Fase B), convenciones y verificación realizada
 
 # Fase B — Disposición compacta (solo si D0 = sí)
 
@@ -80,3 +81,17 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 - [ ] D3 Semana: 7 días desplazables vs 3 días visibles
 - [ ] D4 "Añadir a pantalla de inicio" (manifest) sí/no
 - [ ] D5 Móvil en fase posterior: alcance mínimo (Agenda del día, ficha de cliente)
+
+## Punto de continuación (8/11/2026)
+
+**Estado.** Fase A implementada en `feat/crm-multidispositivo` (commits T0 `60027a4`, T3 `94888c7`, T2 `90c905e`, T3.5 `071b354`), verificada en local (T6a.1, T6a.2) y documentada. Sin PR todavía. Documentación de T6a commiteada el 9/11.
+
+**Siguiente sesión.**
+1. ~~Commit de la documentación de T6a~~ (hecho 9/11).
+2. T6a.3: el usuario prueba el preview de la rama en iPad Pro 13 (Safari) y Surface Pro 10 (Edge): botones de icono, interruptores, scroll de tablas y pestañas con el dedo, sin zoom en campos, pie del menú visible.
+3. PR única de la Fase A a `main` (CI, merge por el usuario, sincronizar rama). Reactivar Vercel Authentication en `medi-renova-api` si se desea.
+4. Decidir D0 (tablets 10–11" en vertical). Si sí: Fase B empezando por T1 Shell (raíl + cajón), en la misma rama o en `feat/crm-multidispositivo-b`.
+
+**Incidencias anotadas, fuera de este change.**
+- Sesión: el access token dura 15 min y al recargar la web vuelve al login en vez de renovar con el refresh token (visto en local de forma consistente). Revisar `apps/web/src/lib/auth-context.tsx` / `api.ts`.
+- Carpeta temporal `.claude/worktrees/tmp-main-t6a` (build de `main` para T6a.2): borrada el 8/11 tras apagar los servidores de desarrollo.

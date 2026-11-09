@@ -1,5 +1,7 @@
 "use client";
 
+import { DataTable } from "@/components/ui/data-table";
+import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useFeatures } from "@/lib/use-features";
 import { LockedModule } from "@/components/locked-module";
 
@@ -1726,13 +1728,15 @@ function AppointmentsBoard() {
       </div>
 
       {/* View tabs — fila propia bajo el encabezado (estilo píldora, como Visitas/Campañas) */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit max-w-full overflow-x-auto mb-6">
+      <TabsScroller className="mb-6">
         {(["month", "week", "day", "list", "sincerrar", "episodios", "recuperar"] as const).map((v) => {
           const labels = { month: "Mes", week: "Semana", day: "Día", list: "Agenda", sincerrar: "Sin cerrar", episodios: "Episodios", recuperar: "Recuperar" };
           const badge = v === "sincerrar" ? unclosedCount : v === "episodios" ? episodesCount : v === "recuperar" ? noShowPending : 0;
           return (
             <button
               key={v}
+              role="tab"
+              aria-selected={view === v}
               onClick={() => setView(v)}
               className={`px-5 py-1.5 text-sm rounded-md font-medium transition-colors inline-flex items-center gap-1.5 whitespace-nowrap ${
                 view === v
@@ -1747,7 +1751,7 @@ function AppointmentsBoard() {
             </button>
           );
         })}
-      </div>
+      </TabsScroller>
 
       {/* Date nav + filters row (la vista Semana lleva su propia navegación) */}
       <div className={`flex items-center gap-3 flex-wrap ${view === "week" || view === "month" ? "" : "mb-5"}`}>
@@ -1964,6 +1968,7 @@ function DayLista({ appts, onManage, onAskConfirm }: { appts: Appointment[]; onM
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <DataTable minWidth={640}>
       <table className="w-full text-sm">
         <thead className="bg-gray-50 text-gray-400 text-xs">
           <tr>
@@ -2049,6 +2054,7 @@ function DayLista({ appts, onManage, onAskConfirm }: { appts: Appointment[]; onM
           })}
         </tbody>
       </table>
+      </DataTable>
       {clientId && <ClientInfoModal customerId={clientId} onClose={() => setClientId(null)} />}
       {noteAppt && <NoteModal name={noteAppt.name} note={noteAppt.note} onClose={() => setNoteAppt(null)} />}
     </div>

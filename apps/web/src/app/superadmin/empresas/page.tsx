@@ -3,6 +3,7 @@
 // Panel de proveedor (crm-planes P4/P4b): centro de mando de empresas y licencias.
 // KPIs que filtran, columna "Atención" con orden por atención necesaria, panel
 // lateral con acciones rápidas y diálogo de confirmación de cambio de plan.
+import { DataTable } from "@/components/ui/data-table";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -270,7 +271,7 @@ export default function EmpresasPage() {
             <span>Mostrando <b className="text-gray-900">{rows.length}</b> de {m?.total ?? 0} · ordenadas por <b className="text-gray-900">atención necesaria</b></span>
             {filter !== "all" && <button type="button" onClick={() => setFilter("all")} className="ml-auto text-blue-600 font-medium hover:underline">Quitar filtro ×</button>}
           </div>
-          <div className="overflow-x-auto">
+          <DataTable minWidth={860}>
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-[11px] uppercase tracking-wide text-gray-500">
@@ -313,7 +314,7 @@ export default function EmpresasPage() {
                 })}
               </tbody>
             </table>
-          </div>
+          </DataTable>
         </section>
 
         {/* Panel lateral */}

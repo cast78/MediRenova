@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable } from "@/components/ui/data-table";
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -76,6 +77,7 @@ export default function FormsPage() {
         <Builder productId={pid} productName={activeProducts.find((p) => p.id === pid)?.name} editing={builder.editing} onClose={() => setBuilder(null)} />
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <DataTable minWidth={600}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
@@ -142,6 +144,7 @@ export default function FormsPage() {
               ))}
             </tbody>
           </table>
+          </DataTable>
         </div>
       )}
     </div>

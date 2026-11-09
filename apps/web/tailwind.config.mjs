@@ -9,6 +9,13 @@ export default {
   ],
   theme: {
     extend: {
+      // Variantes por tipo de puntero (crm-multidispositivo T0): `touch:` para
+      // pantallas táctiles y `hover-none:` para dispositivos sin hover. Son
+      // independientes de la anchura: un iPad apaisado es `lg` y a la vez `touch`.
+      screens: {
+        touch: { raw: "(pointer: coarse)" },
+        "hover-none": { raw: "(hover: none)" },
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

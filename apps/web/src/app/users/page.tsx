@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable } from "@/components/ui/data-table";
 import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -192,6 +193,7 @@ export default function UsersPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <DataTable minWidth={620}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
@@ -256,6 +258,7 @@ export default function UsersPage() {
             })}
           </tbody>
         </table>
+        </DataTable>
       </div>
     </div>
   );

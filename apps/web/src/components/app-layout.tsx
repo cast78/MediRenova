@@ -251,7 +251,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    // h-dvh (no h-screen): en Safari de iPad 100vh incluye la barra del navegador y
+    // dejaba el pie del menú fuera de la pantalla (crm-multidispositivo T0).
+    <div className="flex h-dvh bg-gray-50">
       {/* Sidebar */}
       <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">

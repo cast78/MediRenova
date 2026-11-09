@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable } from "@/components/ui/data-table";
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -150,13 +151,14 @@ export default function CustomersPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <DataTable minWidth={640}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
               <th className="text-left px-4 py-1.5 font-medium text-gray-500 text-xs uppercase tracking-wide">Cliente</th>
               <th className="text-left px-4 py-1.5 font-medium text-gray-500 text-xs uppercase tracking-wide">Email</th>
               <th className="text-left px-4 py-1.5 font-medium text-gray-500 text-xs uppercase tracking-wide">Teléfono</th>
-              <th className="text-left px-4 py-1.5 font-medium text-gray-500 text-xs uppercase tracking-wide">Alta</th>
+              <th className="text-left px-4 py-1.5 font-medium text-gray-500 text-xs uppercase tracking-wide hidden lg:table-cell">Alta</th>
               <th className="w-8" />
             </tr>
           </thead>
@@ -206,13 +208,14 @@ export default function CustomersPage() {
                       ? <span className="text-gray-600 inline-flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />{c.phone}</span>
                       : <span className="text-gray-300 inline-flex items-center gap-1.5"><PhoneOff className="w-3.5 h-3.5" />sin teléfono</span>}
                   </td>
-                  <td className="px-4 py-1.5 text-sm text-gray-500">{new Date(c.createdAt).toLocaleDateString("es-ES")}</td>
+                  <td className="px-4 py-1.5 text-sm text-gray-500 hidden lg:table-cell">{new Date(c.createdAt).toLocaleDateString("es-ES")}</td>
                   <td className="px-2 py-1.5 text-gray-300 group-hover:text-gray-500"><ChevronRight className="w-4 h-4" /></td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+        </DataTable>
 
         {data && data.meta.total > 0 && (
           <div className="flex items-center justify-between px-4 py-1.5 border-t border-gray-100">
