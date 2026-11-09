@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, LogIn, Save, Loader2, Check, Lock, Sparkles, Inbox, Flame, History } from "lucide-react";
+import { ArrowLeft, LogIn, Save, Loader2, Check, Lock, Sparkles, Inbox, Flame, History, Hash, Globe, Building2, Users, ContactRound, CalendarDays, UserCog, ArrowDownCircle } from "lucide-react";
 import { apiFetch, ApiError, setActAsTenant } from "@/lib/api";
 import { PLAN_LABEL, type PlanTier, type FeatureKey } from "@/lib/use-features";
 import { PlanChip } from "@/components/plan-chip";
@@ -134,6 +134,7 @@ export default function EmpresaPage() {
   ];
   const a = t.activity;
   const maxM = Math.max(...a.monthly, 1);
+  const activeCenters = t.centers.filter((c) => c.active).length;
 
   return (
     <div className="p-6 max-w-5xl space-y-4">
@@ -146,7 +147,19 @@ export default function EmpresaPage() {
         {!t.active && <span className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">Suspendida</span>}
         <button type="button" onClick={() => { setActAsTenant(t.id); window.location.href = "/dashboard"; }} className="ml-auto inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"><LogIn className="w-4 h-4" /> Entrar como esta empresa</button>
       </div>
-      <p className="text-sm text-gray-500">{t.slug} · {t.timezone ?? "—"} · {t.centers.filter((c) => c.active).length} centro{t.centers.filter((c) => c.active).length === 1 ? "" : "s"} · {t.usersCount} usuario{t.usersCount === 1 ? "" : "s"} · {t.customersCount} paciente{t.customersCount === 1 ? "" : "s"} · alta {fmtDay(t.createdAt)}{t.admin ? ` · admin: ${t.admin.name} (${t.admin.email})` : ""}</p>
+      {/* Resumen de la empresa: identidad (código, zona horaria, alta, admin) y
+          cifras (centros, usuarios, pacientes) como datos con icono, no texto corrido. */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-gray-500">
+        <span className="inline-flex items-center gap-1.5"><Hash className="w-3.5 h-3.5 text-gray-400" /><code className="font-mono text-xs text-gray-700 bg-gray-100 rounded px-1.5 py-0.5">{t.slug}</code></span>
+        <span className="inline-flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-gray-400" />{t.timezone ?? "—"}</span>
+        <span className="inline-flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5 text-gray-400" />alta {fmtDay(t.createdAt)}</span>
+        {t.admin && <span className="inline-flex items-center gap-1.5 min-w-0"><UserCog className="w-3.5 h-3.5 text-gray-400 shrink-0" /><span className="truncate">{t.admin.name} · <a href={`mailto:${t.admin.email}`} className="text-blue-600 hover:underline">{t.admin.email}</a></span></span>}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-gray-500 -mt-2">
+        <span className="inline-flex items-center gap-1.5" title="Centros activos"><Building2 className="w-3.5 h-3.5 text-gray-400" /><b className="font-semibold text-gray-800 tabular-nums">{activeCenters}</b> centro{activeCenters === 1 ? "" : "s"}</span>
+        <span className="inline-flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-gray-400" /><b className="font-semibold text-gray-800 tabular-nums">{t.usersCount}</b> usuario{t.usersCount === 1 ? "" : "s"}</span>
+        <span className="inline-flex items-center gap-1.5"><ContactRound className="w-3.5 h-3.5 text-gray-400" /><b className="font-semibold text-gray-800 tabular-nums">{t.customersCount}</b> paciente{t.customersCount === 1 ? "" : "s"}</span>
+      </div>
 
       {/* Pestañas */}
       <TabsScroller variant="underline">
@@ -161,24 +174,28 @@ export default function EmpresaPage() {
         <div className="grid lg:grid-cols-[1fr_340px] gap-4 items-start">
           <section className={`${CARD} space-y-4`}>
             <h2 className="font-semibold text-gray-900 flex items-center gap-2"><Sparkles className="w-4 h-4 text-blue-500" /> Licencia</h2>
-            <div className="grid sm:grid-cols-3 gap-3">
+            {/* Plan contratado (con el cambio de plan como botón secundario, no como enlace)
+                y límite de centros (dos dígitos como mucho: campo estrecho). */}
+            <div className="space-y-3">
               <div>
                 <span className="block text-xs font-medium text-gray-600 mb-1">Plan contratado</span>
-                <div className="flex items-center gap-2 h-[38px]">
+                <div className="flex items-center gap-2.5 h-[38px]">
                   <PlanChip plan={t.plan} />
                   {t.plan === "PRO"
-                    ? <button type="button" onClick={() => setDialogTo("ESSENTIAL")} className="text-xs font-semibold text-amber-700 hover:underline">Cambiar a Esencial…</button>
-                    : <button type="button" onClick={() => setDialogTo("PRO")} className="text-xs font-semibold text-blue-700 hover:underline">Pasar a Pro…</button>}
+                    ? <button type="button" onClick={() => setDialogTo("ESSENTIAL")} className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"><ArrowDownCircle className="w-3.5 h-3.5" /> Cambiar a Esencial…</button>
+                    : <button type="button" onClick={() => setDialogTo("PRO")} className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"><Sparkles className="w-3.5 h-3.5" /> Pasar a Pro…</button>}
                 </div>
               </div>
-              <label className="block"><span className="text-xs font-medium text-gray-600">Prueba Pro hasta</span>
-                <input type="date" value={form.trialUntil} onChange={(e) => setForm({ ...form, trialUntil: e.target.value })} className={FIELD} /></label>
-              <label className="block"><span className="text-xs font-medium text-gray-600">Límite de centros</span>
-                <input type="number" min={1} value={form.maxCenters} onChange={(e) => setForm({ ...form, maxCenters: e.target.value })} placeholder="sin límite" className={FIELD} /></label>
+              <label className="flex items-center gap-2 text-xs"><span className="font-medium text-gray-600">Límite de centros</span>
+                <input type="number" min={1} max={99} value={form.maxCenters} onChange={(e) => setForm({ ...form, maxCenters: e.target.value })} placeholder="∞" title="Vacío = sin límite" className="w-14 border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-700 text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <span className="text-gray-400">vacío = sin límite</span></label>
             </div>
+            {/* Prueba Pro: la fecha y los atajos en la misma fila, a la misma altura. */}
             <div className="flex items-center gap-1.5 flex-wrap text-xs">
-              <span className="text-gray-500 mr-1">Prueba rápida:</span>
+              <span className="font-medium text-gray-600 mr-1">Prueba Pro</span>
               {[14, 30, 60].map((d) => <button key={d} type="button" onClick={() => setTrialDays(d)} className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 font-semibold hover:bg-gray-50">{d} días</button>)}
+              <label className="inline-flex items-center gap-1.5 ml-1"><span className="text-gray-500">hasta</span>
+                <input type="date" value={form.trialUntil} onChange={(e) => setForm({ ...form, trialUntil: e.target.value })} className="h-[30px] border border-gray-300 rounded-lg px-2 py-0 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></label>
               {form.trialUntil && <button type="button" onClick={() => setTrialDays(null)} className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 font-semibold hover:bg-gray-50">Quitar prueba</button>}
             </div>
             <div className="flex items-center gap-2 flex-wrap bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-gray-600">
