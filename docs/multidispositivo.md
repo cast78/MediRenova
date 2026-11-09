@@ -1,6 +1,6 @@
 # MediRenova en tablet y pantalla táctil
 
-Borrador (crm-multidispositivo, Fase A). Se completa al cerrar cada fase.
+Estado: **Fase A implementada** (táctil y tablas; `crm-multidispositivo`). La Fase B (disposición compacta para tablets de 10–11" en vertical) está diseñada y pendiente de decisión.
 
 ## Dispositivos soportados
 
@@ -38,7 +38,13 @@ La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de
 2. **Preview de Vercel**: cada push a la rama genera una URL de preview; abrirla en el iPad o la Surface reales (misma API y datos que producción; este cambio no toca la API).
 3. **Escritorio con ratón**: nada debe cambiar. Comparar capturas a 1440 px antes y después.
 
+## Verificación realizada (Fase A, 8/11/2026)
+
+- **Táctil emulado**, 15 páginas (dashboard, reservas mes/día, visitas, revisiones, clientes, analítica, campañas, workflow, centros, productos, formularios, médicos, equipo, configuración): 0 controles por debajo de 44 px (excluidos interruptores, que tienen área de pulsación propia), 0 acciones solo-hover, 0 desbordamientos horizontales de página, 16 de 16 tablas dentro de `DataTable`.
+- **Escritorio con ratón a 1440 px**: huella de tamaños de todos los botones, campos, selects y tablas de 7 páginas comparada entre `main` y la rama: idéntica.
+- **Pendiente en dispositivo real** (iPad Pro 13 con Safari, Surface Pro 10 con Edge): pulsación de botones e interruptores, desplazamiento de tablas y pestañas con el dedo, que el teclado en pantalla no tape los campos, y que el pie del menú ("Cerrar sesión") quede visible en Safari.
+
 ## Pendiente
 
-- Fase A: T2 (`DataTable` en las 13 tablas) y T3 (alturas por componente, hover visible, `TabsScroller`, tooltips).
 - Fase B (si se decide soportar tablets de 10–11" en vertical): raíl y cajón, hojas a pantalla completa, Semana compacta, filtros de analítica en hoja, formularios a una columna.
+- Vista en tarjetas para Clientes en tablet (T2.3, Fase B).
