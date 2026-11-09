@@ -38,11 +38,11 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 
 ## T1. Shell
 
-- [ ] T1.1 `app-layout.tsx`: raíl de 64 px por debajo de `lg` (logo, iconos con badge y candado, avatar); menú completo a partir de `lg`
-- [ ] T1.2 Cajón (280 px, overlay, cierre al tocar fuera o navegar) con secciones, etiquetas, "Tu plan", usuario y cerrar sesión
-- [ ] T1.3 `context-bar.tsx` compacta: botón ☰, nombre truncado, selector de centro
-- [ ] T1.4 `SuperadminBar` a una línea en `< lg`; modo proveedor con raíl
-- [ ] T1.5 Verificar en 768/820/1024/1180 y en escritorio sin cambios
+- [x] T1.1 `app-layout.tsx`: raíl de 64 px por debajo de `lg` (logo, iconos de 48 px con badge y candado, avatar); el aside de 224 px solo a partir de `lg` (`hidden lg:flex`, mismo marcado que antes)
+- [x] T1.2 Cajón (280 px, overlay, `role=dialog`; se cierra al tocar fuera, al navegar, con Escape y al pasar a ≥ lg) con secciones, etiquetas, "Tu plan", usuario y cerrar sesión; se abre desde ☰, el logo y el avatar del raíl. Enlaces del menú a 44 px en táctil (`touch:py-3`)
+- [x] T1.3 `context-bar.tsx` compacta en `< lg`: botón ☰ de 44 px, `px-3`, nombre de empresa truncado, selector de centro; en `≥ lg` sin cambios
+- [x] T1.4 `SuperadminBar` a una línea en `< lg` (textos largos a `title`, "Volver" y "Ver como Pro" cortos); barra del modo proveedor con ☰ y sin email en `< lg`; el raíl muestra Empresas · Peticiones con badge. **Pendiente de validar por el usuario** (sin credenciales de superadmin en local)
+- [x] T1.5 Verificado en local (9/11): 768×1024 y 820×1180 (raíl 64 px, barra compacta, 13 páginas sin desbordamiento de página, módulo activo marcado), 767 táctil (0 controles < 44 px en raíl y cajón, pie del cajón visible, nav con scroll propio), 1024×768 y 1440×900 (aside de 224 px, sin raíl ni ☰, barra con `px-6`, enlaces de 36 px como antes). Pendiente: 1180×820 en iPad real (T6b.3)
 
 ## T4. Reservas
 

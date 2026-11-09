@@ -1,6 +1,6 @@
 # MediRenova en tablet y pantalla táctil
 
-Estado: **Fase A implementada** (táctil y tablas; `crm-multidispositivo`). La Fase B (disposición compacta para tablets de 10–11" en vertical) está diseñada y pendiente de decisión.
+Estado: **Fase A en producción** (táctil y tablas; `crm-multidispositivo`, PR #22). **Fase B en curso** (disposición compacta para tablets de 10–11" en vertical): T1 Shell hecho; faltan T5 modales, T4 Reservas, T4b Analítica/Captación.
 
 ## Dispositivos soportados
 
@@ -9,7 +9,7 @@ Estado: **Fase A implementada** (táctil y tablas; `crm-multidispositivo`). La F
 | Ordenador (≥ 1024 px) | — | completo (vista de escritorio) |
 | Tablet de 11" o más (iPad Pro 11/13, iPad Air, Surface Pro) | horizontal | completo: vista de escritorio con controles táctiles |
 | iPad Pro 13" | vertical | completo (1032 px CSS, recibe la vista de escritorio) |
-| Tablet de 10–11" | vertical | **usable sin garantía de disposición** hasta la Fase B (menú de 224 px fijo, tablas con scroll) |
+| Tablet de 10–11" | vertical | **en curso (Fase B)**: menú en raíl de 64 px con cajón; faltan hojas a pantalla completa, Semana compacta y filtros de analítica |
 | Teléfono | — | solo las páginas públicas (reserva, confirmación, portal del paciente) |
 
 La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de Tailwind (1024 px CSS). Los píxeles CSS no son los físicos: un iPad Pro 13" apaisado mide 1376 px CSS; una Surface Pro 10 al 200 %, 1440 px.
@@ -31,6 +31,11 @@ La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de
 - El contenedor principal usa `h-dvh`, no `h-screen` (en Safari de iPad `100vh` incluye la barra del navegador).
 - `viewport` con `viewport-fit=cover` en `app/layout.tsx`.
 - Tablas: siempre envueltas en `<DataTable minWidth={N}>` (`components/ui/data-table.tsx`), que da scroll horizontal propio con fundido, ancho mínimo, primera columna fija al desplazar y filas más altas en táctil, sin tocar el marcado de la tabla. Columnas prescindibles con `hidden lg:table-cell` en `th` y `td` (solo se ocultan por debajo de 1024 px).
+
+## Convenciones de código (Fase B)
+
+- **Shell** (`components/app-layout.tsx`): por debajo de `lg` el menú es un raíl de 64 px (iconos de 48 px, badge, candado, avatar) y el menú completo vive en un cajón de 280 px (`role="dialog"`) que se abre desde ☰, el logo o el avatar y se cierra al navegar, al tocar fuera, con Escape o al pasar a escritorio. El aside de 224 px de escritorio es el mismo marcado de siempre con `hidden lg:flex`. Las piezas (marca, navegación, pie de usuario) se comparten entre aside y cajón.
+- **Barras superiores** (`context-bar.tsx`, `SuperadminBar`, barra de proveedor): `px-3 lg:px-6`, botón ☰ `lg:hidden`, textos largos a `title` con versión corta `lg:hidden`, nombres con `truncate`.
 
 ## Cómo probar
 
