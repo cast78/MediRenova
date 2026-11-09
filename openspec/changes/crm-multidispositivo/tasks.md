@@ -61,10 +61,10 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 
 ## T5. Modales y formularios
 
-- [ ] T5.1 `components/ui/modal.tsx`: diálogo en `≥ lg`, hoja a pantalla completa en `< lg` (cabecera y pie fijos, `100dvh`)
-- [ ] T5.2 Migrar los 21 modales (incluidos `ConfirmDialog`, `PlanChangeDialog`, nuevo cliente, walk-in, info de cliente, panel lateral de empresas)
-- [ ] T5.3 Consulta (`revisions/[id]`), ficha de cliente y alta de empresa: una columna en `< lg`, firma a todo el ancho
-- [ ] T5.4 Revisar los 36 grids sin breakpoint (`grid-cols-1 md:grid-cols-2`)
+- [x] T5.1 `components/ui/modal.tsx`: en `≥ lg` el diálogo centrado de siempre (`size` xs–5xl, `z`, `backdrop`, `padding`, `locked`); en `< lg` los tamaños lg o más son hoja a pantalla completa (`100dvh`, clases `sheet-*` en `globals.css`, porque las variantes `max-lg:` no existen con pantallas `raw`). Dos modos: `title`/`footer` propios (cabecera y pie fijos, el botón de enviar se asocia al `<form>` por `id`) o contenido tal cual con las filas marcadas `sheet-head` / `sheet-foot` (pegajosas dentro del cuerpo con scroll). Cierre por fondo, X y Escape
+- [x] T5.2 Migrados los 37 diálogos (`fixed inset-0`) a `Modal`: 36 por envoltorio mecánico (script con seguimiento de profundidad de `<div>`, sin tocar el contenido) y `NewCustomerModal` con `title`/`footer`. 14 hojas con `sheet-head`/`sheet-foot`: nueva reserva (3 pasos), aviso de episodios, plantilla/segmento/campaña/resultados, centro, sala, médico, producto, regla de workflow, nueva empresa, foto de consulta, editor de certificado, constructor de formularios. Confirmaciones (xs–md) y `PlanChangeDialog` siguen centradas en tablet. Fuera: el panel de filtros de analítica (T4b.1) y los dos cierres de menú `fixed inset-0 z-10`
+- [x] T5.3 Revisado: consulta, ficha de cliente y alta de empresa ya van a una columna por debajo de `lg` (`lg:grid-cols-[1fr_340px]`, `sm:grid-cols-2` en pares de campos); `SignaturePad` ya es `w-full` + `touch-none`. Sin cambios necesarios
+- [x] T5.4 Revisados los 56 grids sin breakpoint: los `grid-cols-2` (40) caben en tablet vertical (≥ 330 px por columna) y solo afectarían a móvil (fuera de alcance); cambiados los que no caben: filas de 4 indicadores en Revisiones, Productos y Campañas (`grid-cols-2 lg:grid-cols-4`), editor de certificado y constructor de formularios a una columna en `< lg` (`grid-cols-1 lg:grid-cols-[…]`)
 
 ## T6b. Verificación de la Fase B
 

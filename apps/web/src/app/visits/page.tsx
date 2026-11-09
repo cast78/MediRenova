@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -75,8 +76,7 @@ function VisitTraceModal({ v, onClose }: { v: Visit; onClose: () => void }) {
   const room = v.currentRoom?.name ?? v.appointment?.room?.name ?? "—";
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white shadow-xl max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} size="md" padding="">
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100">
           <div className="min-w-0">
             <button onClick={() => setShowClient(true)} title="Ver ficha del cliente" className="group/name inline-flex items-center gap-1.5 text-left min-w-0">
@@ -115,8 +115,7 @@ function VisitTraceModal({ v, onClose }: { v: Visit; onClose: () => void }) {
             </ol>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
     {showClient && <ClientInfoModal customerId={v.customer.id} onClose={() => setShowClient(false)} />}
     </>
   );
@@ -275,8 +274,7 @@ function VisitsBoard() {
       )}
       {traceVisit && <VisitTraceModal v={traceVisit} onClose={() => setTraceVisit(null)} />}
       {roomWarn && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setRoomWarn(null)}>
-          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <Modal onClose={() => setRoomWarn(null)} size="sm" padding="p-5">
             <div className="flex items-center gap-2 mb-2 text-amber-700">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4M12 17h.01" /></svg>
               <h2 className="text-base font-semibold text-gray-900">
@@ -292,8 +290,7 @@ function VisitsBoard() {
               <button onClick={() => setRoomWarn(null)} className="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
               <button onClick={() => { patch.mutate({ id: roomWarn.visitId, body: { status: "IN_PROGRESS", currentRoomId: roomWarn.roomId } }); setRoomWarn(null); }} className="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700">Enviar a {roomWarn.roomName}</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {actionErr && <p className="text-sm text-red-600 mb-3">{actionErr}</p>}

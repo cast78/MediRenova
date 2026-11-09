@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 // Ficha rápida del cliente (contacto + consentimientos), compartida por Reservas y
 // Visitas. Se abre al pulsar el nombre del cliente en la Lista/Agenda.
 import { useRouter } from "next/navigation";
@@ -47,8 +48,7 @@ export function ClientInfoModal({ customerId, onClose }: { customerId: string; o
   });
   const name = c ? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim() || "Sin nombre" : "";
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} size="sm" padding="p-5">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className={`w-10 h-10 rounded-full ${avatarColor(name || "?")} flex items-center justify-center text-white text-sm font-semibold shrink-0`}>{getInitials(c?.firstName ?? null, c?.lastName ?? null)}</div>
@@ -109,7 +109,6 @@ export function ClientInfoModal({ customerId, onClose }: { customerId: string; o
         ) : (
           <p className="text-sm text-gray-400 py-4">No se pudo cargar el cliente.</p>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

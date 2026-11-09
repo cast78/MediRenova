@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -17,15 +18,13 @@ function ProductFormModal({ productId, productName, onClose }: { productId: stri
   });
   const editing = forms ? (forms.find((f) => f.isActive) ?? forms[0] ?? null) : null;
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto">
-      <div className="w-full max-w-4xl my-4">
+    <Modal size="4xl" padding="">
         {isLoading ? (
           <div className="bg-white rounded-xl p-8 text-center text-gray-400">Cargando formulario...</div>
         ) : (
           <Builder productId={productId} productName={productName} editing={editing} onClose={onClose} />
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -244,10 +243,9 @@ function ProductModal({ product, onClose }: { product?: Product; onClose: () => 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+    <Modal size="lg">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl">×</button>
-        <h2 className="text-lg font-semibold text-gray-900 mb-5">{isEdit ? "Editar producto" : "Nuevo producto"}</h2>
+        <h2 className="sheet-head text-lg font-semibold text-gray-900 mb-5">{isEdit ? "Editar producto" : "Nuevo producto"}</h2>
 
         <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-4">
           {/* Nombre */}
@@ -327,15 +325,14 @@ function ProductModal({ product, onClose }: { product?: Product; onClose: () => 
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3 pt-1">
+          <div className="sheet-foot flex justify-end gap-3 pt-1">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
             <button type="submit" disabled={mutation.isPending} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
               {mutation.isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear producto"}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -484,7 +481,7 @@ export default function ProductsPage() {
       </div>
 
       {/* KPI bar */}
-      <div className="grid grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
           <p className="text-xs text-gray-400 font-medium mb-0.5">Total productos</p>
           <p className="text-2xl font-bold text-gray-800">{(products ?? []).length}</p>

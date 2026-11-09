@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 // Panel de proveedor (crm-planes P4/P4b): centro de mando de empresas y licencias.
 // KPIs que filtran, columna "Atención" con orden por atención necesaria, panel
 // lateral con acciones rápidas y diálogo de confirmación de cambio de plan.
@@ -397,9 +398,8 @@ function NewTenantModal({ onClose, onCreated }: { onClose: () => void; onCreated
   const slugAuto = () => setF((s) => ({ ...s, slug: s.slug || s.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") }));
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
+    <Modal onClose={onClose} size="lg">
+        <div className="sheet-head flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Nueva empresa</h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Cerrar"><X className="w-5 h-5" /></button>
         </div>
@@ -420,12 +420,11 @@ function NewTenantModal({ onClose, onCreated }: { onClose: () => void; onCreated
             <label className="block"><span className="text-xs font-medium text-gray-600">Contraseña temporal</span><input type="password" value={f.password} onChange={set("password")} required minLength={8} className={FIELD} /></label>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="sheet-foot flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
             <button type="submit" disabled={create.isPending} className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">{create.isPending && <Loader2 className="w-4 h-4 animate-spin" />} Crear empresa</button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

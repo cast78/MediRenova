@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -164,10 +165,9 @@ function CenterModal({ center, onClose }: { center?: Center; onClose: () => void
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+    <Modal size="lg">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl">×</button>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">{isEdit ? "Editar centro" : "Nuevo centro"}</h2>
+        <h2 className="sheet-head text-lg font-semibold text-gray-900 mb-4">{isEdit ? "Editar centro" : "Nuevo centro"}</h2>
         <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">{field("Nombre", "name", true)}{field("CIF / NIF", "cif", false, "text", "B12345674")}</div>
           {field("Dirección", "address", true)}
@@ -178,15 +178,14 @@ function CenterModal({ center, onClose }: { center?: Center; onClose: () => void
             {listField("Emails", "emails", "email", "centro@ejemplo.es")}
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="sheet-foot flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
             <button type="submit" disabled={mutation.isPending} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
               {mutation.isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear centro"}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -268,10 +267,9 @@ function RoomModal({ centerId, room, onClose }: { centerId: string; room?: Room;
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+    <Modal size="2xl">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl">×</button>
-        <div className="flex items-center gap-2.5 mb-4">
+        <div className="sheet-head flex items-center gap-2.5 mb-4">
           <span className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><DoorOpen className="w-5 h-5 text-blue-600" /></span>
           <div>
             <h2 className="text-lg font-semibold text-gray-900 leading-tight">{isEdit ? "Editar sala" : "Nueva sala"}</h2>
@@ -333,15 +331,14 @@ function RoomModal({ centerId, room, onClose }: { centerId: string; room?: Room;
             </div>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3 pt-1">
+          <div className="sheet-foot flex justify-end gap-3 pt-1">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
             <button type="submit" disabled={mutation.isPending} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
               {mutation.isPending ? "Guardando..." : isEdit ? "Guardar" : "Crear sala"}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -349,8 +346,7 @@ function RoomModal({ centerId, room, onClose }: { centerId: string; room?: Room;
 
 function DeleteConfirm({ label, onConfirm, onCancel, loading, error }: { label: string; onConfirm: () => void; onCancel: () => void; loading: boolean; error?: string | null }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
+    <Modal size="sm">
         <h3 className="font-semibold text-gray-900 mb-2">¿Eliminar {label}?</h3>
         <p className="text-sm text-gray-500 mb-5">Esta acción no se puede deshacer.</p>
         {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-4">{error}</p>}
@@ -360,8 +356,7 @@ function DeleteConfirm({ label, onConfirm, onCancel, loading, error }: { label: 
             {loading ? "Eliminando..." : "Eliminar"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -384,8 +379,7 @@ function DeactivateRoomModal({ center, room, onClose }: { center: Center; room: 
   const hasImpact = future > 0 || inProgress > 0;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
+    <Modal size="sm">
         <h3 className="font-semibold text-gray-900 mb-2">¿Desactivar la sala &laquo;{room.name}&raquo;?</h3>
         {isLoading ? (
           <p className="text-sm text-gray-400 mb-5">Comprobando citas y pacientes…</p>
@@ -409,8 +403,7 @@ function DeactivateRoomModal({ center, room, onClose }: { center: Center; room: 
             {mutation.isPending ? "Desactivando..." : hasImpact ? "Desactivar de todas formas" : "Desactivar sala"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -434,8 +427,7 @@ function DeleteRoomModal({ center, room, onClose }: { center: Center; room: Room
   const blocked = totalAppts > 0 || inProgress > 0;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
+    <Modal size="sm">
         <h3 className="font-semibold text-gray-900 mb-2">¿Eliminar la sala &laquo;{room.name}&raquo;?</h3>
         {isLoading ? (
           <p className="text-sm text-gray-400 mb-5">Comprobando citas y pacientes…</p>
@@ -460,8 +452,7 @@ function DeleteRoomModal({ center, room, onClose }: { center: Center; room: Room
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -485,8 +476,7 @@ function HolidaysModal({ center, onClose }: { center: Center; onClose: () => voi
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <Modal size="md">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl">×</button>
         <h2 className="text-lg font-semibold text-gray-900 mb-1">Festivos</h2>
         <p className="text-sm text-gray-500 mb-4">{center.name} · días sin disponibilidad</p>
@@ -519,8 +509,7 @@ function HolidaysModal({ center, onClose }: { center: Center; onClose: () => voi
             {mutation.isPending ? "Guardando..." : "Guardar"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

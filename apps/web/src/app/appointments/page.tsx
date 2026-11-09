@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useFeatures } from "@/lib/use-features";
@@ -287,7 +288,7 @@ function NewAppointmentModal({ onClose, onManageExisting }: { onClose: () => voi
   const progressSubtitle = priorParts.join(" · "); // vacío en el paso 1
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <Modal size="lg">
       {showNewCustomer && (
         <NewCustomerModal
           onClose={() => setShowNewCustomer(false)}
@@ -298,7 +299,6 @@ function NewAppointmentModal({ onClose, onManageExisting }: { onClose: () => voi
           }}
         />
       )}
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl leading-none"
@@ -306,7 +306,7 @@ function NewAppointmentModal({ onClose, onManageExisting }: { onClose: () => voi
         >
           ×
         </button>
-        <div className="flex items-center justify-between mb-1">
+        <div className="sheet-head flex items-center justify-between mb-1">
           <h2 className="text-lg font-semibold text-gray-900">Nueva reserva</h2>
           <div className="flex gap-1 text-xs text-gray-400 mr-6">
             {([1, 2, 3] as const).map((s) => (
@@ -389,7 +389,7 @@ function NewAppointmentModal({ onClose, onManageExisting }: { onClose: () => voi
                 </button>
               </div>
             )}
-            <div className="flex justify-end pt-2">
+            <div className="sheet-foot flex justify-end pt-2">
               <button
                 onClick={() => setStep(2)}
                 disabled={!customerId || !productId || !!blockingBooking}
@@ -440,7 +440,7 @@ function NewAppointmentModal({ onClose, onManageExisting }: { onClose: () => voi
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <div className="flex justify-between pt-2">
+            <div className="sheet-foot flex justify-between pt-2">
               <button onClick={() => setStep(1)} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">← Atrás</button>
               <button
                 onClick={() => setStep(3)}
@@ -488,7 +488,7 @@ function NewAppointmentModal({ onClose, onManageExisting }: { onClose: () => voi
               />
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <div className="flex justify-between pt-2">
+            <div className="sheet-foot flex justify-between pt-2">
               <button onClick={() => setStep(2)} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">← Atrás</button>
               <button
                 onClick={() => mutation.mutate()}
@@ -500,8 +500,7 @@ function NewAppointmentModal({ onClose, onManageExisting }: { onClose: () => voi
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -602,8 +601,7 @@ function AppointmentCard({ appt, onManage, onAskConfirm, isPast }: {
 // Popup con la nota de la reserva (compartido por Agenda y Lista).
 function NoteModal({ name, note, onClose }: { name: string; note: string; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} size="sm" padding="p-5">
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-2 text-gray-900">
             <FileText className="w-4 h-4 text-amber-500" />
@@ -613,8 +611,7 @@ function NoteModal({ name, note, onClose }: { name: string; note: string; onClos
         </div>
         <p className="text-xs text-gray-400 mb-2">{name}</p>
         <p className="text-sm text-gray-700 whitespace-pre-wrap rounded-lg bg-amber-50 border border-amber-100 p-3">{note}</p>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1037,8 +1034,7 @@ function EpisodeRow({ ep, role, onOpen, onChanged }: { ep: Episode; role: string
 
     {/* Confirmaciones */}
     {confirm && (
-      <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onClick={() => !busy && setConfirm(null)}>
-        <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+      <Modal onClose={() => setConfirm(null)} locked={!!busy} size="md" z={80} padding="p-5">
           {confirm === "left" && (
             <>
               <h3 className="font-bold text-gray-900 mb-1">Marcar “Se fue”</h3>
@@ -1069,8 +1065,7 @@ function EpisodeRow({ ep, role, onOpen, onChanged }: { ep: Episode; role: string
               {busy ? "…" : confirm === "left" ? "Marcar se fue" : confirm === "void" ? "Anular" : "Cerrar episodio"}
             </button>
           </div>
-        </div>
-      </div>
+      </Modal>
     )}
     {showClient && ep.customer?.id && <ClientInfoModal customerId={ep.customer.id} onClose={() => setShowClient(false)} />}
     </>
@@ -1097,9 +1092,8 @@ function EpisodeAlertModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onClick={() => !sending && onClose()}>
-      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3">
+    <Modal onClose={onClose} locked={sending} size="lg" z={80} padding="p-5">
+        <div className="sheet-head flex items-center justify-between mb-3">
           <h3 className="font-bold text-gray-900">Enviar aviso de episodios sin cerrar</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
         </div>
@@ -1128,14 +1122,13 @@ function EpisodeAlertModal({ onClose }: { onClose: () => void }) {
             {err && <p className="text-xs text-red-600 mb-3">{err}</p>}
             <p className="text-[11px] text-gray-400 mb-3">El envío real requiere el email (Resend) configurado en el servidor. En local solo se registra un log.</p>
 
-            <div className="flex justify-end gap-2">
+            <div className="sheet-foot flex justify-end gap-2">
               <button disabled={sending} onClick={onClose} className="text-sm px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100 font-medium">Cancelar</button>
               <button disabled={sending || nothing || noRecipients} onClick={send} className="text-sm px-3 py-1.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50">{sending ? "Enviando…" : "Enviar ahora"}</button>
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1189,8 +1182,7 @@ function ConfirmRequestModal({ data, onClose }: { data: ConfirmLinkData; onClose
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} size="md" z={60} padding="p-5">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-semibold text-gray-900">Pedir confirmación</h2>
           <button onClick={onClose} aria-label="Cerrar" className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
@@ -1208,8 +1200,7 @@ function ConfirmRequestModal({ data, onClose }: { data: ConfirmLinkData; onClose
           </button>
         </div>
         <p className="text-[11px] text-gray-400 mt-3">Solo se habilitan los canales que el cliente ha aceptado (RGPD).</p>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1333,9 +1324,8 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
   return (
     <>
     {showClient && appt.customer?.id && <ClientInfoModal customerId={appt.customer.id} onClose={() => setShowClient(false)} />}
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <Modal onClose={onClose} size="md" padding="p-5">
       {confirmLink && <ConfirmRequestModal data={confirmLink} onClose={() => setConfirmLink(null)} />}
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="min-w-0">
             {appt.customer?.id ? (
@@ -1536,8 +1526,7 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
             <button onClick={() => setMode("actions")} className="mt-3 text-xs text-gray-400 hover:text-gray-600 hover:underline">← Volver a acciones</button>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
     </>
   );
 }
@@ -2228,8 +2217,7 @@ function RecoveryActionModal({ row, mode, onClose, onDone }: { row: NoShowRow; m
     } finally { setBusy(false); }
   }
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} size="sm" z={60} padding="p-5">
         <div className="flex items-start justify-between gap-3 mb-1">
           <div className="flex items-center gap-2.5">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isCall ? "bg-blue-50 text-blue-600" : "bg-red-50 text-red-600"}`}>
@@ -2248,8 +2236,7 @@ function RecoveryActionModal({ row, mode, onClose, onDone }: { row: NoShowRow; m
           {isCall ? <PhoneCall className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
           {busy ? "Guardando…" : isCall ? "Registrar y cerrar" : "Descartar y cerrar"}
         </button>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -2433,8 +2420,7 @@ function InviteRebookModal({ row, onClose, onContacted }: { row: NoShowRow; onCl
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} size="md" z={60} padding="p-5">
         <div className="flex items-start justify-between gap-3 mb-1">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0"><Send className="w-5 h-5" /></div>
@@ -2459,7 +2445,6 @@ function InviteRebookModal({ row, onClose, onContacted }: { row: NoShowRow; onCl
         )}
         <button onClick={() => markContacted()} className="w-full mt-3 text-sm px-3 py-2.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium inline-flex items-center justify-center gap-2"><CheckCircle2 className="w-4 h-4" /> Marcar como contactado y cerrar</button>
         <p className="text-[11px] text-gray-400 mt-3">Solo se habilitan los canales que el cliente ha aceptado (RGPD).</p>
-      </div>
-    </div>
+    </Modal>
   );
 }

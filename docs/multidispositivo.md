@@ -1,6 +1,6 @@
 # MediRenova en tablet y pantalla táctil
 
-Estado: **Fase A en producción** (táctil y tablas; `crm-multidispositivo`, PR #22). **Fase B en curso** (disposición compacta para tablets de 10–11" en vertical): T1 Shell hecho; faltan T5 modales, T4 Reservas, T4b Analítica/Captación.
+Estado: **Fase A en producción** (táctil y tablas; `crm-multidispositivo`, PR #22). **Fase B en curso** (disposición compacta para tablets de 10–11" en vertical): T1 Shell y T5 diálogos hechos; faltan T4 Reservas y T4b Analítica/Captación.
 
 ## Dispositivos soportados
 
@@ -9,7 +9,7 @@ Estado: **Fase A en producción** (táctil y tablas; `crm-multidispositivo`, PR 
 | Ordenador (≥ 1024 px) | — | completo (vista de escritorio) |
 | Tablet de 11" o más (iPad Pro 11/13, iPad Air, Surface Pro) | horizontal | completo: vista de escritorio con controles táctiles |
 | iPad Pro 13" | vertical | completo (1032 px CSS, recibe la vista de escritorio) |
-| Tablet de 10–11" | vertical | **en curso (Fase B)**: menú en raíl de 64 px con cajón; faltan hojas a pantalla completa, Semana compacta y filtros de analítica |
+| Tablet de 10–11" | vertical | **en curso (Fase B)**: menú en raíl de 64 px con cajón y diálogos como hoja a pantalla completa; faltan Semana compacta y filtros de analítica |
 | Teléfono | — | solo las páginas públicas (reserva, confirmación, portal del paciente) |
 
 La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de Tailwind (1024 px CSS). Los píxeles CSS no son los físicos: un iPad Pro 13" apaisado mide 1376 px CSS; una Surface Pro 10 al 200 %, 1440 px.
@@ -36,6 +36,9 @@ La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de
 
 - **Shell** (`components/app-layout.tsx`): por debajo de `lg` el menú es un raíl de 64 px (iconos de 48 px, badge, candado, avatar) y el menú completo vive en un cajón de 280 px (`role="dialog"`) que se abre desde ☰, el logo o el avatar y se cierra al navegar, al tocar fuera, con Escape o al pasar a escritorio. El aside de 224 px de escritorio es el mismo marcado de siempre con `hidden lg:flex`. Las piezas (marca, navegación, pie de usuario) se comparten entre aside y cajón.
 - **Barras superiores** (`context-bar.tsx`, `SuperadminBar`, barra de proveedor): `px-3 lg:px-6`, botón ☰ `lg:hidden`, textos largos a `title` con versión corta `lg:hidden`, nombres con `truncate`.
+- **Diálogos**: siempre `<Modal>` (`components/ui/modal.tsx`), nunca un `fixed inset-0` a mano. En escritorio es el diálogo centrado (`size` xs–5xl). Por debajo de `lg`, los de tamaño lg o más son **hoja a pantalla completa**; los pequeños (confirmaciones) siguen centrados; se fuerza con `sheet`. Dos formas de tener cabecera y pie fijos en la hoja: pasar `title` y `footer` al `Modal` (el botón de enviar va en el pie, fuera del `<form>`, asociado con `form="id"`), o dejar el contenido como está y marcar la fila del título con `sheet-head` y la de acciones con `sheet-foot` (clases de `globals.css`, pegajosas dentro del cuerpo con scroll, solo activas por debajo de `lg`). El cuerpo de una hoja lleva 1 rem de relleno, que esas clases compensan. Cierre por fondo, X y Escape; `locked` lo desactiva mientras se guarda.
+- **Variantes `max-lg:`**: no están disponibles porque `screens` incluye pantallas `raw` (`touch`, `hover-none`); lo que deba aplicarse solo por debajo de `lg` va en `globals.css` bajo `@media (max-width: 1023.98px)` o se expresa en positivo (`grid-cols-1 lg:grid-cols-2`).
+- **Rejillas**: las de 2 columnas caben en tablet vertical; las filas de 3–4 indicadores pasan a `grid-cols-2 lg:grid-cols-4`; editores a dos paneles, a una columna bajo `lg`.
 
 ## Cómo probar
 
@@ -51,5 +54,5 @@ La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de
 
 ## Pendiente
 
-- Fase B (si se decide soportar tablets de 10–11" en vertical): raíl y cajón, hojas a pantalla completa, Semana compacta, filtros de analítica en hoja, formularios a una columna.
+- Fase B (en curso): Semana compacta y filtros de analítica en hoja (T4, T4b); verificación final T6b.
 - Vista en tarjetas para Clientes en tablet (T2.3, Fase B).

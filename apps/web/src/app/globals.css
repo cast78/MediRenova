@@ -92,3 +92,36 @@
     font-size: max(1rem, 1em);
   }
 }
+
+/* Hojas a pantalla completa (crm-multidispositivo T5): por debajo de lg, la fila de
+   título y la fila de acciones de un diálogo se quedan fijas mientras el cuerpo se
+   desplaza. Solo se marcan en los diálogos que son hoja (lg o más); el cuerpo del
+   Modal lleva 1rem de relleno en ese modo, que es lo que compensan los márgenes. */
+@media (max-width: 1023.98px) {
+  .sheet-overlay { padding: 0; }
+  .sheet-panel {
+    position: fixed; inset: 0; height: 100dvh;
+    max-height: none; max-width: none; border-radius: 0; box-shadow: none;
+  }
+  .sheet-body { padding: 1rem; }
+  .sheet-panel .modal-foot { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+  /* Botón × absoluto de los formularios antiguos: en la hoja queda fijo arriba a la
+     derecha, por encima de la cabecera pegajosa, y no se va al desplazar. */
+  .sheet-panel .sheet-body > button.absolute {
+    position: fixed; top: 0.375rem; right: 0.5rem; z-index: 3;
+    width: 2.75rem; height: 2.75rem; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 0.5rem; font-size: 1.5rem; line-height: 1;
+  }
+  /* …y la cabecera de esos formularios deja sitio al botón para no quedar debajo. */
+  .sheet-panel .sheet-body:has(> button.absolute) > .sheet-head { padding-right: 3.75rem; }
+  .sheet-head {
+    position: sticky; top: -1rem; z-index: 2; /* -1rem: el límite pegajoso es la caja de contenido, dentro del relleno */
+    margin: -1rem -1rem 1rem; padding: 0.75rem 1rem;
+    background: #fff; border-bottom: 1px solid #f3f4f6;
+  }
+  .sheet-foot {
+    position: sticky; bottom: -1rem; z-index: 2;
+    margin: 1rem -1rem -1rem; padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+    background: #fff; border-top: 1px solid #f3f4f6;
+  }
+}

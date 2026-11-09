@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 // Diálogo de confirmación de cambio de plan (crm-planes P4b): resume qué gana o
 // pierde la clínica, la facturación resultante y cierra la petición abierta.
 // El motivo es obligatorio: queda en la auditoría.
@@ -37,8 +38,7 @@ export function PlanChangeDialog({ tenant, to, catalog, onClose, onDone }: {
   });
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-900/45 flex items-center justify-center p-4" onClick={onClose}>
-      <div role="dialog" aria-labelledby="plan-dialog-title" className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} size="lg" sheet={false} bodyClassName="space-y-4">
         <div className="flex items-center gap-3">
           <span className={`w-10 h-10 rounded-xl inline-flex items-center justify-center ${toPro ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}>{toPro ? <Sparkles className="w-5 h-5" /> : <Lock className="w-5 h-5" />}</span>
           <h2 id="plan-dialog-title" className="text-lg font-semibold text-gray-900 flex-1">{toPro ? `Pasar ${tenant.name} a Pro` : `Cambiar ${tenant.name} a Esencial`}</h2>
@@ -74,7 +74,6 @@ export function PlanChangeDialog({ tenant, to, catalog, onClose, onDone }: {
             {save.isPending && <Loader2 className="w-4 h-4 animate-spin" />} {toPro ? "Confirmar: pasar a Pro" : "Confirmar: cambiar a Esencial"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

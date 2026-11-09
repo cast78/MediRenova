@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 // Nueva visita (walk-in) = crear la reserva sobre la marcha (source WALK_IN, hora =
 // ahora) + check-in inmediato. Compartido por las vistas "En vivo" y "Utilización".
 import { useState } from "react";
@@ -68,14 +69,13 @@ export function WalkInModal({ centerId, onClose, onDone }: { centerId: string; o
   const canSubmit = !!customerId && !!productId && !!roomId && !submit.isPending;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <Modal onClose={onClose} size="md" padding="p-5">
       {showNewCustomer && (
         <NewCustomerModal
           onClose={() => setShowNewCustomer(false)}
           onCreated={(c) => { setChosen(c); setCustomerId(c.id); setSearch(`${c.firstName ?? ""} ${c.lastName ?? ""}`.trim()); }}
         />
       )}
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Nueva visita (walk-in)</h2>
           <button onClick={onClose} aria-label="Cerrar" className="text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg p-1">
@@ -152,7 +152,6 @@ export function WalkInModal({ centerId, onClose, onDone }: { centerId: string; o
         >
           {submit.isPending ? "Registrando…" : "Registrar llegada"}
         </button>
-      </div>
-    </div>
+    </Modal>
   );
 }

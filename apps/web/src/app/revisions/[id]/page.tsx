@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
@@ -247,9 +248,8 @@ function CameraCapture({ onCapture, onClose }: { onCapture: (blob: Blob) => void
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl p-4 w-full max-w-lg">
-        <div className="flex items-center justify-between mb-3">
+    <Modal size="lg" backdrop="dark" padding="p-4">
+        <div className="sheet-head flex items-center justify-between mb-3">
           <h3 className="font-medium text-gray-900">Hacer foto</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
         </div>
@@ -259,14 +259,13 @@ function CameraCapture({ onCapture, onClose }: { onCapture: (blob: Blob) => void
           <>
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video ref={videoRef} playsInline className="w-full rounded-lg bg-black aspect-video object-cover" />
-            <div className="flex justify-end gap-2 mt-3">
+            <div className="sheet-foot flex justify-end gap-2 mt-3">
               <button onClick={onClose} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">Cancelar</button>
               <button onClick={snap} disabled={!ready} className="text-sm px-4 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Capturar</button>
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 

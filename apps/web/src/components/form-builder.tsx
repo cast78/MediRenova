@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -273,7 +274,7 @@ export function Builder({ productId, productName, editing, onClose }: { productI
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <div className="flex items-start justify-between gap-4 mb-4">
+      <div className="sheet-head flex items-start justify-between gap-4 mb-4">
         <div className="min-w-0 flex-1">
           <p className="text-[11px] text-gray-400 mb-0.5 truncate">Formulario de exploración{productName ? ` · ${productName}` : ""}</p>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del formulario"
@@ -304,7 +305,7 @@ export function Builder({ productId, productName, editing, onClose }: { productI
       {preview ? (
         <div className="max-w-md"><FormPreview fields={fields} /></div>
       ) : (
-        <div className="grid grid-cols-[1fr_280px] gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5">
           {/* Canvas */}
           <div>
             <div className="flex flex-wrap gap-1.5 mb-3">
@@ -365,15 +366,13 @@ export function Builder({ productId, productName, editing, onClose }: { productI
       )}
 
       {pendingTpl && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setPendingTpl(null)}>
-          <div className="w-full max-w-xs rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <Modal onClose={() => setPendingTpl(null)} size="xs" z={60} padding="p-5">
             <p className="text-sm text-gray-700 mb-4">Esto reemplaza los <span className="font-medium">{fields.length}</span> campos actuales por la plantilla «<span className="font-medium">{pendingTpl}</span>». ¿Continuar?</p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setPendingTpl(null)} className="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
               <button onClick={() => { loadTemplate(pendingTpl); setPendingTpl(null); }} className="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700">Reemplazar</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useState, useEffect, useMemo } from "react";
@@ -285,9 +286,8 @@ function TemplateModal({ template, onClose, onSaved }: { template: Template | nu
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start gap-3 mb-4">
+    <Modal onClose={onClose} size="2xl">
+        <div className="sheet-head flex items-start gap-3 mb-4">
           <span className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><FileText className="w-5 h-5 text-blue-600" /></span>
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-semibold text-gray-900 leading-tight">{template ? "Editar plantilla" : "Nueva plantilla"}</h2>
@@ -372,15 +372,14 @@ function TemplateModal({ template, onClose, onSaved }: { template: Template | nu
           </label>
         </div>
 
-        <div className="flex gap-2 mt-5">
+        <div className="sheet-foot flex gap-2 mt-5">
           <button onClick={() => save.mutate()} disabled={!canSave}
             className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
             {save.isPending ? "Guardando…" : template ? "Guardar cambios" : "Crear plantilla"}
           </button>
           <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-gray-200 text-gray-600 text-sm hover:bg-gray-50">Cancelar</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -607,9 +606,8 @@ function SegmentModal({ segment, onClose, onSaved }: { segment: Segment | null; 
   const EXPIRY = [30, 60, 90, 365];
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start gap-3 mb-4">
+    <Modal onClose={onClose} size="2xl">
+        <div className="sheet-head flex items-start gap-3 mb-4">
           <span className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><Users className="w-5 h-5 text-blue-600" /></span>
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-semibold text-gray-900 leading-tight">{segment ? "Editar segmento" : "Nuevo segmento"}</h2>
@@ -732,15 +730,14 @@ function SegmentModal({ segment, onClose, onSaved }: { segment: Segment | null; 
           </div>
         </div>
 
-        <div className="flex gap-2 mt-5">
+        <div className="sheet-foot flex gap-2 mt-5">
           <button onClick={() => save.mutate()} disabled={!name.trim() || save.isPending}
             className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
             {save.isPending ? "Guardando…" : segment ? "Guardar cambios" : "Crear segmento"}
           </button>
           <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-gray-200 text-gray-600 text-sm hover:bg-gray-50">Cancelar</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -957,9 +954,8 @@ function CampaignModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   const canSave = name.trim() && templateId && segmentId && (!scheduled || scheduledAt) && !save.isPending;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start gap-3 mb-4">
+    <Modal onClose={onClose} size="lg">
+        <div className="sheet-head flex items-start gap-3 mb-4">
           <span className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><Send className="w-5 h-5 text-blue-600" /></span>
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-semibold text-gray-900 leading-tight">Nueva campaña</h2>
@@ -1012,15 +1008,14 @@ function CampaignModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
           </div>
         </div>
 
-        <div className="flex gap-2 mt-5">
+        <div className="sheet-foot flex gap-2 mt-5">
           <button onClick={() => save.mutate()} disabled={!canSave}
             className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
             {save.isPending ? "Creando…" : "Crear campaña"}
           </button>
           <button onClick={onClose} className="px-4 py-2.5 rounded-lg border border-gray-200 text-gray-600 text-sm hover:bg-gray-50">Cancelar</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1028,9 +1023,8 @@ function CampaignDetailModal({ id, onClose }: { id: string; onClose: () => void 
   const { data, isLoading } = useQuery<CampaignDetail>({ queryKey: ["campaign", id], queryFn: () => apiFetch<CampaignDetail>(`/campaigns/${id}`) });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
+    <Modal onClose={onClose} size="lg">
+        <div className="sheet-head flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">{data?.name ?? "Resultados"}</h2>
           <button onClick={onClose} aria-label="Cerrar" className="text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg p-1">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
@@ -1041,7 +1035,7 @@ function CampaignDetailModal({ id, onClose }: { id: string; onClose: () => void 
           <p className="text-sm text-gray-400">Cargando…</p>
         ) : (
           <>
-            <div className="grid grid-cols-4 gap-2 mb-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
               <Stat label="Total" value={data.totalCount} />
               <Stat label="Enviados" value={data.sentCount} cls="text-emerald-700" />
               <Stat label="Omitidos" value={data.skippedCount} cls="text-gray-500" />
@@ -1068,8 +1062,7 @@ function CampaignDetailModal({ id, onClose }: { id: string; onClose: () => void 
             {data.recipients.length >= 300 && <p className="text-[11px] text-gray-400 mt-2">Mostrando los primeros 300 destinatarios.</p>}
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 

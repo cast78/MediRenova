@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -862,8 +863,7 @@ function RenewalReminderModal({ data, onClose }: { data: RenewalReminder; onClos
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} size="md" padding="p-5">
         <h3 className="text-base font-semibold text-gray-900">Recordar renovación</h3>
         <p className="text-xs text-gray-500 mt-1">{data.productName} · caduca {fmtShort(data.expiryDate)}</p>
 
@@ -893,7 +893,6 @@ function RenewalReminderModal({ data, onClose }: { data: RenewalReminder; onClos
         </div>
 
         <button onClick={onClose} className="mt-3 w-full rounded-lg px-3 py-2 text-sm text-gray-500 hover:bg-gray-50">Cerrar</button>
-      </div>
-    </div>
+    </Modal>
   );
 }
