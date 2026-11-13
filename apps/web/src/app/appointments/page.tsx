@@ -3,6 +3,7 @@
 import { Modal } from "@/components/ui/modal";
 import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
+import { Select } from "@/components/ui/select";
 import { useFeatures } from "@/lib/use-features";
 import { LockedModule } from "@/components/locked-module";
 
@@ -18,7 +19,7 @@ import { RoomSelect } from "@/components/room-select";
 import { ClientInfoModal } from "@/components/client-info-modal";
 import { estadoDelCiclo, type CycleState } from "@/lib/cycle-state";
 import { arrivalInfo } from "@/lib/flow";
-import { ArrowUpRight, Phone, MessageCircle, Mail, MapPin, FileText, Calendar, Building2, DoorOpen, UserCircle, CalendarPlus, Send, X, RotateCcw, ArrowRight, CheckCircle2, CalendarX, PhoneCall, Bot, PencilLine, Copy, Trash2 } from "lucide-react";
+import { ArrowUpRight, Phone, MessageCircle, Mail, MapPin, FileText, Calendar, Building2, DoorOpen, UserCircle, CalendarPlus, Send, X, RotateCcw, ArrowRight, CheckCircle2, CalendarX, PhoneCall, Bot, PencilLine, Copy, Trash2, Package } from "lucide-react";
 
 // Origen de la reserva (solo destacamos los no-recepción, que son la mayoría).
 const ORIGIN: Record<string, string> = { WALK_IN: "mostrador", MAGIC_LINK: "online", API: "API", BACKOFFICE: "recepción" };
@@ -108,6 +109,16 @@ const STATUS_COLORS: Record<string, string> = {
   CANCELLED: "bg-red-50 text-red-600 border-red-200",
   NO_SHOW: "bg-orange-50 text-orange-600 border-orange-200",
   RESCHEDULED: "bg-slate-100 text-slate-700 border-slate-200",
+};
+
+// Franja lateral (borde izquierdo) de las cajas de la vista Semana, por estado.
+const STATUS_STRIPE: Record<string, string> = {
+  PENDING: "border-l-amber-400",
+  CONFIRMED: "border-l-emerald-500",
+  ATTENDED: "border-l-violet-500",
+  CANCELLED: "border-l-red-400",
+  NO_SHOW: "border-l-orange-400",
+  RESCHEDULED: "border-l-slate-400",
 };
 
 const STATUS_DOT: Record<string, string> = {
@@ -368,14 +379,17 @@ function NewAppointmentModal({ onClose, onManageExisting }: { onClose: () => voi
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Producto *</label>
-              <select
+              <Select
                 value={productId}
-                onChange={(e) => { setProductId(e.target.value); setRoomId(""); setSlot(""); }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">— Selecciona producto —</option>
-                {products?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+                onChange={(v) => { setProductId(v); setRoomId(""); setSlot(""); }}
+                options={(products ?? []).map((p) => ({ value: p.id, label: p.name }))}
+                placeholder="— Selecciona producto —"
+                title="Producto"
+                subtitle="Tipo de reconocimiento"
+                headerIcon={<Package className="w-5 h-5" />}
+                optionIcon={<Package className="w-4 h-4" />}
+                className="w-full"
+              />
             </div>
             {blockingBooking && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
@@ -406,26 +420,32 @@ function NewAppointmentModal({ onClose, onManageExisting }: { onClose: () => voi
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Centro *</label>
-              <select
+              <Select
                 value={centerId}
-                onChange={(e) => { setCenterId(e.target.value); setRoomId(""); setSlot(""); }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">— Selecciona un centro —</option>
-                {centers?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+                onChange={(v) => { setCenterId(v); setRoomId(""); setSlot(""); }}
+                options={(centers ?? []).map((c) => ({ value: c.id, label: c.name }))}
+                placeholder="— Selecciona un centro —"
+                title="Centro"
+                subtitle="Dónde se hará el reconocimiento"
+                headerIcon={<Building2 className="w-5 h-5" />}
+                optionIcon={<Building2 className="w-4 h-4" />}
+                className="w-full"
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Sala *</label>
-              <select
+              <Select
                 value={roomId}
-                onChange={(e) => { setRoomId(e.target.value); setSlot(""); }}
+                onChange={(v) => { setRoomId(v); setSlot(""); }}
                 disabled={!centerId}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
-              >
-                <option value="">— Selecciona sala —</option>
-                {selectedCenter?.rooms.filter((r) => r.active !== false && roomOffersProduct(r.allowedProductIds, productId)).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
+                options={(selectedCenter?.rooms ?? []).filter((r) => r.active !== false && roomOffersProduct(r.allowedProductIds, productId)).map((r) => ({ value: r.id, label: r.name }))}
+                placeholder="— Selecciona sala —"
+                title="Sala"
+                subtitle={selectedCenter ? `Salas de ${selectedCenter.name} que ofrecen el producto` : "Elige antes un centro"}
+                headerIcon={<DoorOpen className="w-5 h-5" />}
+                optionIcon={<DoorOpen className="w-4 h-4" />}
+                className="w-full"
+              />
               {centerId && selectedCenter && selectedCenter.rooms.filter((r) => r.active !== false && roomOffersProduct(r.allowedProductIds, productId)).length === 0 && (
                 <p className="mt-1 text-xs text-amber-600">Ninguna sala de este centro ofrece el producto seleccionado.</p>
               )}
@@ -627,6 +647,26 @@ const KPI_MATCH = (status: string, f: string): boolean =>
 // Fila de KPIs = filtro de estado clicable, común a todas las vistas. Los números
 // son del alcance completo (centro+sala), no cambian al filtrar; al pulsar una
 // tarjeta, la vista muestra solo ese estado. La tarjeta activa se resalta.
+// Leyenda de estados (crm-multidispositivo T4.1). En escritorio es la fila de
+// siempre; por debajo de lg se pliega tras un botón "Leyenda" para no ocupar dos
+// líneas (la fila padre es flex-wrap: desplegada ocupa una línea propia).
+function StatusLegend({ statuses, square = false }: { statuses: readonly (keyof typeof STATUS_DOT)[]; square?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const dot = square ? "w-3 h-3 rounded-sm" : "w-2.5 h-2.5 rounded-full";
+  const items = statuses.map((s) => (
+    <span key={s} className="flex items-center gap-1.5"><span className={`${dot} ${STATUS_DOT[s]}`} />{STATUS_LABELS[s]}</span>
+  ));
+  return (
+    <>
+      <div className="hidden lg:contents">{items}</div>
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="lg:hidden inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 -ml-2 rounded-lg hover:bg-gray-100">
+        Leyenda <span className={`transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
+      </button>
+      {open && <div className="basis-full flex flex-wrap items-center gap-x-4 gap-y-1.5 lg:hidden">{items}</div>}
+    </>
+  );
+}
+
 function KpiRow({ appts, active, onPick }: { appts: Appointment[]; active: string; onPick: (f: string) => void }) {
   const cards = [
     { key: "", label: "Total", value: appts.length, color: "text-gray-800", ring: "ring-gray-300", bg: "bg-white border-gray-200" },
@@ -728,13 +768,60 @@ function WeekView({ anchor, onAnchor, onOpenAppt, centers, roomFilter, onRoomCha
   const allH = [...offeredH, ...offeredH.map((h) => h + 1), ...apptH];
   const gStart = allH.length ? Math.max(0, Math.min(...allH)) : WK_START;
   const gEnd = allH.length ? Math.min(24, Math.max(gStart + 1, Math.max(...allH))) : WK_END;
-  const pxMin = 1.1; // panel más alto → reservas menos apretadas
+  // Escala vertical: 1,1 px/min en escritorio; 1,6 en tablet vertical (< lg), donde
+  // una cita de 30 min pasa a medir 48 px (dos líneas de texto y altura táctil).
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const apply = () => setCompact(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  const pxMin = compact ? 1.6 : 1.1;
 
   const hours: number[] = [];
   for (let h = gStart; h <= gEnd; h++) hours.push(h);
   const gridH = (gEnd - gStart) * 60 * pxMin;
   const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
   const label = `${days[0]!.getDate()} ${WK_MONTHS[days[0]!.getMonth()]} – ${days[6]!.getDate()} ${WK_MONTHS[days[6]!.getMonth()]} ${days[6]!.getFullYear()}`;
+
+  // Tablet vertical (crm-multidispositivo T4.3, D3): el calendario es un único
+  // contenedor con scroll en los dos ejes, como una app de calendario: 7 columnas de
+  // 160 px (clase wk-days) con ajuste por día, cabecera de días pegajosa arriba y
+  // columna de horas pegajosa a la izquierda. En < lg se limita al alto disponible
+  // de la pantalla; al abrir empieza en lunes y se sitúa en la hora actual.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [maxH, setMaxH] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!compact || !el) { setMaxH(undefined); return; }
+    // Alto disponible = alto del contenedor de scroll de la página menos lo que hay
+    // por encima del calendario (pestañas, KPIs…) y un margen.
+    let page = el.parentElement;
+    while (page && !/(auto|scroll)/.test(getComputedStyle(page).overflowY)) page = page.parentElement;
+    const calc = () => {
+      if (!page) return;
+      const top = el.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop;
+      setMaxH(Math.max(320, page.clientHeight - top - 32)); // 32: relleno inferior de la página + borde
+    };
+    calc();
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
+  }, [compact]);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    // En horizontal la semana empieza siempre en lunes (sin centrar hoy).
+    el.scrollLeft = 0;
+    if (compact && el.scrollHeight > el.clientHeight + 2) {
+      // Hora de referencia: ahora si hoy está en la semana; si no, la primera cita.
+      const firstAppt = shown.map((a) => Number(a.scheduledAt.slice(11, 13)) * 60 + Number(a.scheduledAt.slice(14, 16))).sort((x, y) => x - y)[0];
+      const ref = days.some((d) => toLocalDateString(d) === todayStr) ? nowMins : (firstAppt ?? gStart * 60);
+      el.scrollTop = Math.max(0, (ref - gStart * 60) * pxMin - 48);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from, anchor, compact, maxH, data]);
 
   return (
     <div>
@@ -749,23 +836,22 @@ function WeekView({ anchor, onAnchor, onOpenAppt, centers, roomFilter, onRoomCha
 
       {/* Leyenda + filtro de sala, pegados al calendario */}
       <div className="flex items-center gap-4 mb-2 text-xs text-gray-500 flex-wrap">
-        {(["CONFIRMED", "ATTENDED", "PENDING", "RESCHEDULED", "CANCELLED", "NO_SHOW"] as const).map((s) => (
-          <span key={s} className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-full ${STATUS_DOT[s]}`} />{STATUS_LABELS[s]}</span>
-        ))}
+        <StatusLegend statuses={["CONFIRMED", "ATTENDED", "PENDING", "RESCHEDULED", "CANCELLED", "NO_SHOW"]} />
         <div className="ml-auto"><RoomSelect roomCenters={roomCenters} value={roomFilter} onChange={onRoomChange} /></div>
       </div>
 
       <KpiRow appts={appts} active={statusFilter} onPick={onStatusChange} />
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {/* Day headers */}
-        <div className="flex border-b border-gray-100">
-          <div className="w-12 shrink-0" />
-          <div className="grid grid-cols-7 flex-1">
+        <div ref={gridRef} style={maxH ? { maxHeight: maxH } : undefined} className="overflow-auto snap-x snap-proximity scroll-pl-12 touch:[scrollbar-width:none] touch:[&::-webkit-scrollbar]:hidden">
+        {/* Day headers: pegajosos arriba dentro del contenedor de scroll */}
+        <div className="sticky top-0 z-20 flex w-max min-w-full border-b border-gray-100 bg-white">
+          <div className="w-12 shrink-0 sticky left-0 z-10 bg-white" />
+          <div className="grid grid-cols-7 flex-1 wk-days">
             {days.map((d, i) => {
               const isToday = toLocalDateString(d) === todayStr;
               return (
-                <div key={i} className={`text-center py-2 border-l border-gray-50 ${isToday ? "bg-blue-50" : ""}`}>
+                <div key={i} className={`text-center py-2 border-l border-gray-100 ${isToday ? "bg-blue-50" : i >= 5 ? "bg-gray-50/70" : ""}`}>
                   <div className="text-[11px] text-gray-400">{WK_DAYS[i]}</div>
                   <div className={`text-sm font-medium ${isToday ? "text-blue-600" : "text-gray-700"}`}>{d.getDate()}</div>
                 </div>
@@ -775,15 +861,18 @@ function WeekView({ anchor, onAnchor, onOpenAppt, centers, roomFilter, onRoomCha
         </div>
 
         {/* Time grid */}
-        <div className="flex" style={{ height: gridH }}>
-          <div className="w-12 shrink-0 relative">
+        <div className="flex w-max min-w-full" style={{ height: gridH }}>
+          <div className="w-12 shrink-0 sticky left-0 z-10 bg-white">
             {hours.map((h) => (
               <div key={h} className="absolute right-1.5 -translate-y-1/2 text-[10px] text-gray-400 tabular-nums" style={{ top: (h - gStart) * 60 * pxMin }}>{h}:00</div>
             ))}
           </div>
-          <div className="flex-1 relative">
+          <div className="flex-1 relative wk-days">
             {hours.map((h) => (
-              <div key={h} className="absolute left-0 right-0 border-t border-gray-50" style={{ top: (h - gStart) * 60 * pxMin }} />
+              <div key={h} className="absolute left-0 right-0 border-t border-gray-200" style={{ top: (h - gStart) * 60 * pxMin }} />
+            ))}
+            {hours.slice(0, -1).map((h) => (
+              <div key={`${h}h`} className="absolute left-0 right-0 border-t border-dashed border-gray-100" style={{ top: (h - gStart) * 60 * pxMin + 30 * pxMin }} />
             ))}
             <div className="absolute inset-0 grid grid-cols-7">
               {days.map((d, i) => {
@@ -791,25 +880,27 @@ function WeekView({ anchor, onAnchor, onOpenAppt, centers, roomFilter, onRoomCha
                 const isToday = key === todayStr;
                 const placed = wkLanes(byDay[key] ?? []);
                 return (
-                  <div key={i} className="relative border-l border-gray-50 overflow-hidden min-w-0">
+                  <div key={i} className={`relative border-l border-gray-100 overflow-hidden min-w-0 snap-start ${i >= 5 ? "bg-gray-50/70" : ""}`}>
                     {isToday && nowMins >= gStart * 60 && nowMins <= gEnd * 60 && (
-                      <div className="absolute left-0 right-0 border-t-2 border-red-400 z-10" style={{ top: (nowMins - gStart * 60) * pxMin }} />
+                      <div className="absolute left-0 right-0 border-t-2 border-red-500 z-10" style={{ top: (nowMins - gStart * 60) * pxMin }}><span className="absolute -left-1 -top-[5px] w-2 h-2 rounded-full bg-red-500" /></div>
                     )}
                     {placed.map(({ a, start, lane, lanes }) => {
-                      const top = (start - gStart * 60) * pxMin;
-                      const height = Math.max((a.durationMinutes ?? 20) * pxMin, 28);
+                      // 1 px arriba y abajo para que dos citas seguidas no se toquen; 4 px a los
+                      // lados de la celda y 4 px entre carriles.
+                      const top = (start - gStart * 60) * pxMin + 1;
+                      const height = Math.max((a.durationMinutes ?? 20) * pxMin, 30) - 2;
                       const canceled = a.status === "CANCELLED" || a.status === "NO_SHOW";
                       return (
                         <button
                           key={a.id}
                           onClick={() => onOpenAppt(a)}
                           title={`${a.scheduledAt.slice(11, 16)} · ${a.customer?.firstName ?? ""} ${a.customer?.lastName ?? ""} · ${a.product?.name ?? ""} · ${a.room?.name ?? ""}`}
-                          className={`absolute rounded-md border px-1.5 py-0.5 text-left overflow-hidden box-border ${STATUS_COLORS[a.status] ?? "bg-gray-50 border-gray-200 text-gray-700"} ${canceled ? "line-through opacity-70" : ""}`}
-                          style={{ top, height, left: `${(100 / lanes) * lane}%`, width: `calc(${100 / lanes}% - 2px)` }}
+                          className={`absolute rounded-md border border-l-[3px] shadow-sm px-2 py-1 text-left overflow-hidden box-border ${STATUS_COLORS[a.status] ?? "bg-gray-50 border-gray-200 text-gray-700"} ${STATUS_STRIPE[a.status] ?? "border-l-gray-400"} ${canceled ? "line-through opacity-70" : ""}`}
+                          style={{ top, height, left: `calc(${(100 / lanes) * lane}% + 4px)`, width: `calc(${100 / lanes}% - 8px)` }}
                         >
-                          <span className="text-[10px] font-medium tabular-nums block leading-tight">{a.scheduledAt.slice(11, 16)}</span>
-                          <span className="text-[11px] leading-tight block truncate">{a.customer?.firstName} {a.customer?.lastName}</span>
-                          {height > 40 && <span className="text-[10px] opacity-70 block truncate">{a.product?.name}</span>}
+                          <span className="text-[11px] font-semibold leading-tight block truncate">{a.customer?.firstName} {a.customer?.lastName}</span>
+                          <span className="text-[10px] tabular-nums opacity-80 block leading-tight">{a.scheduledAt.slice(11, 16)}{a.room?.name && lanes > 1 ? ` · ${a.room.name}` : ""}</span>
+                          {height > 44 && <span className="text-[10px] opacity-70 block truncate">{a.product?.name}</span>}
                         </button>
                       );
                     })}
@@ -818,6 +909,7 @@ function WeekView({ anchor, onAnchor, onOpenAppt, centers, roomFilter, onRoomCha
               })}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -861,9 +953,7 @@ function MonthView({ anchor, onAnchor, onOpenDay, centerId, roomCenters, roomFil
       </div>
 
       <div className="flex items-center gap-4 mb-3 text-xs text-gray-500 flex-wrap">
-        {(["CONFIRMED", "ATTENDED", "PENDING", "RESCHEDULED", "CANCELLED", "NO_SHOW"] as const).map((s) => (
-          <span key={s} className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-full ${STATUS_DOT[s]}`} />{STATUS_LABELS[s]}</span>
-        ))}
+        <StatusLegend statuses={["CONFIRMED", "ATTENDED", "PENDING", "RESCHEDULED", "CANCELLED", "NO_SHOW"]} />
         <div className="ml-auto"><RoomSelect roomCenters={roomCenters} value={roomFilter} onChange={onRoomChange} /></div>
       </div>
 
@@ -1324,9 +1414,9 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
   return (
     <>
     {showClient && appt.customer?.id && <ClientInfoModal customerId={appt.customer.id} onClose={() => setShowClient(false)} />}
-    <Modal onClose={onClose} size="md" padding="p-5">
+    <Modal onClose={onClose} size="md" sheet padding="p-5">
       {confirmLink && <ConfirmRequestModal data={confirmLink} onClose={() => setConfirmLink(null)} />}
-        <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="sheet-head flex items-start justify-between gap-3 mb-3">
           <div className="min-w-0">
             {appt.customer?.id ? (
               <button onClick={() => setShowClient(true)} title="Ver ficha del cliente" className="group/name inline-flex items-center gap-1.5 text-left min-w-0">
@@ -1539,6 +1629,11 @@ export default function AppointmentsPage() {
   );
 }
 
+const VIEWS = ["month", "week", "day", "list", "sincerrar", "episodios", "recuperar"] as const;
+type View = (typeof VIEWS)[number];
+// Última vista elegida en tablet vertical (< lg), por dispositivo (crm-multidispositivo T4.2).
+const COMPACT_VIEW_KEY = "appt_view_compact";
+
 function AppointmentsBoard() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1559,6 +1654,19 @@ function AppointmentsBoard() {
     (["agenda", "timeline"] as const).includes(qDay as never) ? (qDay as "agenda" | "timeline") : "agenda",
   );
   const [dateFilter, setDateFilter] = useState(searchParams.get("date") ?? today);
+  // Tablet vertical (< lg): si la URL no fija la vista, se abre la última usada en
+  // este dispositivo (por defecto Día, la que cabe); en escritorio sigue siendo Mes.
+  const compactDefaultApplied = useRef(false);
+  useEffect(() => {
+    if (compactDefaultApplied.current) return;
+    compactDefaultApplied.current = true;
+    if (qView || !window.matchMedia("(max-width: 1023px)").matches) return;
+    const stored = localStorage.getItem(COMPACT_VIEW_KEY);
+    setView(stored && (VIEWS as readonly string[]).includes(stored) ? (stored as View) : "day");
+  }, [qView]);
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 1023px)").matches) localStorage.setItem(COMPACT_VIEW_KEY, view);
+  }, [view]);
   const [statusFilter, setStatusFilter] = useState("");
   const [roomFilter, setRoomFilter] = useState(searchParams.get("room") ?? ""); // filtro de sala (todas las vistas de Reservas)
   const [showModal, setShowModal] = useState(false);
@@ -2153,9 +2261,7 @@ function TimelineView({ appts, loading, dateFilter, onManage }: {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-4 mt-4 text-xs text-gray-500">
-          {(["PENDING", "CONFIRMED", "ATTENDED", "NO_SHOW", "CANCELLED", "RESCHEDULED"] as const).map((s) => (
-            <span key={s} className="inline-flex items-center gap-1.5"><span className={`w-3 h-3 rounded-sm ${STATUS_DOT[s]}`} />{STATUS_LABELS[s]}</span>
-          ))}
+          <StatusLegend square statuses={["PENDING", "CONFIRMED", "ATTENDED", "NO_SHOW", "CANCELLED", "RESCHEDULED"]} />
           {isToday && <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-[2px] bg-red-500" />Ahora</span>}
         </div>
       </div>

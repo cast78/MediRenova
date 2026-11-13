@@ -46,14 +46,15 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 
 ## T4. Reservas
 
-- [ ] T4.1 Pestañas de vistas con `TabsScroller`; leyenda plegable en `< lg`
-- [ ] T4.2 Vista por defecto Día en `< lg` (recordada por dispositivo)
-- [ ] T4.3 Semana: columnas de 160 px con desplazamiento lateral y `scroll-snap`, cabecera fija, día actual centrado (según D3)
-- [ ] T4.4 Nueva reserva y detalle de cita como hoja (T5)
+- [x] T4.1 Pestañas de vistas con `TabsScroller` (hecho en T3); leyenda de estados como `StatusLegend`: fila de siempre en `≥ lg`, botón "Leyenda ▾" plegable en `< lg` (Semana, Mes y Día/timeline)
+- [x] T4.2 En `< lg`, si la URL no fija vista, se abre la última usada en el dispositivo (`localStorage` `appt_view_compact`, por defecto Día); en escritorio sigue Mes
+- [x] T4.3 Semana (D3 = 7 días desplazables): el calendario es un único contenedor con scroll en los dos ejes, 7 columnas de 160 px en `< lg` (`.wk-days`), ajuste por día (`snap-x snap-proximity`, `scroll-pl-12`), cabecera de días pegajosa arriba y columna de horas pegajosa a la izquierda; en `< lg` se limita al alto disponible de la pantalla (como una app de calendario); al abrir empieza en lunes (decisión del usuario, 13/11) y se sitúa en la hora actual (o la primera cita). Escala 1,6 px/min en `< lg`. Rejilla rediseñada (líneas de hora y media hora, fin de semana en gris, cajas con margen, franja de color por estado, nombre + hora). En `≥ lg` sin ancho mínimo ni límite de alto: la página se desplaza como antes
+- [x] T4.4 Nueva reserva ya era hoja (lg, T5); el detalle de cita (md) pasa a hoja con `sheet` y cabecera pegajosa
+- [x] T4.5 Selector de salas propio (`components/room-select.tsx`, mockup https://claude.ai/artifact/PmHh6KG1a14WprW3EYWjEN): botón con icono y sala elegida; en `≥ lg` desplegable bajo el botón, en `< lg` hoja pequeña centrada (`Modal` sm); salas agrupadas por centro con etiqueta solo si hay varios, punto de color por sala, marca en la seleccionada; cierre al elegir, fuera o Escape. Sustituye al `<select>` nativo en Reservas, Visitas, Revisiones y Utilización. Generalizado como `components/ui/select.tsx` (`Select`: opciones planas o agrupadas, `emptyLabel`, `title`, `icon`, `menu` button/right); `RoomSelect` es un envoltorio suyo y el asistente de nueva reserva lo usa para producto, centro y sala. Pendiente: migrar el resto de `<select>` de la app (filtros de analítica en T4b, formularios) de forma gradual
 
 ## T4b. Analítica y Captación (módulo compartido)
 
-- [ ] T4b.1 Barra de filtros compacta en `< lg` (periodo · "Filtros" con contador · exportar) con los selectores en hoja; sin cambios en `≥ lg`
+- [ ] T4b.1 Barra de filtros compacta en `< lg` (periodo · "Filtros" con contador · exportar) con los selectores en hoja; sin cambios de disposición en `≥ lg`. Los 5 `<select>` de Analítica/Captación pasan al `Select` propio (T4.5) con icono y subtítulo
 - [ ] T4b.2 Pestañas con `TabsScroller` (7 en Analítica, 3 en Captación)
 - [ ] T4b.3 "Dónde se pierde", "Fugas del periodo" y accesos del resumen de Captación como filas/tarjetas pulsables (sin hover)
 - [ ] T4b.4 Tablas del módulo (salas, médicos, comparativas, campañas, altas por canal) con `DataTable`; detalle de campaña como hoja
@@ -65,6 +66,7 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 - [x] T5.2 Migrados los 37 diálogos (`fixed inset-0`) a `Modal`: 36 por envoltorio mecánico (script con seguimiento de profundidad de `<div>`, sin tocar el contenido) y `NewCustomerModal` con `title`/`footer`. 14 hojas con `sheet-head`/`sheet-foot`: nueva reserva (3 pasos), aviso de episodios, plantilla/segmento/campaña/resultados, centro, sala, médico, producto, regla de workflow, nueva empresa, foto de consulta, editor de certificado, constructor de formularios. Confirmaciones (xs–md) y `PlanChangeDialog` siguen centradas en tablet. Fuera: el panel de filtros de analítica (T4b.1) y los dos cierres de menú `fixed inset-0 z-10`
 - [x] T5.3 Revisado: consulta, ficha de cliente y alta de empresa ya van a una columna por debajo de `lg` (`lg:grid-cols-[1fr_340px]`, `sm:grid-cols-2` en pares de campos); `SignaturePad` ya es `w-full` + `touch-none`. Sin cambios necesarios
 - [x] T5.4 Revisados los 56 grids sin breakpoint: los `grid-cols-2` (40) caben en tablet vertical (≥ 330 px por columna) y solo afectarían a móvil (fuera de alcance); cambiados los que no caben: filas de 4 indicadores en Revisiones, Productos y Campañas (`grid-cols-2 lg:grid-cols-4`), editor de certificado y constructor de formularios a una columna en `< lg` (`grid-cols-1 lg:grid-cols-[…]`)
+- [ ] T5.5 Pasada de migración de los `<select>` nativos restantes (unos 30 en 14 ficheros: Configuración, Equipo, bandeja de comunicaciones, walk-in, constructor de formularios, empresas del superadmin, campañas, reserva pública, barra de contexto, workflow, utilización, visitas, consulta, productos, formularios, médicos) al `Select` propio, en un commit aparte, comprobando que cada formulario sigue guardando igual
 
 ## T6b. Verificación de la Fase B
 
@@ -78,7 +80,7 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 - [x] D0 Fase A se hace; Fase B solo si se decide soportar tablets de 10–11" en vertical (pendiente)
 - [ ] D1 Raíl + cajón vs solo cajón
 - [ ] D2 Clientes: tabla con prioridades vs tarjetas por defecto en tablet
-- [ ] D3 Semana: 7 días desplazables vs 3 días visibles
+- [x] D3 Semana: **7 días desplazables** con ajuste por día y día actual centrado (decidido 13/11/2026)
 - [ ] D4 "Añadir a pantalla de inicio" (manifest) sí/no
 - [ ] D5 Móvil en fase posterior: alcance mínimo (Agenda del día, ficha de cliente)
 

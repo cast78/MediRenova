@@ -114,6 +114,8 @@
   }
   /* …y la cabecera de esos formularios deja sitio al botón para no quedar debajo. */
   .sheet-panel .sheet-body:has(> button.absolute) > .sheet-head { padding-right: 3.75rem; }
+  /* Semana de Reservas (T4.3): 7 columnas de 160 px dentro del calendario con scroll propio. */
+  .wk-days { min-width: 1120px; }
   .sheet-head {
     position: sticky; top: -1rem; z-index: 2; /* -1rem: el límite pegajoso es la caja de contenido, dentro del relleno */
     margin: -1rem -1rem 1rem; padding: 0.75rem 1rem;

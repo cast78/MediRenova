@@ -142,7 +142,7 @@ Las dos páginas usan el mismo `AnalyticsModule` (`mod="gestion" | "captacion"`)
 - **D0 Soportar tablets de 10–11" en vertical** (decide si la Fase B se hace). Mientras no: requisito declarado "tablet de 11" o más, en horizontal". Decidido el 14/10/2026: Fase A sí; Fase B pendiente.
 - **D1 Menú en tablet vertical**: raíl de iconos + cajón (propuesta) o solo cajón con ☰ (más contenido, un toque más por navegación).
 - **D2 Clientes**: tabla con scroll y prioridades (propuesta mínima) o tarjetas como vista por defecto en tablet.
-- **D3 Semana en tablet**: 7 días con desplazamiento lateral (propuesta) o 3 días visibles con flechas.
+- **D3 Semana en tablet**: 7 días con desplazamiento lateral. **Decidido (13/11/2026): 7 días desplazables.**
 - **D4 "Añadir a pantalla de inicio"** (manifest + iconos, sin service worker): barato y útil en recepción; no es una PWA completa.
 - **D5 Móvil**: fuera de alcance aquí; si se aborda, empezar por Agenda del día y ficha de cliente.
 
