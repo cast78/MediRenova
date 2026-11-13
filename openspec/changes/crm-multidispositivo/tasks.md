@@ -70,10 +70,10 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 
 ## T6b. Verificación de la Fase B
 
-- [ ] T6b.1 Script por página (sin desbordamiento, objetivos ≥ 44 px, sin solo-hover) en 768×1024 · 820×1180 · 1024×768 · 1180×820
-- [ ] T6b.2 Capturas antes/después en escritorio (1280/1440) sin diferencias
-- [ ] T6b.3 Prueba en iPad 10.9" real (Safari) en vertical: teclado en pantalla con hojas, scroll de Semana
-- [ ] T6b.4 `docs/multidispositivo.md` final (retirar la restricción "en horizontal")
+- [x] T6b.1 Barrido en el navegador (13/11): 768×1024 en 13 páginas y 820×1180 · 1024×768 · 1180×820 en 6 páginas (dashboard, Reservas/Semana, Clientes, Analítica, Configuración, Centros): 0 desbordamientos de documento ni del contenedor principal, 0 elementos que sobresalgan del contenido (fuera de los carriles con scroll propio); raíl de 64 px por debajo de 1024 y menú de 224 px a partir de 1024; la Semana limita su alto en vertical (777 px a 820×1180) y no en horizontal. Objetivos ≥ 44 px y acciones solo-hover: cubiertos por el barrido táctil de la Fase A (reglas por puntero, no por anchura) más las medidas de T1 (raíl y cajón) y T5 (hojas)
+- [x] T6b.2 Huella de tamaños (botones, campos, selects, tablas, enlaces) a 1440 px en 8 páginas, rama (:3000) frente a `main` (:3005, worktree temporal): idéntica en dashboard, Clientes, Visitas, Configuración y Centros; en Revisiones, Analítica y Reservas/Mes la única diferencia es que los `<select>` nativos son ahora botones del `Select` propio (3 en Analítica, 1 en Revisiones, 1 en Reservas), cambio deliberado de T4.5/T4b; la rejilla del Mes mide igual (976×533)
+- [ ] T6b.3 Prueba en iPad 10.9" real (Safari) en vertical: teclado en pantalla con hojas, scroll de Semana. **Sin dispositivo**: validado por el usuario con la emulación de iPad de Edge/Chrome; queda pendiente para cuando haya un iPad
+- [x] T6b.4 `docs/multidispositivo.md` final: tablets de 10–11" en vertical pasan a soporte completo; se retira la restricción "en horizontal"
 
 ## Decisiones pendientes (ver design.md)
 

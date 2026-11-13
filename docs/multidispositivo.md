@@ -1,15 +1,15 @@
 # MediRenova en tablet y pantalla táctil
 
-Estado: **Fase A en producción** (táctil y tablas; `crm-multidispositivo`, PR #22). **Fase B en curso** (disposición compacta para tablets de 10–11" en vertical): T1 Shell, T5 diálogos, T4 Reservas y T4b Analítica/Captación hechos; falta la verificación final (T6b) y la PR.
+Estado: **Fase A en producción** (táctil y tablas; PR #22) y **Fase B completa** (disposición compacta para tablets de 10–11" en vertical: raíl y cajón, diálogos como hoja, Reservas en tablet, selector propio, filtros de analítica), verificada en local el 13/11/2026 y pendiente de PR.
 
 ## Dispositivos soportados
 
 | Dispositivo | Orientación | Soporte |
 |---|---|---|
 | Ordenador (≥ 1024 px) | — | completo (vista de escritorio) |
-| Tablet de 11" o más (iPad Pro 11/13, iPad Air, Surface Pro) | horizontal | completo: vista de escritorio con controles táctiles |
+| Tablet de 10" o más (iPad, iPad Air, iPad Pro, Surface Pro) | horizontal | completo: vista de escritorio con controles táctiles |
 | iPad Pro 13" | vertical | completo (1032 px CSS, recibe la vista de escritorio) |
-| Tablet de 10–11" | vertical | **en curso (Fase B)**: menú en raíl de 64 px con cajón, diálogos como hoja a pantalla completa, Reservas con Día por defecto y Semana desplazable, filtros de analítica con el selector propio |
+| Tablet de 10–11" (768–1023 px CSS) | vertical | completo (disposición compacta): menú en raíl de 64 px con cajón, diálogos como hoja a pantalla completa, Reservas con Día por defecto y Semana desplazable, selectores propios |
 | Teléfono | — | solo las páginas públicas (reserva, confirmación, portal del paciente) |
 
 La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de Tailwind (1024 px CSS). Los píxeles CSS no son los físicos: un iPad Pro 13" apaisado mide 1376 px CSS; una Surface Pro 10 al 200 %, 1440 px.
@@ -48,6 +48,12 @@ La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de
 2. **Preview de Vercel**: cada push a la rama genera una URL de preview; abrirla en el iPad o la Surface reales (misma API y datos que producción; este cambio no toca la API).
 3. **Escritorio con ratón**: nada debe cambiar. Comparar capturas a 1440 px antes y después.
 
+## Verificación realizada (Fase B, 13/11/2026)
+
+- **Tablet**: 768×1024 en 13 páginas y 820×1180, 1024×768 y 1180×820 en 6: sin desbordamientos, raíl por debajo de 1024 y menú completo a partir de 1024; Semana con alto limitado solo en vertical.
+- **Escritorio a 1440 px**: huella de tamaños de 8 páginas comparada con `main`: idéntica salvo los combos nativos que ahora son el selector propio (cambio deliberado).
+- **Pendiente en iPad real**: teclado en pantalla sobre las hojas y desplazamiento de la Semana con el dedo (validado solo con emulación).
+
 ## Verificación realizada (Fase A, 8/11/2026)
 
 - **Táctil emulado**, 15 páginas (dashboard, reservas mes/día, visitas, revisiones, clientes, analítica, campañas, workflow, centros, productos, formularios, médicos, equipo, configuración): 0 controles por debajo de 44 px (excluidos interruptores, que tienen área de pulsación propia), 0 acciones solo-hover, 0 desbordamientos horizontales de página, 16 de 16 tablas dentro de `DataTable`.
@@ -56,5 +62,6 @@ La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de
 
 ## Pendiente
 
-- Fase B: verificación final (T6b) y PR; después, migración del resto de `<select>` nativos (T5.5).
+- Migración del resto de `<select>` nativos al selector propio (T5.5), en un commit aparte tras la PR de la Fase B.
+- Prueba en iPad real (T6b.3) cuando haya dispositivo.
 - Vista en tarjetas para Clientes en tablet (T2.3, Fase B).
