@@ -6,6 +6,7 @@
 // vistas de embudo, ocupación/saturación, médicos, comparativa y volumen; export CSV.
 import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
+import { Select } from "@/components/ui/select";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -203,23 +204,37 @@ function CsvButton({ ep, f, extra }: { ep: string; f: Filters; extra?: Record<st
 
 const empty = <p className="text-center text-gray-400 text-sm py-8">Sin datos en el periodo</p>;
 
-// Desplegable de filtro con icono y etiqueta (barra de filtros, Opción B).
+// Desplegable de filtro con icono y etiqueta (barra de filtros, Opción B). Usa el
+// Select propio (crm-multidispositivo T4b.1): desplegable en escritorio, hoja con
+// cabecera de icono en tablet. La primera opción ("Todos…") es el valor vacío.
 function FilterSelect({ label, icon: Icon, value, onChange, options }: {
   label: string; icon: typeof Percent; value: string; onChange: (v: string) => void;
   options: { v: string; t: string }[];
 }) {
   return (
-    <label className="flex flex-col gap-1 min-w-[150px] flex-1">
+    <div className="flex flex-col gap-1 min-w-[150px] flex-1">
       <span className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">{label}</span>
-      <div className="relative flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-2.5 focus-within:border-blue-400 transition-colors">
-        <Icon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-        <select value={value} onChange={(e) => onChange(e.target.value)}
-          className="appearance-none bg-transparent text-[12.5px] text-gray-700 flex-1 outline-none py-2 pr-5 cursor-pointer">
-          {options.map((o) => <option key={o.v} value={o.v}>{o.t}</option>)}
-        </select>
-        <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 pointer-events-none" />
-      </div>
-    </label>
+      <Select
+        value={value}
+        onChange={onChange}
+        options={options.map((o) => ({ value: o.v, label: o.t }))}
+        placeholder={options[0]?.t ?? label}
+        title={label}
+        subtitle="Filtra las métricas del periodo"
+        icon={<Icon className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+        headerIcon={<Icon className="w-5 h-5" />}
+        optionIcon={<Icon className="w-4 h-4" />}
+        className="w-full !bg-gray-50 !border-gray-200 !pl-2.5 !py-2 !text-[12.5px] !text-gray-700 hover:!bg-gray-100"
+      />
+    </div>
+  );
+}
+
+// Selector pequeño de granularidad/ventana de las gráficas (mismo Select, compacto).
+function MiniSelect({ value, onChange, options, title }: { value: string; onChange: (v: string) => void; options: { v: string; t: string }[]; title: string }) {
+  return (
+    <Select value={value} onChange={onChange} options={options.map((o) => ({ value: o.v, label: o.t }))} placeholder={title} title={title}
+      menu="right" className="!text-xs !border-gray-200 !py-1 !pl-2 !pr-1.5" />
   );
 }
 
@@ -884,9 +899,7 @@ function SaturacionView({ f }: { f: Filters }) {
     <Card title="Saturación de la demanda"
       action={
         <div className="flex items-center gap-2">
-          <select value={g} onChange={(e) => setG(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white">
-            <option value="day">Día</option><option value="week">Semana</option><option value="month">Mes</option>
-          </select>
+          <MiniSelect value={g} onChange={setG} title="Agrupar por" options={[{ v: "day", t: "Día" }, { v: "week", t: "Semana" }, { v: "month", t: "Mes" }]} />
           <CsvButton ep="saturation" f={f} extra={{ granularity: g }} />
         </div>
       }>
@@ -1098,9 +1111,7 @@ function VolumenView({ f }: { f: Filters }) {
     <Card title="Volumen de reservas y visitas"
       action={
         <div className="flex items-center gap-2">
-          <select value={g} onChange={(e) => setG(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white">
-            <option value="week">Semana</option><option value="month">Mes</option><option value="year">Año</option>
-          </select>
+          <MiniSelect value={g} onChange={setG} title="Agrupar por" options={[{ v: "week", t: "Semana" }, { v: "month", t: "Mes" }, { v: "year", t: "Año" }]} />
           <CsvButton ep="volume" f={f} extra={{ granularity: g }} />
         </div>
       }>
@@ -1234,9 +1245,7 @@ function AltasView({ f }: { f: Filters }) {
     <Card title="Altas de clientes por periodo y canal"
       action={
         <div className="flex items-center gap-2">
-          <select value={g} onChange={(e) => setG(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white">
-            <option value="month">Mes</option><option value="week">Semana</option><option value="year">Año</option>
-          </select>
+          <MiniSelect value={g} onChange={setG} title="Agrupar por" options={[{ v: "month", t: "Mes" }, { v: "week", t: "Semana" }, { v: "year", t: "Año" }]} />
           <CsvButton ep="acquisition" f={f} extra={{ granularity: g }} />
         </div>
       }>
@@ -1312,9 +1321,7 @@ function CampanasView({ f }: { f: Filters }) {
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-500 flex items-center gap-1">
             Ventana
-            <select value={win} onChange={(e) => setWin(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white">
-              {["7", "15", "30", "60", "90"].map((d) => <option key={d} value={d}>{d}d</option>)}
-            </select>
+            <MiniSelect value={win} onChange={setWin} title="Ventana" options={["7", "15", "30", "60", "90"].map((d) => ({ v: d, t: `${d}d` }))} />
           </label>
           <CsvButton ep="campaign-effectiveness" f={f} extra={{ attributionWindowDays: win }} />
         </div>

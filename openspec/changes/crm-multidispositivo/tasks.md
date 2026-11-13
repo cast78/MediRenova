@@ -54,11 +54,11 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 
 ## T4b. Analítica y Captación (módulo compartido)
 
-- [ ] T4b.1 Barra de filtros compacta en `< lg` (periodo · "Filtros" con contador · exportar) con los selectores en hoja; sin cambios de disposición en `≥ lg`. Los 5 `<select>` de Analítica/Captación pasan al `Select` propio (T4.5) con icono y subtítulo
-- [ ] T4b.2 Pestañas con `TabsScroller` (7 en Analítica, 3 en Captación)
-- [ ] T4b.3 "Dónde se pierde", "Fugas del periodo" y accesos del resumen de Captación como filas/tarjetas pulsables (sin hover)
-- [ ] T4b.4 Tablas del módulo (salas, médicos, comparativas, campañas, altas por canal) con `DataTable`; detalle de campaña como hoja
-- [ ] T4b.5 Gráficas a todo el ancho con alto fijo y leyenda debajo; embudo apilado
+- [x] T4b.1 Barra de filtros: los 5 `<select>` de Analítica/Captación pasan al `Select` propio (`FilterSelect` con icono en botón, cabecera y filas; `MiniSelect` compacto para agrupar/ventana de las gráficas). En `< lg` los filtros de entidad caben en una fila de tres (198 px) y la sala pasa a la segunda; en hoja llevan icono, título y subtítulo. No hizo falta la variante "Filtros con contador": la barra ya envuelve y los chips de filtros activos siguen debajo. Sin cambios de disposición en `≥ lg`
+- [x] T4b.2 Pestañas con `TabsScroller` (hecho en T3)
+- [x] T4b.3 Revisado: "Dónde se pierde", "Fugas del periodo" y los accesos del resumen ya son botones/filas pulsables con chevron visible; el hover solo cambia el color. Sin cambios
+- [x] T4b.4 Tablas ya en `DataTable` (T2). El panel lateral de casos de fuga (448 px desde la derecha) se mantiene: cabe en tablet vertical
+- [x] T4b.5 Revisado: las gráficas ya van a todo el ancho con alto fijo (`ResponsiveContainer` 100 % × 260) y las rejillas de indicadores son `grid-cols-2 lg:grid-cols-4` o de 3 columnas que caben. Sin cambios
 
 ## T5. Modales y formularios
 

@@ -1,6 +1,6 @@
 # MediRenova en tablet y pantalla táctil
 
-Estado: **Fase A en producción** (táctil y tablas; `crm-multidispositivo`, PR #22). **Fase B en curso** (disposición compacta para tablets de 10–11" en vertical): T1 Shell, T5 diálogos y T4 Reservas hechos; falta T4b Analítica/Captación.
+Estado: **Fase A en producción** (táctil y tablas; `crm-multidispositivo`, PR #22). **Fase B en curso** (disposición compacta para tablets de 10–11" en vertical): T1 Shell, T5 diálogos, T4 Reservas y T4b Analítica/Captación hechos; falta la verificación final (T6b) y la PR.
 
 ## Dispositivos soportados
 
@@ -9,7 +9,7 @@ Estado: **Fase A en producción** (táctil y tablas; `crm-multidispositivo`, PR 
 | Ordenador (≥ 1024 px) | — | completo (vista de escritorio) |
 | Tablet de 11" o más (iPad Pro 11/13, iPad Air, Surface Pro) | horizontal | completo: vista de escritorio con controles táctiles |
 | iPad Pro 13" | vertical | completo (1032 px CSS, recibe la vista de escritorio) |
-| Tablet de 10–11" | vertical | **en curso (Fase B)**: menú en raíl de 64 px con cajón, diálogos como hoja a pantalla completa, Reservas con Día por defecto y Semana desplazable; faltan los filtros de analítica |
+| Tablet de 10–11" | vertical | **en curso (Fase B)**: menú en raíl de 64 px con cajón, diálogos como hoja a pantalla completa, Reservas con Día por defecto y Semana desplazable, filtros de analítica con el selector propio |
 | Teléfono | — | solo las páginas públicas (reserva, confirmación, portal del paciente) |
 
 La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de Tailwind (1024 px CSS). Los píxeles CSS no son los físicos: un iPad Pro 13" apaisado mide 1376 px CSS; una Surface Pro 10 al 200 %, 1440 px.
@@ -56,5 +56,5 @@ La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de
 
 ## Pendiente
 
-- Fase B (en curso): filtros de analítica en hoja (T4b); verificación final T6b.
+- Fase B: verificación final (T6b) y PR; después, migración del resto de `<select>` nativos (T5.5).
 - Vista en tarjetas para Clientes en tablet (T2.3, Fase B).
