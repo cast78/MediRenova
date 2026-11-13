@@ -82,6 +82,23 @@ Rama: `feat/crm-multidispositivo` desde `main`. Cada fase se mergea sola; la vis
 - [ ] D4 "Añadir a pantalla de inicio" (manifest) sí/no
 - [ ] D5 Móvil en fase posterior: alcance mínimo (Agenda del día, ficha de cliente)
 
+## Punto de continuación (9/11/2026)
+
+**Estado.** Fase A en producción (PR #22). Fase B en `feat/crm-multidispositivo`: T1 Shell (`8da0408`) y T5 diálogos (`c0d9438`) hechos, verificados en local y documentados. La rama lleva `main` al día (incluye la PR #23, ficha de Licencia). Sin PR de la Fase B todavía.
+
+**Siguiente sesión.**
+1. T4 Reservas: pestañas de vistas ya con `TabsScroller` (T4.1 parcial); falta leyenda plegable en `< lg`, vista Día por defecto en `< lg` recordada por dispositivo (T4.2), Semana con columnas de 160 px, scroll lateral con `scroll-snap`, cabecera fija y día actual centrado (T4.3, decisión D3), y comprobar nueva reserva / detalle de cita como hoja (T4.4, ya migrados en T5).
+2. T4b Analítica y Captación: barra de filtros compacta con selectores en hoja (T4b.1; el panel lateral de filtros sigue con `fixed inset-0` propio), pestañas (ya con `TabsScroller`), filas pulsables, tablas (ya en `DataTable`), gráficas a todo el ancho.
+3. T6b verificación de la Fase B (768×1024, 820×1180, 1024×768, 1180×820; escritorio sin cambios) y `docs/multidispositivo.md` final.
+4. PR única de la Fase B a `main`.
+
+**Pendiente de validar por el usuario** (sin credenciales de superadmin en local): modo proveedor y barra de superadmin en tablet vertical (T1.4). El usuario puede entrar como superadmin en el navegador de Claude en el puerto 3000 para que se mida.
+
+**Notas técnicas.**
+- Las variantes `max-lg:` de Tailwind no se generan porque `screens` tiene pantallas `raw`; lo que va solo por debajo de `lg` se escribe en `globals.css` o en positivo.
+- El selector nativo de los `<select>` se ve enorme en la emulación táctil de Chrome DevTools: es el picker "móvil" de Chrome, no CSS de la app.
+- Carpeta `.claude/worktrees/ux-licencia` (rama corta ya mergeada): el registro del worktree está quitado; la carpeta se borra con los servidores de desarrollo apagados.
+
 ## Punto de continuación (8/11/2026)
 
 **Estado.** Fase A implementada en `feat/crm-multidispositivo` (commits T0 `60027a4`, T3 `94888c7`, T2 `90c905e`, T3.5 `071b354`), verificada en local (T6a.1, T6a.2) y documentada. Sin PR todavía. Documentación de T6a commiteada el 9/11.
