@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { DataTable } from "@/components/ui/data-table";
 import { useState, useEffect, useRef } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -137,10 +138,9 @@ function DoctorModal({ doctor, centers, onClose }: { doctor?: Doctor; centers: C
   const sigShown = isEdit ? hasSig : !!pendingSig;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+    <Modal size="lg">
         <button onClick={onClose} aria-label="Cerrar" className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-        <div className="flex items-center gap-3 mb-4">
+        <div className="sheet-head flex items-center gap-3 mb-4">
           <span className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center shrink-0"><Stethoscope className="w-[18px] h-[18px] text-blue-600" /></span>
           <div>
             <h2 className="text-lg font-semibold text-gray-900 leading-tight">{isEdit ? "Editar médico" : "Nuevo médico"}</h2>
@@ -244,15 +244,14 @@ function DoctorModal({ doctor, centers, onClose }: { doctor?: Doctor; centers: C
           )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3 pt-1">
+          <div className="sheet-foot flex justify-end gap-3 pt-1">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
             <button type="submit" disabled={save.isPending} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
               {save.isPending ? "Guardando..." : "Guardar"}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

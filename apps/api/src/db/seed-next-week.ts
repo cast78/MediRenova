@@ -29,11 +29,15 @@ async function main() {
   if (!prodB || !prodCD) throw new Error("Faltan productos demo.");
 
   // Clientes de prueba (upsert idempotente por dniHash "nextwk-*").
-  const NAMES = [["Roberto", "Díaz"], ["Carmen", "Ortiz"], ["Miguel", "Santos"], ["Isabel", "Ramos"], ["Fernando", "Cruz"]];
+  // Un cliente distinto por cita: la cita es única por (empresa, cliente, producto),
+  // así que no puede repetirse el mismo cliente con el mismo producto otro día.
+  const FIRST = ["Roberto", "Carmen", "Miguel", "Isabel", "Fernando", "Lucía", "Javier", "Pilar", "Sergio", "Marta", "Álvaro", "Teresa", "Raúl", "Nuria", "Óscar", "Beatriz", "Hugo", "Silvia", "Iván", "Rocío", "Pablo", "Elena", "Diego", "Ana", "Jorge"];
+  const LAST = ["Díaz", "Ortiz", "Santos", "Ramos", "Cruz", "Vega", "Molina", "Serrano", "Blanco", "Castro", "Rubio", "Marín", "Soto", "Iglesias", "Delgado", "Ortega", "Garrido", "Pascual", "Lorenzo", "Herrero", "Peña", "Méndez", "Vargas", "Campos", "Nieto"];
+  const NAMES = FIRST.map((f, i) => [f, LAST[i]!] as const);
   const customers: { id: string }[] = [];
   for (let i = 0; i < NAMES.length; i++) {
     const [firstName, lastName] = NAMES[i]!;
-    const birthDate = new Date(`${1962 + i * 5}-08-20`); // edades variadas (~44–64)
+    const birthDate = new Date(`${1960 + (i % 5) * 5 + (i % 3)}-08-20`); // edades variadas (~44–66)
     const c = await prisma.customer.upsert({
       where: { tenantId_dniHash: { tenantId, dniHash: `nextwk-${i}` } },
       update: { deletedAt: null, birthDate },
@@ -78,7 +82,7 @@ async function main() {
     const date = ymd(d);
     for (const s of dayTemplate) {
       const prod = products.find((p) => p.id === s.product)!;
-      const cust = customers[(s.ci + day) % customers.length]!;
+      const cust = customers[day * dayTemplate.length + s.ci]!;
       await prisma.appointment.create({
         data: {
           tenantId, customerId: cust.id, productId: s.product, roomId: s.room,

@@ -32,6 +32,8 @@ import {
   Inbox,
   LogIn,
   Eye,
+  Menu,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -126,6 +128,8 @@ const providerSections: NavSection[] = [
 
 // Barra superior del modo empresa: el superadmin está "dentro" de una clínica.
 // Dice cuál, su plan y centros; permite "Ver como Pro" y volver al panel.
+// Por debajo de lg (tablet vertical, crm-multidispositivo T1) cabe en una línea:
+// los textos largos pasan a `title` y el botón de volver se acorta.
 function SuperadminBar({ tenantName }: { tenantName: string }) {
   const { info } = useFeatures();
   const preview = info?.preview === true;
@@ -144,25 +148,27 @@ function SuperadminBar({ tenantName }: { tenantName: string }) {
     : trialActive ? trialTone(trialDays).bar
     : info?.effectivePlan === "PRO" ? "bg-sky-50 text-sky-900 border-b border-sky-200"
     : "bg-gray-100 text-gray-800 border-b border-gray-200";
+  const headline = preview ? `Vista previa Pro de ${tenantName} · nada se guarda` : `Estás viendo ${tenantName} como superadmin`;
   return (
-    <div className={`${bar} px-5 py-2 flex items-center gap-3 flex-wrap text-[13px] min-h-[44px]`}>
+    <div className={`${bar} px-3 lg:px-5 py-2 flex items-center gap-2 lg:gap-3 lg:flex-wrap text-[13px] min-h-[44px]`}>
       {preview ? (
-        <span className="inline-flex items-center gap-2"><Eye className="w-4 h-4" /><b>Vista previa Pro</b> de <b>{tenantName}</b> · nada se guarda</span>
+        <span className="inline-flex items-center gap-2 min-w-0" title={headline}><Eye className="w-4 h-4 shrink-0" /><span className="truncate"><b>Vista previa Pro</b><span className="hidden lg:inline"> de <b>{tenantName}</b> · nada se guarda</span></span></span>
       ) : (
-        <span className="inline-flex items-center gap-2"><LogIn className="w-4 h-4 opacity-70" />Estás viendo <b>{tenantName}</b> como superadmin</span>
+        <span className="inline-flex items-center gap-2 min-w-0" title={headline}><LogIn className="w-4 h-4 opacity-70 shrink-0" /><span className="truncate"><span className="hidden lg:inline">Estás viendo </span><b>{tenantName}</b><span className="hidden lg:inline"> como superadmin</span></span></span>
       )}
       {info && (
-        <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs bg-white/70 border border-current/20">
-          {planText}{centers ? ` · ${centers}` : ""}
+        <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs bg-white/70 border border-current/20 whitespace-nowrap shrink-0" title={centers ? `${planText} · ${centers}` : planText}>
+          {planText}<span className="hidden lg:inline">{centers ? ` · ${centers}` : ""}</span>
         </span>
       )}
       {canPreview && (
-        <label className="ml-auto inline-flex items-center gap-2 text-xs cursor-pointer">
+        <label className="ml-auto inline-flex items-center gap-2 text-xs cursor-pointer whitespace-nowrap shrink-0" title={preview ? "Salir de la vista previa" : "Ver como Pro (vista previa)"}>
           <input type="checkbox" checked={preview} onChange={(e) => togglePreview(e.target.checked)} className="accent-blue-600 w-4 h-4" />
-          {preview ? "Salir de la vista previa" : "Ver como Pro (vista previa)"}
+          <span className="hidden lg:inline">{preview ? "Salir de la vista previa" : "Ver como Pro (vista previa)"}</span>
+          <span className="lg:hidden">{preview ? "Salir" : "Ver como Pro"}</span>
         </label>
       )}
-      <button type="button" onClick={back} className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 text-white shadow-sm hover:bg-blue-700 ${canPreview ? "" : "ml-auto"}`}><LogOut className="w-3.5 h-3.5 rotate-180" /> Volver al panel</button>
+      <button type="button" onClick={back} title="Volver al panel de proveedor" className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 text-white shadow-sm hover:bg-blue-700 whitespace-nowrap shrink-0 ${canPreview ? "" : "ml-auto"}`}><LogOut className="w-3.5 h-3.5 rotate-180" /> <span className="hidden lg:inline">Volver al panel</span><span className="lg:hidden">Volver</span></button>
     </div>
   );
 }
@@ -175,7 +181,7 @@ function PlanBadge() {
   if (!info) return null;
   // Mismo chip que en "Tu plan" y en el panel de proveedor (Esencial verde · Pro azul · prueba ámbar).
   return (
-    <Link href="/settings?tab=empresa" title="Ver tu plan" className="mt-3 inline-flex items-center gap-1.5 hover:opacity-80 transition-opacity">
+    <Link href="/settings?tab=empresa" title="Ver tu plan" className="mt-3 inline-flex items-center gap-1.5 touch:min-h-[44px] hover:opacity-80 transition-opacity">
       <span className="text-[11px] font-medium text-gray-500">Tu plan</span>
       <PlanChip plan={info.effectivePlan} trialDaysLeft={trialDaysLeft(info.trialUntil)} />
     </Link>
@@ -196,6 +202,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => { setActAs(getActAsTenant()); setReady(true); setRequestsNav(window.location.search.includes("filter=requests")); }, [pathname]);
   const isSuper = user?.role === "SUPERADMIN";
   const providerMode = isSuper && ready && !actAs;
+
+  // Cajón del menú en tablet vertical (< lg, crm-multidispositivo T1). Se cierra al
+  // navegar, al tocar fuera, con Escape o si la ventana pasa a tamaño de escritorio.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  useEffect(() => { setDrawerOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDrawerOpen(false); };
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onMq = (e: MediaQueryListEvent) => { if (e.matches) setDrawerOpen(false); };
+    window.addEventListener("keydown", onKey);
+    mq.addEventListener("change", onMq);
+    return () => { window.removeEventListener("keydown", onKey); mq.removeEventListener("change", onMq); };
+  }, [drawerOpen]);
 
   const { data: branding } = useQuery<Branding>({
     queryKey: ["branding"],
@@ -249,104 +269,199 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (item.href === "/superadmin/empresas") return pathname.startsWith("/superadmin") && !requestsNav;
     return pathname.startsWith(item.match ?? item.href);
   };
+  const visibleItems = (section: NavSection) =>
+    section.items.filter((item) => !item.roles || user.role === "SUPERADMIN" || item.roles.includes(user.role));
+  const initial = (user.firstName?.[0] ?? user.email[0] ?? "U").toUpperCase();
+
+  // --- Piezas del menú, compartidas por el aside de escritorio (≥ lg) y el cajón (< lg) ---
+
+  const brandRow = (
+    <div className="flex items-center gap-2.5">
+      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-teal-500 text-white flex items-center justify-center shadow-sm shrink-0">
+        <HeartPulse className="w-5 h-5" strokeWidth={2.2} />
+      </div>
+      <div className="leading-tight min-w-0">
+        <span className="block font-bold text-gray-900 tracking-tight truncate">MediRenova</span>
+        {providerMode
+          ? <span className="block text-[11px] text-gray-400 truncate">Panel de proveedor</span>
+          : branding?.name && <span className="block text-[11px] text-gray-400 truncate">{branding.name}</span>}
+      </div>
+    </div>
+  );
+
+  const brandExtras = (
+    <>
+      {providerMode && <div className="flex justify-center"><span className="mt-4 inline-block text-[9px] font-semibold uppercase tracking-[0.14em] text-blue-700 border-b border-blue-400 pb-0.5">Modo proveedor</span></div>}
+      {user.role === "ADMIN" && <div className="flex justify-center"><PlanBadge /></div>}
+    </>
+  );
+
+  const fullNav = (
+    <nav className="flex-1 p-3 overflow-y-auto">
+      {sections.map((section, si) => {
+        const items = visibleItems(section);
+        if (items.length === 0) return null;
+        return (
+          <div key={section.title ?? `main-${si}`} className={si > 0 ? "pt-3" : ""}>
+            {section.title && <p className="text-[11px] font-medium text-gray-400 px-3 pb-1 uppercase tracking-wide">{section.title}</p>}
+            <div className="space-y-0.5">
+              {items.map((item) => {
+                const active = isActive(item);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href as string}
+                    onClick={() => setRequestsNav(item.match === "?filter=requests")}
+                    className={`relative flex items-center gap-2.5 px-3 py-2 touch:py-3 rounded-lg text-sm transition-colors ${active ? "font-medium" : "text-gray-600 hover:bg-gray-100"}`}
+                    style={active ? { backgroundColor: `${primary}14`, color: primary } : undefined}
+                  >
+                    {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full" style={{ backgroundColor: primary }} />}
+                    <item.icon size={16} strokeWidth={1.75} />
+                    <span className="flex-1">{item.label}</span>
+                    {item.feature && !hasFeature(item.feature) && (
+                      <Lock size={13} className="text-gray-400" aria-label="Disponible en el plan Pro" />
+                    )}
+                    {item.href === "/appointments" && episodesCount > 0 && (
+                      <span title={`${episodesCount} episodio(s) sin cerrar`} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">{episodesCount}</span>
+                    )}
+                    {item.label === "Peticiones" && openRequestsCount > 0 && (
+                      <span title={`${openRequestsCount} petición(es) abierta(s)`} className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">{openRequestsCount}</span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </nav>
+  );
+
+  const userFooter = (
+    <div className="p-3 border-t border-gray-200">
+      <div className="flex items-center gap-2.5 px-1.5 mb-2">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-teal-500 text-white flex items-center justify-center text-xs font-bold shrink-0">
+          {initial}
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-gray-900 truncate">{user.email}</p>
+          <p className="text-[11px] text-gray-400">{user.role}</p>
+        </div>
+      </div>
+      <button
+        onClick={logout}
+        className="w-full inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-lg text-left transition-colors"
+      >
+        <LogOut className="w-4 h-4" /> Cerrar sesión
+      </button>
+    </div>
+  );
+
+  // Raíl de 64 px (< lg): logo, iconos de módulos con badge y candado, avatar.
+  // Tocar un icono navega directamente; el logo y el avatar abren el cajón, que
+  // es donde están las etiquetas, el plan, el usuario y "Cerrar sesión".
+  const rail = (
+    <aside className="flex lg:hidden w-16 shrink-0 bg-white border-r border-gray-200 flex-col items-center">
+      <button type="button" onClick={() => setDrawerOpen(true)} aria-label="Abrir menú" title="Menú" className="mt-3 mb-1 w-11 h-11 rounded-xl inline-flex items-center justify-center hover:bg-gray-100">
+        <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-teal-500 text-white flex items-center justify-center shadow-sm">
+          <HeartPulse className="w-5 h-5" strokeWidth={2.2} />
+        </span>
+      </button>
+      <nav className="flex-1 w-full overflow-y-auto py-1 flex flex-col items-center gap-0.5" aria-label="Módulos">
+        {sections.map((section, si) => {
+          const items = visibleItems(section);
+          if (items.length === 0) return null;
+          return (
+            <div key={section.title ?? `main-${si}`} className="w-full flex flex-col items-center gap-0.5">
+              {si > 0 && <span className="w-8 h-px bg-gray-200 my-1.5" aria-hidden />}
+              {items.map((item) => {
+                const active = isActive(item);
+                const locked = !!item.feature && !hasFeature(item.feature);
+                const badge = item.href === "/appointments" ? episodesCount : item.label === "Peticiones" ? openRequestsCount : 0;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href as string}
+                    onClick={() => setRequestsNav(item.match === "?filter=requests")}
+                    aria-label={item.label}
+                    title={item.label}
+                    aria-current={active ? "page" : undefined}
+                    className={`relative flex items-center justify-center w-12 h-12 rounded-xl transition-colors ${active ? "" : "text-gray-600 hover:bg-gray-100"}`}
+                    style={active ? { backgroundColor: `${primary}14`, color: primary } : undefined}
+                  >
+                    {active && <span className="absolute -left-2 top-2 bottom-2 w-1 rounded-full" style={{ backgroundColor: primary }} />}
+                    <item.icon size={20} strokeWidth={1.75} />
+                    {locked && <Lock size={11} className="absolute bottom-1.5 right-1.5 text-gray-400 bg-white rounded-full" aria-label="Disponible en el plan Pro" />}
+                    {badge > 0 && (
+                      <span className={`absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] leading-4 text-center font-semibold ${item.label === "Peticiones" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{badge}</span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          );
+        })}
+      </nav>
+      <button type="button" onClick={() => setDrawerOpen(true)} aria-label="Cuenta y menú" title={user.email} className="mt-1 mb-3 w-11 h-11 rounded-xl inline-flex items-center justify-center hover:bg-gray-100">
+        <span className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-teal-500 text-white flex items-center justify-center text-xs font-bold">{initial}</span>
+      </button>
+    </aside>
+  );
+
+  // Cajón de 280 px sobre el contenido (< lg): el menú completo con etiquetas.
+  const drawer = drawerOpen ? (
+    <div className="lg:hidden fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Menú">
+      <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
+      <div className="absolute inset-y-0 left-0 w-[280px] max-w-[85vw] bg-white shadow-2xl flex flex-col">
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-start gap-2">
+            <div className="flex-1 min-w-0">{brandRow}</div>
+            <button type="button" onClick={() => setDrawerOpen(false)} aria-label="Cerrar menú" className="-mr-2 -mt-2 w-10 h-10 rounded-lg inline-flex items-center justify-center text-gray-500 hover:bg-gray-100">
+              <X size={20} />
+            </button>
+          </div>
+          {brandExtras}
+        </div>
+        {fullNav}
+        {userFooter}
+      </div>
+    </div>
+  ) : null;
 
   return (
     // h-dvh (no h-screen): en Safari de iPad 100vh incluye la barra del navegador y
     // dejaba el pie del menú fuera de la pantalla (crm-multidispositivo T0).
     <div className="flex h-dvh bg-gray-50">
-      {/* Sidebar */}
-      <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
+      {/* Sidebar de escritorio (≥ lg), sin cambios respecto a la versión original */}
+      <aside className="hidden lg:flex w-56 bg-white border-r border-gray-200 flex-col">
         <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-teal-500 text-white flex items-center justify-center shadow-sm shrink-0">
-              <HeartPulse className="w-5 h-5" strokeWidth={2.2} />
-            </div>
-            <div className="leading-tight min-w-0">
-              <span className="block font-bold text-gray-900 tracking-tight truncate">MediRenova</span>
-              {providerMode
-                ? <span className="block text-[11px] text-gray-400 truncate">Panel de proveedor</span>
-                : branding?.name && <span className="block text-[11px] text-gray-400 truncate">{branding.name}</span>}
-            </div>
-          </div>
-          {providerMode && <div className="flex justify-center"><span className="mt-4 inline-block text-[9px] font-semibold uppercase tracking-[0.14em] text-blue-700 border-b border-blue-400 pb-0.5">Modo proveedor</span></div>}
-          {user.role === "ADMIN" && <div className="flex justify-center"><PlanBadge /></div>}
+          {brandRow}
+          {brandExtras}
         </div>
-
-        <nav className="flex-1 p-3 overflow-y-auto">
-          {sections.map((section, si) => {
-            const items = section.items.filter((item) => !item.roles || user.role === "SUPERADMIN" || item.roles.includes(user.role));
-            if (items.length === 0) return null;
-            return (
-              <div key={section.title ?? `main-${si}`} className={si > 0 ? "pt-3" : ""}>
-                {section.title && <p className="text-[11px] font-medium text-gray-400 px-3 pb-1 uppercase tracking-wide">{section.title}</p>}
-                <div className="space-y-0.5">
-                  {items.map((item) => {
-                    const active = isActive(item);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href as string}
-                        onClick={() => setRequestsNav(item.match === "?filter=requests")}
-                        className={`relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${active ? "font-medium" : "text-gray-600 hover:bg-gray-100"}`}
-                        style={active ? { backgroundColor: `${primary}14`, color: primary } : undefined}
-                      >
-                        {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full" style={{ backgroundColor: primary }} />}
-                        <item.icon size={16} strokeWidth={1.75} />
-                        <span className="flex-1">{item.label}</span>
-                        {item.feature && !hasFeature(item.feature) && (
-                          <Lock size={13} className="text-gray-400" aria-label="Disponible en el plan Pro" />
-                        )}
-                        {item.href === "/appointments" && episodesCount > 0 && (
-                          <span title={`${episodesCount} episodio(s) sin cerrar`} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">{episodesCount}</span>
-                        )}
-                        {item.label === "Peticiones" && openRequestsCount > 0 && (
-                          <span title={`${openRequestsCount} petición(es) abierta(s)`} className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">{openRequestsCount}</span>
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </nav>
-
-        <div className="p-3 border-t border-gray-200">
-          <div className="flex items-center gap-2.5 px-1.5 mb-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-teal-500 text-white flex items-center justify-center text-xs font-bold shrink-0">
-              {(user.firstName?.[0] ?? user.email[0] ?? "U").toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-gray-900 truncate">{user.email}</p>
-              <p className="text-[11px] text-gray-400">{user.role}</p>
-            </div>
-          </div>
-          <button
-            onClick={logout}
-            className="w-full inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-3 py-2 rounded-lg text-left transition-colors"
-          >
-            <LogOut className="w-4 h-4" /> Cerrar sesión
-          </button>
-        </div>
+        {fullNav}
+        {userFooter}
       </aside>
 
+      {rail}
+      {drawer}
+
       {/* Main content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {isSuper && actAs && <SuperadminBar tenantName={branding?.name ?? "la empresa"} />}
         {/* El provider siempre envuelve a las páginas (algunas usan useAppContext incluso
             durante el instante previo a la redirección); en modo proveedor solo se
             oculta la barra Empresa › Centro. */}
         <ContextBarProvider>
           {providerMode && (
-            // Barra del modo proveedor: simétrica a la del modo empresa, con cierre de
-            // sesión a mano (el del menú lateral queda abajo, fuera de vista en pantallas bajas).
-            <div className="border-b border-gray-200 bg-white px-6 py-2 flex items-center gap-3 text-sm min-h-[44px]">
-              <span className="inline-flex items-center gap-1.5 font-medium text-blue-600"><Building2 size={15} strokeWidth={2} /> Panel de proveedor</span>
+            // Barra del modo proveedor: simétrica a la del modo empresa. "Cerrar sesión"
+            // vive solo en el pie del menú (aside o cajón): aquí era redundante.
+            <div className="border-b border-gray-200 bg-white px-3 lg:px-6 py-2 flex items-center gap-3 text-sm min-h-[44px]">
+              <button type="button" onClick={() => setDrawerOpen(true)} aria-label="Abrir menú" className="lg:hidden -my-2 -ml-1 w-11 h-11 rounded-lg inline-flex items-center justify-center text-gray-600 hover:bg-gray-100"><Menu size={20} /></button>
+              <span className="inline-flex items-center gap-1.5 font-medium text-blue-600 whitespace-nowrap"><Building2 size={15} strokeWidth={2} /> Panel de proveedor</span>
               <span className="ml-auto text-xs text-gray-500 truncate">{user.email}</span>
-              <button type="button" onClick={logout} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"><LogOut className="w-3.5 h-3.5" /> Cerrar sesión</button>
             </div>
           )}
-          {!providerMode && <ContextBar empresaName={branding?.name ?? "MediRenova"} primaryColor={primary} />}
+          {!providerMode && <ContextBar empresaName={branding?.name ?? "MediRenova"} primaryColor={primary} onMenu={() => setDrawerOpen(true)} />}
           <div className="flex-1 overflow-y-auto">{children}</div>
         </ContextBarProvider>
       </main>

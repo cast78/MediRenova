@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError, getAccessToken, getActAsTenant } from "@/lib/api";
@@ -252,10 +253,9 @@ export function CertificateTemplateModal({ productId, productName, onClose }: { 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto">
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-5xl my-4 p-6">
+    <Modal onClose={onClose} size="5xl">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl">×</button>
-        <h2 className="text-lg font-semibold text-gray-900">Plantilla del certificado</h2>
+        <h2 className="sheet-head text-lg font-semibold text-gray-900">Plantilla del certificado</h2>
         <p className="text-sm text-gray-500 mb-4">{productName}</p>
 
         {isLoading || !config ? (
@@ -272,7 +272,7 @@ export function CertificateTemplateModal({ productId, productName, onClose }: { 
               </button>
             </div>
 
-            <div className="grid grid-cols-[1fr_1fr] gap-5">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-5">
               {/* ── Configuración ── */}
               <div>
                 {mode === "visual" ? (
@@ -391,7 +391,7 @@ export function CertificateTemplateModal({ productId, productName, onClose }: { 
 
             {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
-            <div className="flex items-center justify-between gap-3 pt-4 mt-2 border-t border-gray-100">
+            <div className="sheet-foot flex items-center justify-between gap-3 pt-4 mt-2 border-t border-gray-100">
               <div className="flex items-center gap-3">
                 <button type="button" onClick={previewPdf} disabled={previewing}
                   className="px-3 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 disabled:opacity-50">
@@ -412,7 +412,6 @@ export function CertificateTemplateModal({ productId, productName, onClose }: { 
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

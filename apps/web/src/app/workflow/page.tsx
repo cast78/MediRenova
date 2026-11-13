@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { useFeatures } from "@/lib/use-features";
@@ -86,9 +87,8 @@ function RuleModal({ rule, products, onClose }: { rule?: WorkflowRule; products:
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
-        <div className="flex items-start gap-3 mb-4">
+    <Modal size="lg">
+        <div className="sheet-head flex items-start gap-3 mb-4">
           <span className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><Zap className="w-5 h-5 text-blue-600" /></span>
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-semibold text-gray-900 leading-tight">{isEdit ? "Editar regla" : "Nueva regla"}</h2>
@@ -179,15 +179,14 @@ function RuleModal({ rule, products, onClose }: { rule?: WorkflowRule; products:
             <p className="text-[11px] text-gray-400 mt-1.5"><Info className="w-3 h-3 inline align-[-1px]" /> {products.find((p) => p.id === form.productId)?.name ? `Para «${products.find((p) => p.id === form.productId)!.name}» · ` : ""}se ejecuta a diario y se salta a quien ya tenga cita.</p>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3 pt-1">
+          <div className="sheet-foot flex justify-end gap-3 pt-1">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
             <button type="submit" disabled={mutation.isPending} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
               {mutation.isPending ? "Guardando..." : isEdit ? "Guardar" : "Crear regla"}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

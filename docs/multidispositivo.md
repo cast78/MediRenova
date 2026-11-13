@@ -1,15 +1,15 @@
 # MediRenova en tablet y pantalla táctil
 
-Estado: **Fase A implementada** (táctil y tablas; `crm-multidispositivo`). La Fase B (disposición compacta para tablets de 10–11" en vertical) está diseñada y pendiente de decisión.
+Estado: **Fase A en producción** (táctil y tablas; PR #22) y **Fase B completa** (disposición compacta para tablets de 10–11" en vertical: raíl y cajón, diálogos como hoja, Reservas en tablet, selector propio, filtros de analítica), verificada en local el 13/11/2026 y pendiente de PR.
 
 ## Dispositivos soportados
 
 | Dispositivo | Orientación | Soporte |
 |---|---|---|
 | Ordenador (≥ 1024 px) | — | completo (vista de escritorio) |
-| Tablet de 11" o más (iPad Pro 11/13, iPad Air, Surface Pro) | horizontal | completo: vista de escritorio con controles táctiles |
+| Tablet de 10" o más (iPad, iPad Air, iPad Pro, Surface Pro) | horizontal | completo: vista de escritorio con controles táctiles |
 | iPad Pro 13" | vertical | completo (1032 px CSS, recibe la vista de escritorio) |
-| Tablet de 10–11" | vertical | **usable sin garantía de disposición** hasta la Fase B (menú de 224 px fijo, tablas con scroll) |
+| Tablet de 10–11" (768–1023 px CSS) | vertical | completo (disposición compacta): menú en raíl de 64 px con cajón, diálogos como hoja a pantalla completa, Reservas con Día por defecto y Semana desplazable, selectores propios |
 | Teléfono | — | solo las páginas públicas (reserva, confirmación, portal del paciente) |
 
 La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de Tailwind (1024 px CSS). Los píxeles CSS no son los físicos: un iPad Pro 13" apaisado mide 1376 px CSS; una Surface Pro 10 al 200 %, 1440 px.
@@ -32,11 +32,27 @@ La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de
 - `viewport` con `viewport-fit=cover` en `app/layout.tsx`.
 - Tablas: siempre envueltas en `<DataTable minWidth={N}>` (`components/ui/data-table.tsx`), que da scroll horizontal propio con fundido, ancho mínimo, primera columna fija al desplazar y filas más altas en táctil, sin tocar el marcado de la tabla. Columnas prescindibles con `hidden lg:table-cell` en `th` y `td` (solo se ocultan por debajo de 1024 px).
 
+## Convenciones de código (Fase B)
+
+- **Shell** (`components/app-layout.tsx`): por debajo de `lg` el menú es un raíl de 64 px (iconos de 48 px, badge, candado, avatar) y el menú completo vive en un cajón de 280 px (`role="dialog"`) que se abre desde ☰, el logo o el avatar y se cierra al navegar, al tocar fuera, con Escape o al pasar a escritorio. El aside de 224 px de escritorio es el mismo marcado de siempre con `hidden lg:flex`. Las piezas (marca, navegación, pie de usuario) se comparten entre aside y cajón.
+- **Barras superiores** (`context-bar.tsx`, `SuperadminBar`, barra de proveedor): `px-3 lg:px-6`, botón ☰ `lg:hidden`, textos largos a `title` con versión corta `lg:hidden`, nombres con `truncate`.
+- **Diálogos**: siempre `<Modal>` (`components/ui/modal.tsx`), nunca un `fixed inset-0` a mano. En escritorio es el diálogo centrado (`size` xs–5xl). Por debajo de `lg`, los de tamaño lg o más son **hoja a pantalla completa**; los pequeños (confirmaciones) siguen centrados; se fuerza con `sheet`. Dos formas de tener cabecera y pie fijos en la hoja: pasar `title` y `footer` al `Modal` (el botón de enviar va en el pie, fuera del `<form>`, asociado con `form="id"`), o dejar el contenido como está y marcar la fila del título con `sheet-head` y la de acciones con `sheet-foot` (clases de `globals.css`, pegajosas dentro del cuerpo con scroll, solo activas por debajo de `lg`). El cuerpo de una hoja lleva 1 rem de relleno, que esas clases compensan. Cierre por fondo, X y Escape; `locked` lo desactiva mientras se guarda.
+- **Variantes `max-lg:`**: no están disponibles porque `screens` incluye pantallas `raw` (`touch`, `hover-none`); lo que deba aplicarse solo por debajo de `lg` va en `globals.css` bajo `@media (max-width: 1023.98px)` o se expresa en positivo (`grid-cols-1 lg:grid-cols-2`).
+- **Rejillas**: las de 2 columnas caben en tablet vertical; las filas de 3–4 indicadores pasan a `grid-cols-2 lg:grid-cols-4`; editores a dos paneles, a una columna bajo `lg`.
+- **Reservas en tablet vertical**: se abre en la última vista usada en el dispositivo (por defecto Día); la Semana es un calendario con scroll propio en los dos ejes: 7 columnas de 160 px (`.wk-days` en `globals.css`) con ajuste por día, cabecera de días y columna de horas pegajosas dentro del contenedor, alto limitado al disponible en pantalla y posición inicial en lunes y la hora actual; la leyenda de estados se pliega tras "Leyenda ▾" (`StatusLegend`).
+- **Selectores**: `<Select>` (`components/ui/select.tsx`) en lugar del `<select>` nativo (el picker del sistema varía por dispositivo y agrupa mal): botón con la opción elegida; desplegable propio en escritorio y hoja centrada por debajo de `lg`; opciones planas o agrupadas con etiqueta, punto de color e indicación secundaria opcionales; `emptyLabel` para un vacío elegible ("Todas las salas"). `RoomSelect` es un envoltorio suyo (salas agrupadas por centro solo cuando hay varios). Los `<select>` que queden se migran al tocar cada pantalla.
+
 ## Cómo probar
 
 1. **Emulación**: en las herramientas del navegador, modo dispositivo con un iPad (apaisado 1180×820 o 1376×1032) y puntero táctil activado. Comprobar: botones y campos ≥ 44 px, sin zoom al enfocar un campo, acciones de fila visibles sin hover, tablas con scroll lateral propio y la página sin scroll horizontal.
 2. **Preview de Vercel**: cada push a la rama genera una URL de preview; abrirla en el iPad o la Surface reales (misma API y datos que producción; este cambio no toca la API).
 3. **Escritorio con ratón**: nada debe cambiar. Comparar capturas a 1440 px antes y después.
+
+## Verificación realizada (Fase B, 13/11/2026)
+
+- **Tablet**: 768×1024 en 13 páginas y 820×1180, 1024×768 y 1180×820 en 6: sin desbordamientos, raíl por debajo de 1024 y menú completo a partir de 1024; Semana con alto limitado solo en vertical.
+- **Escritorio a 1440 px**: huella de tamaños de 8 páginas comparada con `main`: idéntica salvo los combos nativos que ahora son el selector propio (cambio deliberado).
+- **Pendiente en iPad real**: teclado en pantalla sobre las hojas y desplazamiento de la Semana con el dedo (validado solo con emulación).
 
 ## Verificación realizada (Fase A, 8/11/2026)
 
@@ -46,5 +62,6 @@ La frontera entre disposición compacta y de escritorio es el breakpoint `lg` de
 
 ## Pendiente
 
-- Fase B (si se decide soportar tablets de 10–11" en vertical): raíl y cajón, hojas a pantalla completa, Semana compacta, filtros de analítica en hoja, formularios a una columna.
+- Migración del resto de `<select>` nativos al selector propio (T5.5), en un commit aparte tras la PR de la Fase B.
+- Prueba en iPad real (T6b.3) cuando haya dispositivo.
 - Vista en tarjetas para Clientes en tablet (T2.3, Fase B).

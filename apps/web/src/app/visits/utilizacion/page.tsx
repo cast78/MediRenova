@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -570,8 +571,7 @@ function TraceModal({ row, cyc, onClose, onOpenReserva, onOpenRevision, onAbrirR
   });
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white shadow-xl max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} size="md" padding="">
         {/* Cabecera con el contexto del paciente + estado del ciclo */}
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100">
           <div className="min-w-0">
@@ -636,8 +636,7 @@ function TraceModal({ row, cyc, onClose, onOpenReserva, onOpenRevision, onAbrirR
             </button>
           ) : null}
         </div>
-      </div>
-    </div>
+    </Modal>
     {showClient && <ClientInfoModal customerId={row.customer.id} onClose={() => setShowClient(false)} />}
     </>
   );

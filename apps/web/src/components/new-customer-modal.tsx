@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Modal } from "@/components/ui/modal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 
@@ -89,10 +90,17 @@ export function NewCustomerModal({ onClose, onCreated }: { onClose: () => void; 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Nuevo cliente</h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
+    // Cabecera y pie fijos del Modal (en tablet, hoja a pantalla completa); el botón
+    // de enviar vive en el pie, fuera del <form>, y se asocia por id.
+    <Modal onClose={onClose} size="lg" z={60} title="Nuevo cliente" footer={
+      <>
+        <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
+        <button type="submit" form="new-customer-form" disabled={mutation.isPending} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+          {mutation.isPending ? "Guardando..." : "Crear cliente"}
+        </button>
+      </>
+    }>
+        <form id="new-customer-form" onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             {textField("DNI / NIE", "dni", "text", true)}
             {textField("Fecha de nacimiento", "birthDate", "date", true)}
@@ -119,14 +127,7 @@ export function NewCustomerModal({ onClose, onCreated }: { onClose: () => void; 
           </label>
 
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancelar</button>
-            <button type="submit" disabled={mutation.isPending} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
-              {mutation.isPending ? "Guardando..." : "Crear cliente"}
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

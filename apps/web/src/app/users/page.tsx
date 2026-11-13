@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { DataTable } from "@/components/ui/data-table";
 import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -79,8 +80,7 @@ function UserModal({ user, centers, onClose }: { user?: TeamUser; centers: Cente
   const showCenter = form.role !== "ADMIN";
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+    <Modal size="md">
         <button onClick={onClose} aria-label="Cerrar" className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         <div className="flex items-center gap-3 mb-4">
           <span className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center shrink-0"><UserCog className="w-[18px] h-[18px] text-blue-600" /></span>
@@ -136,8 +136,7 @@ function UserModal({ user, centers, onClose }: { user?: TeamUser; centers: Cente
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

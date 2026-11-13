@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useState, useEffect } from "react";
@@ -190,8 +191,7 @@ function AvisarModal({ row, onClose }: { row: RevisionRow; onClose: () => void }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} size="md">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-semibold text-gray-900">Avisar de renovación</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
@@ -225,8 +225,7 @@ function AvisarModal({ row, onClose }: { row: RevisionRow; onClose: () => void }
           </button>
         </div>
         <p className="text-[11px] text-gray-400 mt-3">Cada envío queda registrado en el historial del cliente. Solo se habilitan los canales que ha aceptado (RGPD).</p>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -363,7 +362,7 @@ export default function RevisionsPage() {
         const mr = monthRange();
         const isMonthHistory = view === "history" && from === mr.from && to === mr.to;
         return (
-          <div className="grid grid-cols-4 gap-3 mb-5">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
             <KpiCard label="Pendientes" value={stats?.pending ?? "—"} icon={ClipboardList} tone="neutral"
               active={view === "pending"} onClick={() => setView("pending")} />
             <KpiCard label="Por caducar ≤ 30 días" value={stats?.expiringSoon ?? "—"} icon={AlarmClock} tone="red"

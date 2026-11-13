@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, MapPin, ChevronRight } from "lucide-react";
+import { Building2, MapPin, ChevronRight, Menu } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
 interface CtxCenter { id: string; name: string; lat?: number | null; lng?: number | null; address?: string | null; city?: string | null; province?: string | null }
@@ -60,7 +60,9 @@ export function ContextBarProvider({ children }: { children: React.ReactNode }) 
 }
 
 // Barra superior de contexto: Empresa › Centro, progresiva según el módulo.
-export function ContextBar({ empresaName, primaryColor }: { empresaName: string; primaryColor: string }) {
+// Por debajo de lg (crm-multidispositivo T1) es compacta: botón ☰ que abre el
+// cajón del menú, nombre de empresa truncado y el selector de centro.
+export function ContextBar({ empresaName, primaryColor, onMenu }: { empresaName: string; primaryColor: string; onMenu?: () => void }) {
   const pathname = usePathname();
   const { centers, centerId, setCenterId } = useAppContext();
   const aware = CENTER_AWARE.some((p) => pathname.startsWith(p));
@@ -80,15 +82,20 @@ export function ContextBar({ empresaName, primaryColor }: { empresaName: string;
   );
 
   return (
-    <div className="border-b border-gray-200 bg-white px-6 py-2 flex items-center gap-2 text-sm min-h-[44px]">
-      <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: primaryColor }}>
-        <Building2 size={15} strokeWidth={2} />
-        {empresaName}
+    <div className="border-b border-gray-200 bg-white px-3 lg:px-6 py-2 flex items-center gap-2 text-sm min-h-[44px]">
+      {onMenu && (
+        <button type="button" onClick={onMenu} aria-label="Abrir menú" className="lg:hidden -my-2 -ml-1 w-11 h-11 rounded-lg inline-flex items-center justify-center text-gray-600 hover:bg-gray-100">
+          <Menu size={20} />
+        </button>
+      )}
+      <span className="inline-flex items-center gap-1.5 font-medium min-w-0" style={{ color: primaryColor }}>
+        <Building2 size={15} strokeWidth={2} className="shrink-0" />
+        <span className="truncate">{empresaName}</span>
       </span>
 
       {aware && centers.length > 0 && (
         <>
-          <ChevronRight size={14} className="text-gray-300" />
+          <ChevronRight size={14} className="text-gray-300 shrink-0" />
           {onlyOne ? (
             <span className="inline-flex items-center gap-1.5 text-gray-700">
               {pin}

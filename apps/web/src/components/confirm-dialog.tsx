@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
 // Diálogo de confirmación genérico (panel de proveedor): texto según la acción,
 // botón de confirmar con tono (azul / verde / ámbar / rojo) y, opcionalmente,
 // un campo de nota (p. ej. motivo de rechazo) que se pasa a onConfirm.
@@ -33,8 +34,7 @@ export function ConfirmDialog({ spec, onClose }: { spec: ConfirmSpec; onClose: (
     try { await spec.onConfirm(note.trim()); onClose(); } finally { setBusy(false); }
   }
   return (
-    <div className="fixed inset-0 z-50 bg-gray-900/45 flex items-center justify-center p-4" onClick={onClose}>
-      <div role="dialog" aria-labelledby="confirm-title" className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} size="md" bodyClassName="space-y-4" ariaLabel={spec.title}>
         <div className="flex items-center gap-3">
           <span className={`w-10 h-10 rounded-xl inline-flex items-center justify-center ${tone === "red" ? "bg-red-50 text-red-600" : tone === "amber" ? "bg-amber-50 text-amber-600" : tone === "green" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}>
             {tone === "red" || tone === "amber" ? <AlertTriangle className="w-5 h-5" /> : <Check className="w-5 h-5" />}
@@ -56,7 +56,6 @@ export function ConfirmDialog({ spec, onClose }: { spec: ConfirmSpec; onClose: (
             {busy && <Loader2 className="w-4 h-4 animate-spin" />} {spec.confirmLabel}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
