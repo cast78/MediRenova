@@ -7,7 +7,8 @@
 // recuadro suave, título y subtítulo). Opciones planas o agrupadas con etiqueta
 // discreta; cada fila puede llevar icono o punto de color; marca en la elegida;
 // cierre al elegir, fuera o Escape.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, X } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 
@@ -74,15 +75,44 @@ export function Select({
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  // Desplegable de escritorio: se cierra al pulsar fuera o con Escape.
+  // Desplegable de escritorio: se pinta en <body> (portal) con posición fija
+  // calculada desde el botón, para que ninguna tarjeta, tabla o diálogo con
+  // overflow lo recorte; hacia arriba si no cabe debajo. Se cierra al pulsar
+  // fuera, con Escape o al desplazar/redimensionar la página.
   const wrapRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    if (!open || compact || !wrapRef.current) { setPos(null); return; }
+    const r = wrapRef.current.getBoundingClientRect();
+    const width = menu === "button" ? Math.max(r.width, 220) : 280;
+    const left = Math.max(8, Math.min(menu === "button" ? r.left : r.right - width, window.innerWidth - width - 8));
+    const below = window.innerHeight - r.bottom - 12;
+    const need = Math.min(320, (popRef.current?.scrollHeight ?? 320) + 2);
+    const up = below < need && r.top > below;
+    setPos(up
+      ? { position: "fixed", left, width, bottom: window.innerHeight - r.top + 6, maxHeight: Math.min(320, r.top - 12) }
+      : { position: "fixed", left, width, top: r.bottom + 6, maxHeight: Math.min(320, below) });
+  }, [open, compact, menu]);
   useEffect(() => {
     if (!open || compact) return;
-    const onDoc = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false); };
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      setOpen(false);
+    };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onMove = (e: Event) => { if (popRef.current && e.target instanceof Node && popRef.current.contains(e.target)) return; setOpen(false); };
     document.addEventListener("mousedown", onDoc);
     window.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDoc); window.removeEventListener("keydown", onKey); };
+    document.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
   }, [open, compact]);
 
   const allGroups: SelectGroup[] = groups ?? [{ options: options ?? [] }];
@@ -159,7 +189,10 @@ export function Select({
           {list}
         </Modal>
       ) : (
-        <div className={`absolute top-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-[0_12px_32px_-8px_rgba(17,24,39,0.18),0_2px_6px_rgba(17,24,39,0.06)] z-30 max-h-80 overflow-y-auto ${menu === "button" ? "left-0 right-0 min-w-[220px]" : "right-0 w-[280px]"}`}>{list}</div>
+        createPortal(
+          <div ref={popRef} style={pos ?? { position: "fixed", visibility: "hidden" }} className="z-[90] bg-white border border-gray-200 rounded-xl shadow-[0_12px_32px_-8px_rgba(17,24,39,0.18),0_2px_6px_rgba(17,24,39,0.06)] overflow-y-auto">{list}</div>,
+          document.body,
+        )
       ))}
     </div>
   );
