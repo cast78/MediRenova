@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -101,11 +102,7 @@ function RuleModal({ rule, products, onClose }: { rule?: WorkflowRule; products:
         <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Producto *</label>
-            <select required value={form.productId} onChange={(e) => setForm((f) => ({ ...f, productId: e.target.value }))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">— Seleccionar —</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <Select value={form.productId} onChange={(v) => setForm((f) => ({ ...f, productId: v }))} options={products.map((p) => ({ value: p.id, label: p.name }))} placeholder="— Seleccionar —" title="Producto" headerIcon={<Package className="w-5 h-5" />} optionIcon={<Package className="w-4 h-4" />} className="w-full" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Días antes de caducidad *</label>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -104,14 +105,7 @@ export function ContextBar({ empresaName, primaryColor, onMenu }: { empresaName:
           ) : (
             <div className="inline-flex items-center gap-1.5">
               {pin}
-              <select
-                value={centerId}
-                onChange={(e) => setCenterId(e.target.value)}
-                className="text-sm border border-gray-200 rounded-lg px-2.5 py-1 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">{requireCenter ? "Elige un centro…" : "Todos los centros"}</option>
-                {centers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <Select value={centerId} onChange={setCenterId} options={[{ value: "", label: requireCenter ? "Elige un centro…" : "Todos los centros" }, ...centers.map((c) => ({ value: c.id, label: c.name }))]} placeholder={requireCenter ? "Elige un centro…" : "Todos los centros"} title="Centro" subtitle="Centro activo en los módulos de operación" headerIcon={<Building2 className="w-5 h-5" />} optionIcon={<Building2 className="w-4 h-4" />} className="!py-1 !pl-2.5 !border-gray-200 !text-gray-700" />
             </div>
           )}
         </>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
@@ -977,21 +978,13 @@ function CampaignModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
 
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Plantilla</label>
-            <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">Elige plantilla…</option>
-              {(templates ?? []).filter((t) => t.active).map((t) => <option key={t.id} value={t.id}>{t.name} · {CHANNEL_LABEL[t.channel]}</option>)}
-            </select>
+            <Select value={templateId} onChange={setTemplateId} options={(templates ?? []).filter((t) => t.active).map((t) => ({ value: t.id, label: `${t.name} · ${CHANNEL_LABEL[t.channel]}` }))} placeholder="Elige plantilla…" title="Plantilla" headerIcon={<FileText className="w-5 h-5" />} optionIcon={<FileText className="w-4 h-4" />} className="w-full" />
             {template && <p className="text-[11px] text-gray-400 mt-1">Canal: {CHANNEL_LABEL[template.channel]}{template.channel !== "EMAIL" ? " (en pruebas se registra; requiere proveedor en producción)" : ""}</p>}
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Segmento</label>
-            <select value={segmentId} onChange={(e) => setSegmentId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">Elige segmento…</option>
-              {(segments ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <Select value={segmentId} onChange={setSegmentId} options={(segments ?? []).map((s) => ({ value: s.id, label: s.name }))} placeholder="Elige segmento…" title="Segmento" headerIcon={<Users className="w-5 h-5" />} optionIcon={<Users className="w-4 h-4" />} className="w-full" />
             {segment && <p className="text-[11px] text-blue-600 mt-1">Llegará a ≈ {preview ? preview.count : "…"} clientes (según consentimiento del canal al enviar).</p>}
           </div>
 

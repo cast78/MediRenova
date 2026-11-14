@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 // Panel de proveedor (crm-planes P4/P4b): centro de mando de empresas y licencias.
 // KPIs que filtran, columna "Atención" con orden por atención necesaria, panel
@@ -9,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, Clock, Inbox, Flame, Moon, Plus, Search, LogIn, Check, X, Loader2, Sparkles } from "lucide-react";
+import { Building2, Clock, Inbox, Flame, Moon, Plus, Search, LogIn, Check, X, Loader2, Sparkles, Globe } from "lucide-react";
 import { apiFetch, ApiError, setActAsTenant } from "@/lib/api";
 import { PLAN_LABEL, trialTone, type PlanTier } from "@/lib/use-features";
 import { PlanChip } from "@/components/plan-chip";
@@ -407,8 +408,8 @@ function NewTenantModal({ onClose, onCreated }: { onClose: () => void; onCreated
           <div className="grid grid-cols-2 gap-3">
             <label className="block col-span-2"><span className="text-xs font-medium text-gray-600">Nombre</span><input value={f.name} onChange={set("name")} onBlur={slugAuto} required className={FIELD} /></label>
             <label className="block"><span className="text-xs font-medium text-gray-600">Slug (URL del portal)</span><input value={f.slug} onChange={set("slug")} required pattern="[a-z0-9-]+" className={FIELD} /></label>
-            <label className="block"><span className="text-xs font-medium text-gray-600">Zona horaria</span><select value={f.timezone} onChange={set("timezone")} className={FIELD}><option>Europe/Madrid</option><option>Atlantic/Canary</option></select></label>
-            <label className="block"><span className="text-xs font-medium text-gray-600">Plan</span><select value={f.plan} onChange={set("plan")} className={FIELD}><option value="ESSENTIAL">Esencial</option><option value="PRO">Pro</option></select></label>
+            <label className="block"><span className="text-xs font-medium text-gray-600">Zona horaria</span><Select value={f.timezone} onChange={(v) => setF((s) => ({ ...s, timezone: v }))} options={[{ value: "Europe/Madrid", label: "Europe/Madrid" }, { value: "Atlantic/Canary", label: "Atlantic/Canary" }]} placeholder="Zona horaria" title="Zona horaria" headerIcon={<Globe className="w-5 h-5" />} optionIcon={<Globe className="w-4 h-4" />} className="w-full mt-1" /></label>
+            <label className="block"><span className="text-xs font-medium text-gray-600">Plan</span><Select value={f.plan} onChange={(v) => setF((s) => ({ ...s, plan: v as PlanTier }))} options={[{ value: "ESSENTIAL", label: "Esencial" }, { value: "PRO", label: "Pro" }]} placeholder="Plan" title="Plan" headerIcon={<Sparkles className="w-5 h-5" />} optionIcon={<Sparkles className="w-4 h-4" />} className="w-full mt-1" /></label>
             <label className="block"><span className="text-xs font-medium text-gray-600">Prueba Pro (días, opcional)</span><input type="number" min={1} max={365} value={f.trialDays} onChange={set("trialDays")} placeholder="30" className={FIELD} /></label>
             <label className="block col-span-2"><span className="text-xs font-medium text-gray-600">Límite de centros (vacío = sin límite)</span><input type="number" min={1} value={f.maxCenters} onChange={set("maxCenters")} className={FIELD} /></label>
           </div>

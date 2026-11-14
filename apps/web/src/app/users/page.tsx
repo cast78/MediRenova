@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { DataTable } from "@/components/ui/data-table";
 import { useState } from "react";
@@ -108,17 +109,12 @@ function UserModal({ user, centers, onClose }: { user?: TeamUser; centers: Cente
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Rol *</label>
-            <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              {ROLES.map((r) => <option key={r} value={r}>{ROLE_META[r].label}</option>)}
-            </select>
+            <Select value={form.role} onChange={(v) => setForm((f) => ({ ...f, role: v as Role }))} options={ROLES.map((r) => ({ value: r, label: ROLE_META[r].label }))} placeholder="Rol" title="Rol" headerIcon={<UserCog className="w-5 h-5" />} optionIcon={<UserCog className="w-4 h-4" />} className="w-full" />
           </div>
           {showCenter && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Centro {form.role === "RECEPTIONIST" ? "(verá solo este centro)" : "(opcional)"}</label>
-              <select value={form.centerId} onChange={(e) => setForm((f) => ({ ...f, centerId: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">— Sin asignar (todos) —</option>
-                {centers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <Select value={form.centerId} onChange={(v) => setForm((f) => ({ ...f, centerId: v }))} options={[{ value: "", label: "— Sin asignar (todos) —" }, ...centers.map((c) => ({ value: c.id, label: c.name }))]} placeholder="— Sin asignar (todos) —" title="Centro" headerIcon={<Building2 className="w-5 h-5" />} optionIcon={<Building2 className="w-4 h-4" />} className="w-full" />
             </div>
           )}
           <div>
@@ -185,10 +181,7 @@ export default function UsersPage() {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre o email…"
             className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
         </div>
-        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as "" | Role)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">Todos los roles</option>
-          {ROLES.map((r) => <option key={r} value={r}>{ROLE_META[r].label}</option>)}
-        </select>
+        <Select value={roleFilter} onChange={(v) => setRoleFilter(v as "" | Role)} options={[{ value: "", label: "Todos los roles" }, ...ROLES.map((r) => ({ value: r, label: ROLE_META[r].label }))]} placeholder="Todos los roles" title="Rol" headerIcon={<UserCog className="w-5 h-5" />} optionIcon={<UserCog className="w-4 h-4" />} />
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
+import { FileText } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -338,9 +340,7 @@ export function Builder({ productId, productName, editing, onClose }: { productI
                 </div>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Tipo</label>
-                  <select value={selected.type} onChange={(e) => update(selected.id, { type: e.target.value as FieldType })} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm">
-                    {TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
-                  </select>
+                  <Select value={selected.type} onChange={(v) => update(selected.id, { type: v as FieldType })} options={TYPES.map((t) => ({ value: t, label: TYPE_LABELS[t] }))} placeholder="Tipo" title="Tipo de campo" headerIcon={<FileText className="w-5 h-5" />} optionIcon={<FileText className="w-4 h-4" />} className="w-full !py-1.5 !pl-2.5" />
                 </div>
                 {selected.type === "select" && (
                   <div>

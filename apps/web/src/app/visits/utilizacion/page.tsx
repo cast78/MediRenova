@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
@@ -13,7 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 import { RoomSelect } from "@/components/room-select";
 import { estadoDelCiclo, CYCLE_LEGEND, type CycleState } from "@/lib/cycle-state";
 import { CHIP, CHIP_ICON, minsSince, arrivalInfo, flowChip, flowFallback } from "@/lib/flow";
-import { ArrowUpRight, ArrowRight, UserCircle, Calendar, Stethoscope, DoorOpen, CalendarCheck, UserCheck, ClipboardCheck, ClipboardPlus, Clipboard, ChevronRight, Gauge, UserX, Clock } from "lucide-react";
+import { ArrowUpRight, ArrowRight, UserCircle, Calendar, Stethoscope, DoorOpen, CalendarCheck, UserCheck, ClipboardCheck, ClipboardPlus, Clipboard, ChevronRight, Gauge, UserX, Clock, Activity } from "lucide-react";
 import { ClientInfoModal } from "@/components/client-info-modal";
 import { WalkInModal } from "@/components/walk-in-modal";
 
@@ -289,9 +290,7 @@ export default function UtilizationPage() {
           </div>
         </Field>
         <Field label="Estado">
-          <select value={estado} onChange={(e) => setEstado(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
-            {STATE_FILTERS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
+          <Select value={estado} onChange={setEstado} options={STATE_FILTERS.map((s) => ({ value: s.key, label: s.label }))} placeholder="Estado" title="Estado" headerIcon={<Activity className="w-5 h-5" />} optionIcon={<Activity className="w-4 h-4" />} />
         </Field>
         <Field label="Paciente"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre…" className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[200px]" /></Field>
         {rooms.length > 0 && (

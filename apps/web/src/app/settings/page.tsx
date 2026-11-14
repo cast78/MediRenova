@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { DataTable } from "@/components/ui/data-table";
 import { TabsScroller } from "@/components/ui/tabs-scroller";
 import { useState, useEffect } from "react";
@@ -12,7 +13,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiError, authHeaders } from "@/lib/api";
 import { DEFAULT_CONSENT_TEXT, renderConsent } from "@/lib/consent";
-import { Building2, Palette, CalendarClock, MessagesSquare, ShieldCheck, Code2, History, MessageCircle, Mail, MessageSquare, CheckCircle2, AlertTriangle, KeyRound, Lock, PlugZap, FlaskConical, Loader2, Upload, Trash2, Download, Search, UserCircle } from "lucide-react";
+import { Building2, Palette, CalendarClock, MessagesSquare, ShieldCheck, Code2, History, MessageCircle, Mail, MessageSquare, CheckCircle2, AlertTriangle, KeyRound, Lock, PlugZap, FlaskConical, Loader2, Upload, Trash2, Download, Search, UserCircle, FileText, UserCog, Clock, Globe } from "lucide-react";
 
 type ChannelState = "connected" | "pending" | "off";
 // `mode`: "live" = los avisos salen por el proveedor; "demo" = se redactan y se
@@ -194,20 +195,9 @@ function AuditSection() {
       <p className="text-sm text-gray-500 mb-4">Quién hizo qué y cuándo. Solo lectura.</p>
 
       <div className="flex flex-wrap gap-2 mb-4">
-        <select value={action} onChange={(e) => setAction(e.target.value)} className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
-          <option value="">Toda acción</option>
-          <option value="CREATE">Creó</option>
-          <option value="UPDATE">Editó</option>
-          <option value="DELETE">Eliminó</option>
-        </select>
-        <select value={resourceType} onChange={(e) => setResourceType(e.target.value)} className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
-          <option value="">Todo recurso</option>
-          {types.map((t) => <option key={t} value={t}>{resLabel(t)}</option>)}
-        </select>
-        <select value={userId} onChange={(e) => setUserId(e.target.value)} className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
-          <option value="">Todo usuario</option>
-          {(users ?? []).map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
-        </select>
+        <Select value={action} onChange={setAction} options={[{ value: "", label: "Toda acción" }, { value: "CREATE", label: "Creó" }, { value: "UPDATE", label: "Editó" }, { value: "DELETE", label: "Eliminó" }]} placeholder="Toda acción" title="Acción" headerIcon={<History className="w-5 h-5" />} optionIcon={<History className="w-4 h-4" />} className="!py-1.5 !pl-2.5" />
+        <Select value={resourceType} onChange={setResourceType} options={[{ value: "", label: "Todo recurso" }, ...types.map((t) => ({ value: t, label: resLabel(t) }))]} placeholder="Todo recurso" title="Recurso" headerIcon={<FileText className="w-5 h-5" />} optionIcon={<FileText className="w-4 h-4" />} className="!py-1.5 !pl-2.5" />
+        <Select value={userId} onChange={setUserId} options={[{ value: "", label: "Todo usuario" }, ...(users ?? []).map((u) => ({ value: u.id, label: `${u.firstName} ${u.lastName}` }))]} placeholder="Todo usuario" title="Usuario" headerIcon={<UserCog className="w-5 h-5" />} optionIcon={<UserCog className="w-4 h-4" />} className="!py-1.5 !pl-2.5" />
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm" />
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm" />
         {hasFilters && <button onClick={() => { setAction(""); setResourceType(""); setUserId(""); setFrom(""); setTo(""); }} className="text-xs text-gray-400 hover:text-gray-600 hover:underline">Limpiar</button>}
@@ -648,9 +638,7 @@ export default function SettingsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Granularidad de huecos</label>
-                <select value={form.bookingGranularity} onChange={(e) => set("bookingGranularity", e.target.value)} className={FIELD}>
-                  {["10", "15", "20", "30"].map((g) => <option key={g} value={g}>{g} min</option>)}
-                </select>
+                <Select value={form.bookingGranularity} onChange={(v) => set("bookingGranularity", v)} options={["10", "15", "20", "30"].map((g) => ({ value: g, label: `${g} min` }))} placeholder="Intervalo" title="Intervalo de reserva" headerIcon={<Clock className="w-5 h-5" />} optionIcon={<Clock className="w-4 h-4" />} className="w-full" />
                 <p className="text-[11px] text-gray-400 mt-1">Cada cuánto se ofrecen los huecos de reserva</p>
               </div>
               <div>
@@ -660,10 +648,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Zona horaria</label>
-                <select value={form.timezone} onChange={(e) => set("timezone", e.target.value)} className={FIELD}>
-                  {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
-                  {!TIMEZONES.includes(form.timezone) && <option value={form.timezone}>{form.timezone}</option>}
-                </select>
+                <Select value={form.timezone} onChange={(v) => set("timezone", v)} options={[...TIMEZONES, ...(TIMEZONES.includes(form.timezone) ? [] : [form.timezone])].map((tz) => ({ value: tz, label: tz }))} placeholder="Zona horaria" title="Zona horaria" headerIcon={<Globe className="w-5 h-5" />} optionIcon={<Globe className="w-4 h-4" />} className="w-full" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Máx. citas/día (opcional)</label>
@@ -797,14 +782,7 @@ export default function SettingsPage() {
             <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-gray-400" />Política de retención</h2>
             <div className="max-w-xs">
               <label className="block text-xs font-medium text-gray-600 mb-1">Conservar los datos de clientes</label>
-              <select value={form.dataRetentionMonths} onChange={(e) => set("dataRetentionMonths", e.target.value)} className={FIELD}>
-                <option value="">Sin límite definido</option>
-                <option value="12">12 meses</option>
-                <option value="24">24 meses</option>
-                <option value="36">36 meses</option>
-                <option value="60">5 años</option>
-                <option value="120">10 años</option>
-              </select>
+              <Select value={form.dataRetentionMonths} onChange={(v) => set("dataRetentionMonths", v)} options={[{ value: "", label: "Sin límite definido" }, { value: "12", label: "12 meses" }, { value: "24", label: "24 meses" }, { value: "36", label: "36 meses" }, { value: "60", label: "5 años" }, { value: "120", label: "10 años" }]} placeholder="Sin límite definido" title="Retención de datos" headerIcon={<History className="w-5 h-5" />} optionIcon={<History className="w-4 h-4" />} className="w-full" />
               <p className="text-[11px] text-gray-400 mt-1">Política documentada. La eliminación automática se aplicará en una iteración posterior.</p>
             </div>
           </section>
