@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -101,17 +102,7 @@ function DynamicField({
 
   if (field.type === "select") {
     return (
-      <select
-        value={String(value ?? "")}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        className={base}
-      >
-        <option value="">— Seleccionar —</option>
-        {field.options?.map((opt) => (
-          <option key={opt} value={opt}>{opt}</option>
-        ))}
-      </select>
+      <Select value={String(value ?? "")} onChange={onChange} disabled={disabled} options={(field.options ?? []).map((opt) => ({ value: opt, label: opt }))} placeholder="— Seleccionar —" title={field.label} className="w-full" />
     );
   }
 

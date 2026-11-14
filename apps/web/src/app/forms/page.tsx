@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { DataTable } from "@/components/ui/data-table";
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -7,7 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Builder, type FormTemplate, type Product } from "@/components/form-builder";
-import { FileText, CheckCircle2, Pencil, Trash2, Plus, ListChecks } from "lucide-react";
+import { FileText, CheckCircle2, Pencil, Trash2, Plus, ListChecks, Package } from "lucide-react";
 
 export default function FormsPage() {
   const queryClient = useQueryClient();
@@ -59,11 +60,7 @@ export default function FormsPage() {
           <PageHeader page="formularios" />
         </div>
         <div className="flex items-center gap-2.5">
-          <select value={pid} onChange={(e) => { setProductId(e.target.value); setBuilder(null); }}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-            {activeProducts.length === 0 && <option value="">Sin productos</option>}
-            {activeProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <Select value={pid} onChange={(v) => { setProductId(v); setBuilder(null); }} options={activeProducts.map((p) => ({ value: p.id, label: p.name }))} placeholder="Sin productos" title="Producto" headerIcon={<Package className="w-5 h-5" />} optionIcon={<Package className="w-4 h-4" />} />
           {!builder && pid && (
             <button onClick={() => setBuilder({ editing: null })}
               className="px-3.5 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium inline-flex items-center gap-1.5 shrink-0">

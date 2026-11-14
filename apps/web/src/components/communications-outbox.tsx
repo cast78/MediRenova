@@ -1,12 +1,13 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 // Bandeja global de comunicaciones (Configuración → Comunicaciones): KPIs del
 // periodo, filtros y tabla de todos los avisos de la clínica (crm-mensajeria).
 import { DataTable } from "@/components/ui/data-table";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { Search, FlaskConical, Bot, UserCircle } from "lucide-react";
+import { Search, FlaskConical, Bot, UserCircle, Bell, Activity, Calendar } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ChannelIcon, StatusChip, CHANNEL_LABEL, fmtWhen, type Delivery, type DeliveryChannel, type DeliveryStatus } from "./customer-communications";
 
@@ -93,19 +94,13 @@ export function CommunicationsOutbox() {
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex gap-1.5">{chip("ALL", "Todos")}{chip("WHATSAPP", "WhatsApp")}{chip("EMAIL", "Email")}{chip("SMS", "SMS")}</div>
         <label className={SEL}><span className="text-gray-400 text-xs">Evento</span>
-          <select value={event} onChange={(e) => setEvent(e.target.value)} className="bg-transparent border-0 text-sm text-gray-700 focus:outline-none">
-            <option value="">Todos</option>{EVENTS.map((e) => <option key={e.key} value={e.key}>{e.label}</option>)}
-          </select>
+          <Select value={event} onChange={setEvent} options={[{ value: "", label: "Todos" }, ...EVENTS.map((e) => ({ value: e.key, label: e.label }))]} placeholder="Todos" title="Evento" headerIcon={<Bell className="w-5 h-5" />} optionIcon={<Bell className="w-4 h-4" />} className="!border-0 !bg-transparent !py-0.5 !pl-1 !pr-0.5 !text-gray-700 hover:!bg-gray-100" />
         </label>
         <label className={SEL}><span className="text-gray-400 text-xs">Estado</span>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className="bg-transparent border-0 text-sm text-gray-700 focus:outline-none">
-            <option value="">Todos</option><option value="SENT">Enviado / Simulado</option><option value="DELIVERED">Entregado</option><option value="READ">Leído</option><option value="SKIPPED">Omitido</option><option value="FAILED">Fallido</option>
-          </select>
+          <Select value={status} onChange={setStatus} options={[{ value: "", label: "Todos" }, { value: "SENT", label: "Enviado / Simulado" }, { value: "DELIVERED", label: "Entregado" }, { value: "READ", label: "Leído" }, { value: "SKIPPED", label: "Omitido" }, { value: "FAILED", label: "Fallido" }]} placeholder="Todos" title="Estado" headerIcon={<Activity className="w-5 h-5" />} optionIcon={<Activity className="w-4 h-4" />} className="!border-0 !bg-transparent !py-0.5 !pl-1 !pr-0.5 !text-gray-700 hover:!bg-gray-100" />
         </label>
         <label className={SEL}><span className="text-gray-400 text-xs">Periodo</span>
-          <select value={period} onChange={(e) => setPeriod(e.target.value as Period)} className="bg-transparent border-0 text-sm text-gray-700 focus:outline-none">
-            <option value="today">Hoy</option><option value="7d">7 días</option><option value="30d">30 días</option>
-          </select>
+          <Select value={period} onChange={(v) => setPeriod(v as Period)} options={[{ value: "today", label: "Hoy" }, { value: "7d", label: "7 días" }, { value: "30d", label: "30 días" }]} placeholder="Periodo" title="Periodo" headerIcon={<Calendar className="w-5 h-5" />} optionIcon={<Calendar className="w-4 h-4" />} className="!border-0 !bg-transparent !py-0.5 !pl-1 !pr-0.5 !text-gray-700 hover:!bg-gray-100" />
         </label>
         <label className={`${SEL} ml-auto flex-[1_1_180px] max-w-[260px]`}>
           <Search className="w-3.5 h-3.5 text-gray-400" />

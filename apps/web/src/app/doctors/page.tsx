@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { DataTable } from "@/components/ui/data-table";
 import { useState, useEffect, useRef } from "react";
@@ -308,10 +309,7 @@ export default function DoctorsPage() {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre…"
             className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
         </div>
-        <select value={centerFilter} onChange={(e) => setCenterFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">Todos los centros</option>
-          {activeCenters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <Select value={centerFilter} onChange={setCenterFilter} options={[{ value: "", label: "Todos los centros" }, ...activeCenters.map((c) => ({ value: c.id, label: c.name }))]} placeholder="Todos los centros" title="Centro" headerIcon={<Building2 className="w-5 h-5" />} optionIcon={<Building2 className="w-4 h-4" />} />
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -318,11 +319,10 @@ function VisitsBoard() {
                 <VisitCard key={v.id} v={v} highlighted={highlightId === v.id} onOpen={() => setTraceVisit(v)}>
                   <span className={`text-[11px] px-2 py-0.5 rounded-full ${waitPillClass(mins, wt)}`}>esperando {mins} min</span>
                   <div className="mt-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    <select
-                      defaultValue=""
+                    <Select
+                      value=""
                       disabled={patch.isPending}
-                      onChange={(e) => {
-                        const roomId = e.target.value;
+                      onChange={(roomId) => {
                         if (!roomId) return;
                         const bookedId = v.appointment?.room?.id;
                         const differs = !!bookedId && roomId !== bookedId;
@@ -334,16 +334,17 @@ function VisitsBoard() {
                             bookedName: differs ? (v.appointment?.room?.name ?? "otra sala") : undefined,
                             occupantName: occupant ? name(occupant) : undefined,
                           });
-                          e.target.value = "";
                         } else {
                           patch.mutate({ id: v.id, body: { status: "IN_PROGRESS", currentRoomId: roomId } });
                         }
                       }}
-                      className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                    >
-                      <option value="">Llamar a…</option>
-                      {shownRooms.map((r) => <option key={r.id} value={r.id}>{r.name}{roomOccupant.has(r.id) ? " · ocupada" : ""}</option>)}
-                    </select>
+                      options={shownRooms.map((r) => ({ value: r.id, label: r.name, hint: roomOccupant.has(r.id) ? "ocupada" : undefined }))}
+                      placeholder="Llamar a…"
+                      title="Llamar a sala"
+                      headerIcon={<DoorOpen className="w-5 h-5" />} optionIcon={<DoorOpen className="w-4 h-4" />}
+                      wrapperClassName="flex-1 min-w-0"
+                      className="w-full !text-xs !py-1 !pl-2 !border-gray-200"
+                    />
                     <button
                       disabled={patch.isPending}
                       onClick={() => patch.mutate({ id: v.id, body: { status: "LEFT" } })}

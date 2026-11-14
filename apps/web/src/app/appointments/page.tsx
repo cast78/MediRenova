@@ -1581,11 +1581,7 @@ function AppointmentDetailModal({ appt, onClose, onChanged, onOpenById }: {
                 <div className="rounded-lg border border-red-200 bg-red-50 p-2.5">
                   <p className="text-xs text-red-700 mb-2">¿Seguro que quieres cancelar esta cita?</p>
                   <label className="block text-[11px] text-red-700/80 mb-1">Motivo (opcional)</label>
-                  <select value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}
-                    className="w-full text-xs border border-red-200 rounded-lg px-2 py-1.5 bg-white mb-2 focus:outline-none focus:ring-1 focus:ring-red-400">
-                    <option value="">Sin especificar</option>
-                    {CANCEL_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                  </select>
+                  <Select value={cancelReason} onChange={setCancelReason} options={[{ value: "", label: "Sin especificar" }, ...CANCEL_REASONS.map((r) => ({ value: r.value, label: r.label }))]} placeholder="Sin especificar" title="Motivo de cancelación" headerIcon={<CalendarX className="w-5 h-5" />} optionIcon={<CalendarX className="w-4 h-4" />} className="w-full !text-xs !border-red-200 !py-1.5 !pl-2 mb-2" />
                   <div className="flex gap-2">
                     <button disabled={busy} onClick={() => patch({ status: "CANCELLED", ...(cancelReason ? { cancelReason } : {}) })} className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">Sí, cancelar</button>
                     <button onClick={() => setConfirmingCancel(false)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50">No</button>
@@ -2379,12 +2375,7 @@ function RecoveryInbox({ data, loading, filter, onFilter, windowDays, onWindow, 
             <button key={f.key} onClick={() => onFilter(f.key)} className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${filter === f.key ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>{f.label}</button>
           ))}
         </div>
-        <select value={windowDays} onChange={(e) => onWindow(Number(e.target.value))} className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600">
-          <option value={15}>Últimos 15 días</option>
-          <option value={30}>Últimos 30 días</option>
-          <option value={60}>Últimos 60 días</option>
-          <option value={90}>Últimos 90 días</option>
-        </select>
+        <Select value={String(windowDays)} onChange={(v) => onWindow(Number(v))} options={[15, 30, 60, 90].map((d) => ({ value: String(d), label: `Últimos ${d} días` }))} placeholder="Ventana" title="Ventana" headerIcon={<Calendar className="w-5 h-5" />} optionIcon={<Calendar className="w-4 h-4" />} menu="right" className="!text-xs !border-gray-200 !py-1.5 !pl-2.5 !text-gray-600" />
       </div>
       {loading ? (
         <p className="text-gray-400 text-sm py-8 text-center">Cargando…</p>

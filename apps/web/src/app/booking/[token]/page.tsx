@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
+import { Building2, DoorOpen } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -221,42 +223,13 @@ export default function BookingPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Centro *</label>
-              <select
-                value={centerId}
-                onChange={(e) => {
-                  setCenterId(e.target.value);
-                  setRoomId("");
-                  setSlot("");
-                }}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Selecciona un centro</option>
-                {ctx.centers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={centerId} onChange={(v) => { setCenterId(v); setRoomId(""); setSlot(""); }} options={ctx.centers.map((c) => ({ value: c.id, label: c.name }))} placeholder="Selecciona un centro" title="Centro" headerIcon={<Building2 className="w-5 h-5" />} optionIcon={<Building2 className="w-4 h-4" />} className="w-full !rounded-xl !py-2.5" />
             </div>
 
             {centerId && (
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Sala *</label>
-                <select
-                  value={roomId}
-                  onChange={(e) => {
-                    setRoomId(e.target.value);
-                    setSlot("");
-                  }}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Selecciona sala</option>
-                  {selectedCenter?.rooms.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
+                <Select value={roomId} onChange={(v) => { setRoomId(v); setSlot(""); }} options={(selectedCenter?.rooms ?? []).map((r) => ({ value: r.id, label: r.name }))} placeholder="Selecciona sala" title="Sala" headerIcon={<DoorOpen className="w-5 h-5" />} optionIcon={<DoorOpen className="w-4 h-4" />} className="w-full !rounded-xl !py-2.5" />
               </div>
             )}
 

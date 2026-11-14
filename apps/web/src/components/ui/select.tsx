@@ -53,13 +53,15 @@ interface Props {
   disabled?: boolean;
   /** Clases del botón (ancho, etc.). */
   className?: string;
+  /** Clases del envoltorio (p. ej. `flex-1 min-w-0` dentro de una fila flex). */
+  wrapperClassName?: string;
   /** Desplegable: tan ancho como el botón, o fijo alineado a la derecha. */
   menu?: "button" | "right";
 }
 
 export function Select({
   value, onChange, options, groups, placeholder, emptyLabel, title, subtitle, icon, headerIcon, optionIcon, renderSelected,
-  disabled = false, className = "", menu = "button",
+  disabled = false, className = "", wrapperClassName = "", menu = "button",
 }: Props) {
   const [open, setOpen] = useState(false);
   // Por debajo de lg el desplegable se sustituye por una hoja centrada.
@@ -128,7 +130,7 @@ export function Select({
 
   const hasValue = !!selected || (value === "" && !!emptyLabel);
   return (
-    <div ref={wrapRef} className={`relative ${menu === "button" ? "" : "inline-block"}`}>
+    <div ref={wrapRef} className={`relative ${menu === "button" ? "" : "inline-block"} ${wrapperClassName}`}>
       <button
         type="button"
         aria-haspopup="listbox"

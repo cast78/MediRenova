@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
+import { Package, DoorOpen } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 // Nueva visita (walk-in) = crear la reserva sobre la marcha (source WALK_IN, hora =
 // ahora) + check-in inmediato. Compartido por las vistas "En vivo" y "Utilización".
@@ -123,26 +125,11 @@ export function WalkInModal({ centerId, onClose, onDone }: { centerId: string; o
 
         {/* Producto */}
         <label className="block text-xs font-medium text-gray-500 mb-1">Producto</label>
-        <select
-          value={productId}
-          onChange={(e) => { setProductId(e.target.value); setRoomId(""); }}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">Selecciona producto…</option>
-          {(products ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <Select value={productId} onChange={(v) => { setProductId(v); setRoomId(""); }} options={(products ?? []).map((p) => ({ value: p.id, label: p.name }))} placeholder="Selecciona producto…" title="Producto" headerIcon={<Package className="w-5 h-5" />} optionIcon={<Package className="w-4 h-4" />} className="w-full mb-3" />
 
         {/* Sala */}
         <label className="block text-xs font-medium text-gray-500 mb-1">Sala</label>
-        <select
-          value={roomId}
-          onChange={(e) => setRoomId(e.target.value)}
-          disabled={!productId}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
-        >
-          <option value="">Selecciona sala…</option>
-          {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </select>
+        <Select value={roomId} onChange={setRoomId} disabled={!productId} options={rooms.map((r) => ({ value: r.id, label: r.name }))} placeholder="Selecciona sala…" title="Sala" headerIcon={<DoorOpen className="w-5 h-5" />} optionIcon={<DoorOpen className="w-4 h-4" />} className="w-full mb-4" />
         {productId && rooms.length === 0 && <p className="text-xs text-amber-600 -mt-3 mb-3">Ninguna sala de este centro ofrece el producto.</p>}
 
         <button
