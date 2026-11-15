@@ -27,7 +27,7 @@ Algunas funciones dependen de otras: Captación necesita Campañas; Renovación 
 
 **Qué ve una clínica Esencial cuando una función es Pro**
 - En el menú lateral, el módulo aparece con un candado; al entrar, una pantalla explica qué aporta y ofrece pedir el plan Pro.
-- La API responde `403 FEATURE_NOT_IN_PLAN` a cualquier llamada de ese módulo, también desde integraciones.
+- La API responde `403 FEATURE_NOT_IN_PLAN` a cualquier llamada de ese módulo, también desde integraciones. En la aplicación ese 403 se muestra como un aviso en la esquina ("Función del plan Pro", con el nombre de la función y el enlace "Ver mi plan"), y el menú vuelve a leer el plan por si el bloqueo viene de un cambio reciente.
 - Los avisos automáticos a pacientes no se generan (no queda rastro en la bandeja de Comunicaciones, que es un módulo Pro); recepción puede seguir llamando o escribiendo a mano con los botones de siempre, que generan sus enlaces aparte.
 - El portal del paciente solo muestra certificados.
 - Los datos no se tocan: campañas, reglas de renovación o analítica histórica siguen guardados y vuelven a verse al pasar a Pro.

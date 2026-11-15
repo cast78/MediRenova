@@ -27,7 +27,7 @@ Rama: `feat/crm-planes` desde `main`, PRs pequeños y frecuentes. Cada fase es d
 - [x] P3.4 Envolver cada módulo Pro: Campañas, Workflow, Analítica (parte pro), Captación, Recuperar (pestaña), Comunicaciones (pestaña ficha + Configuración), Canales, API; Reservas/ficha ocultan acciones Pro con tooltip "Disponible en Pro"
 - [x] P3.5 Configuración → tarjeta **"Tu plan"**: plan, prueba, centros/límite, incluye/no incluye, botón de petición, historial (auditoría)
 - [x] P3.6 Portal: sin `portal_full` se ocultan citas y renovación
-- [ ] P3.7 Manejo global del `403 FEATURE_NOT_IN_PLAN` en `apiFetch` (mensaje claro, no "Error 403")
+- [x] P3.7 (15/11) Manejo global del `403 FEATURE_NOT_IN_PLAN`: `ApiError.message` legible (mensaje de la API + "Pide el plan Pro desde Configuración → Empresa"; genéricos para 401/403/404/5xx), evento `mr:plan-blocked` desde `apiFetch` y aviso global `PlanBlockedToast` en el layout (enlace a "Ver mi plan", refresca `tenant-plan` para actualizar los candados); los helpers de error de las páginas usan `err.message` en vez de "Error 403"
 
 ## P4. Panel de proveedor (superadmin)
 

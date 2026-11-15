@@ -79,7 +79,7 @@ function errorMessage(err: unknown, fallback = "Error al guardar"): string {
       const msgs = Object.values(e as Record<string, string[]>).flat().filter(Boolean);
       if (msgs.length) return msgs.join(" · ");
     }
-    return `Error ${err.status}`;
+    return err.message;
   }
   return err instanceof Error ? err.message : fallback;
 }

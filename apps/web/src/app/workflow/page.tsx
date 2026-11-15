@@ -38,7 +38,7 @@ function errorMessage(err: unknown): string {
       const msgs = Object.values(e as Record<string, string[]>).flat().filter(Boolean);
       if (msgs.length) return msgs.join(" · ");
     }
-    return `Error ${err.status}`;
+    return err.message;
   }
   return err instanceof Error ? err.message : "Error al guardar";
 }

@@ -109,7 +109,7 @@ function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     const e = err.errors;
     if (Array.isArray(e) && e[0]?.message) return e.map((x: { message?: string }) => x.message).filter(Boolean).join(" · ");
-    return `Error ${err.status}`;
+    return err.message;
   }
   return err instanceof Error ? err.message : "Error";
 }

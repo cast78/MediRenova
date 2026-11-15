@@ -3,10 +3,43 @@ const API_BASE =
     ? "/api/proxy"
     : (process.env["API_URL"] ?? "http://localhost:3001/api/v1");
 
+// Primer error del cuerpo `{ errors: [{ code, message, ... }] }` que devuelve la API.
+interface ApiErrorItem { code?: string; message?: string; feature?: string; plan?: string | null }
+function firstError(errors: unknown): ApiErrorItem | null {
+  return Array.isArray(errors) && errors[0] && typeof errors[0] === "object" ? (errors[0] as ApiErrorItem) : null;
+}
+
+// Aviso global de "función fuera del plan" (crm-planes P3.7): apiFetch lo emite
+// cuando la API responde 403 FEATURE_NOT_IN_PLAN a una clínica (no al portal del
+// paciente ni al enlace de reserva, cuyos mensajes ya son para el paciente).
+export const PLAN_BLOCKED_EVENT = "mr:plan-blocked";
+export interface PlanBlockedDetail { feature: string | null; message: string }
+const PLAN_HINT = "Pide el plan Pro desde Configuración → Empresa.";
+
 export class ApiError extends Error {
+  readonly code: string | null;
+  readonly feature: string | null;
   constructor(public status: number, public errors: unknown, public data?: unknown) {
-    super(`API Error ${status}`);
+    const first = firstError(errors);
+    super(ApiError.describe(status, first));
+    this.code = first?.code ?? null;
+    this.feature = first?.feature ?? null;
   }
+  // `message` legible para mostrar tal cual: el de la API si lo hay; el 403 de
+  // plan añade cómo resolverlo; el resto, un texto genérico con el estado.
+  private static describe(status: number, first: ApiErrorItem | null): string {
+    if (first?.code === "FEATURE_NOT_IN_PLAN") {
+      const base = first.message ?? "Esta función no está incluida en tu plan";
+      return "plan" in first ? `${base.replace(/\.?$/, "")}. ${PLAN_HINT}` : base;
+    }
+    if (first?.message) return first.message;
+    if (status === 401) return "Tu sesión ha caducado. Vuelve a entrar.";
+    if (status === 403) return "No tienes permiso para hacer esto.";
+    if (status === 404) return "No se ha encontrado lo que buscabas.";
+    if (status >= 500) return "El servidor ha fallado. Inténtalo de nuevo en un momento.";
+    return `Error ${status}`;
+  }
+  get isPlanBlocked(): boolean { return this.code === "FEATURE_NOT_IN_PLAN"; }
 }
 
 function getAccessToken(): string | null {
@@ -147,7 +180,14 @@ export async function apiFetch<T>(
   }
 
   if (!res.ok) {
-    throw new ApiError(res.status, json.errors, json.data);
+    const err = new ApiError(res.status, json.errors, json.data);
+    // 403 de plan en la clínica (la API incluye `plan`): aviso global y el menú
+    // vuelve a leer el plan, por si el bloqueo viene de un cambio reciente.
+    const first = firstError(json.errors);
+    if (err.isPlanBlocked && first && "plan" in first && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent<PlanBlockedDetail>(PLAN_BLOCKED_EVENT, { detail: { feature: err.feature, message: err.message } }));
+    }
+    throw err;
   }
 
   return (raw ? json : json.data) as T;

@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch, getActAsTenant, setActAsTenant, getPreviewPlan, setPreviewPlan } from "@/lib/api";
 import { ContextBarProvider, ContextBar } from "@/components/context-bar";
+import { PlanBlockedToast } from "@/components/plan-blocked-toast";
 import { useFeatures, PLAN_LABEL, trialTone, trialDaysLeft, type FeatureKey } from "@/lib/use-features";
 import { PlanChip } from "@/components/plan-chip";
 import {
@@ -465,6 +466,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex-1 overflow-y-auto">{children}</div>
         </ContextBarProvider>
       </main>
+      {/* Aviso global cuando una llamada devuelve 403 de plan (crm-planes P3.7). */}
+      <PlanBlockedToast />
     </div>
   );
 }
