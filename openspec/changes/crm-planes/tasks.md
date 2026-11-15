@@ -66,10 +66,11 @@ Rama: `feat/crm-planes` desde `main`, PRs pequeños y frecuentes. Cada fase es d
 
 - [ ] P6.1 Typecheck API + web; tests en verde
 - [ ] P6.2 E2E: empresa Esencial → menú con candados, 403 en API, portal sin citas, `notify` no registra, botones manuales siguen; cambiar a Pro desde el panel → todo se abre sin recargar datos; prueba vencida → vuelve a Esencial
-- [ ] P6.3 `docs/planes.md`: qué incluye cada plan, cómo dar de alta una clínica, asignar plan/prueba, atender peticiones, facturar por centros
+- [x] P6.3 `docs/planes.md` (15/11): qué incluye cada plan (tabla desde `FEATURES` y dependencias), alta de empresa, plan contratado / efectivo / prueba y sus avisos, peticiones (una por tipo, aprobar / rechazar / cerrar), centros y facturación plan × centros, herramientas del proveedor, lectura del panel y mapa del código
 
 ## Fase posterior (anotado)
 
+- [ ] Empresa inactiva: hoy la casilla "Empresa activa" solo marca "Suspendida" en el panel; no bloquea el acceso de sus usuarios (detectado al escribir `docs/planes.md`). **Decisión (15/11): se deja así por ahora**, el usuario lo usa en demos; si algún día debe bloquear, rechazar en login y auth a los usuarios de una empresa inactiva
 - [ ] Analítica de uso por clínica para el proveedor (citas/mes, mensajes, usuarios activos, último acceso, fallos)
 - [ ] Autoservicio con Stripe (cambio de plan y centros con cobro automático)
 
