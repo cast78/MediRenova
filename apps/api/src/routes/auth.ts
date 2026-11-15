@@ -136,4 +136,21 @@ export async function authRoutes(server: FastifyInstance) {
       return reply.status(204).send();
     },
   );
+
+  // GET /auth/me — usuario de la sesión actual (misma forma que en el login).
+  // La web lo usa al restaurar la sesión tras recargar: el JWT solo lleva id, rol
+  // y empresa, y así recupera email y nombre sin volver a pedir la contraseña.
+  server.get(
+    "/auth/me",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await prisma.user.findFirst({ where: { id: request.ctx.userId, active: true } });
+      if (!user) {
+        return reply.status(401).send({ errors: [{ code: "UNAUTHORIZED", message: "Sesión no válida" }] });
+      }
+      return reply.status(200).send({
+        data: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, tenantId: user.tenantId },
+        errors: null,
+      });
+    },
+  );
 }
