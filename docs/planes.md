@@ -93,8 +93,13 @@ La facturación es **plan × centros contratados**: una clínica Esencial con tr
 
 - **Tarjetas superiores**: empresas por plan contratado, peticiones abiertas (por tipo), empresas en prueba (y cuántas vencen en 7 días), candidatas a Pro (≥ 5 no-shows o ≥ 80 citas en 30 días: argumento de venta, la recuperación automática), sin actividad (30 días sin citas) y centros contratados en total.
 - **Columna "Atención"**: orden de prioridad: petición abierta, prueba que vence en 7 días, candidata a Pro, sin actividad, en prueba; "Al día" (verde) cuando no hay nada.
-- **Tarjeta lateral**: resumen de la empresa seleccionada (qué ha pedido, actividad, citas por mes) y acciones rápidas.
-- **Últimos cambios** (en la ficha): cada cambio de plan, prueba o excepción con fecha, usuario y motivo; las entradas del proceso automático van marcadas como "automático". El detalle completo está en la pestaña Auditoría.
+- **Tarjeta lateral**: resumen de la empresa seleccionada (qué ha pedido, actividad, citas por mes) y acciones rápidas. El nombre de la empresa en la tabla abre su ficha.
+- **Ficha de empresa** (cabecera con plan, prueba, peticiones abiertas y "Entrar como esta empresa"; pestañas con contador):
+  - *Licencia*: cambio de plan, límite de centros, prueba Pro y excepciones; al lado, el último cambio registrado, la actividad resumida y las peticiones abiertas con sus acciones.
+  - *Actividad*: citas y no-shows de 30 días (con el periodo anterior y el porcentaje), última actividad, lectura comercial (candidata a Pro o plan Pro en uso), citas por mes de los últimos 12 meses con el tramo de no-shows, umbrales y argumento de venta.
+  - *Usuarios*: equipo de la clínica con rol, estado, fecha de alta y último acceso (fecha de su última sesión); se edita desde la propia clínica (*Entrar como → Configuración → Equipo*).
+  - *Centros*: centros contratados frente al límite, petición de centro adicional con "Aprobar" y "Rechazar", y una tarjeta por centro (salas, citas registradas en 30 días, alta); las plazas libres o el límite alcanzado se muestran como tarjetas punteadas.
+  - *Auditoría*: línea de tiempo por día de los cambios de licencia y de las peticiones (con su estado), con filtros Plan · Prueba · Centros · Peticiones · Automático; las entradas del proceso diario van marcadas como "Automático".
 
 ## 8. Dónde está cada cosa en el código
 
