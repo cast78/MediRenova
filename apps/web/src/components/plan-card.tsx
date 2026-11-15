@@ -48,7 +48,7 @@ export function PlanCard() {
         {!isPro && <SelfTrialButton compact />}
         {!isPro && !info.pendingRequest && (
           sent ? (
-            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"><Check className="w-4 h-4" /> Petición enviada</span>
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2"><Check className="w-4 h-4" /> Petición enviada</span>
           ) : (
             <button type="button" onClick={() => request.mutate()} disabled={request.isPending}
               className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 transition-colors">
@@ -57,6 +57,22 @@ export function PlanCard() {
           )
         )}
       </div>
+
+      {/* Última petición rechazada (30 días): la clínica ve el motivo que puso el
+          proveedor mientras no tenga otra del mismo tipo abierta (P4c). */}
+      {(() => {
+        const r = info.lastRejected;
+        if (!r || !r.closedAt) return null;
+        if (Date.now() - new Date(r.closedAt).getTime() > 30 * 86_400_000) return null;
+        if (r.kind === "CENTER" ? info.pendingCenterRequest : info.pendingRequest) return null;
+        const what = r.kind === "TRIAL" ? "prueba Pro" : r.kind === "CENTER" ? "centro adicional" : "paso a Pro";
+        const reason = (/Rechazada:\s*(.+)$/i.exec(r.note ?? "")?.[1] ?? "").trim(); // la nota guarda "<original> · Rechazada: <motivo>"
+        return (
+          <p className={`mt-3 text-xs rounded-lg px-3 py-2 border ${r.kind === "CENTER" ? "text-violet-800 bg-violet-50 border-violet-200" : r.kind === "TRIAL" ? "text-amber-800 bg-amber-50 border-amber-200" : "text-blue-800 bg-blue-50 border-blue-200"}`}>
+            Tu petición de {what} del {new Date(r.closedAt).toLocaleDateString("es-ES")} no fue aprobada{reason ? <> por: <b>“{reason}”</b>.</> : "."} Puedes volver a pedirla cuando quieras.
+          </p>
+        );
+      })()}
 
       <div className="grid md:grid-cols-2 gap-4 mt-4">
         <div>

@@ -132,12 +132,15 @@ export async function tenantRoutes(server: FastifyInstance) {
       const centersCount = await prisma.center.count({ where: { tenantId: request.ctx.tenantId, active: true } });
       // "Ver como Pro" (solo superadmin): todo abierto, marcado como vista previa.
       const preview = isProPreview(request);
-      // Petición pendiente (prueba o contratación) y si aún puede pedir la prueba
-      // (P4c, opción B): Esencial, sin prueba en curso, sin petición abierta y sin
-      // prueba aprobada antes. Nada se activa sin el proveedor.
+      // Peticiones pendientes, una por tipo: las de PLAN (prueba o contratación) son
+      // excluyentes entre sí; la de CENTRO es independiente, porque los centros no
+      // dependen del plan (se factura plan × centros). Puede pedir la prueba si es
+      // Esencial, sin prueba en curso, sin petición de plan abierta y sin prueba
+      // aprobada antes (P4c, opción B). Nada se activa sin el proveedor.
       const trialActive = !!tenant.trialUntil && tenant.trialUntil > new Date();
-      const [pending, approvedTrial] = await Promise.all([
-        prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, status: "OPEN" }, select: { id: true, kind: true, createdAt: true }, orderBy: { createdAt: "desc" } }),
+      const [pending, pendingCenter, approvedTrial] = await Promise.all([
+        prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, status: "OPEN", kind: { in: ["UPGRADE", "TRIAL"] } }, select: { id: true, kind: true, createdAt: true }, orderBy: { createdAt: "desc" } }),
+        prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, status: "OPEN", kind: "CENTER" }, select: { id: true, kind: true, createdAt: true } }),
         prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, kind: "TRIAL", status: "APPROVED" }, select: { id: true } }),
       ]);
       const lastDecision = await prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, status: "REJECTED" }, select: { kind: true, closedAt: true, note: true }, orderBy: { closedAt: "desc" } });
@@ -146,7 +149,7 @@ export async function tenantRoutes(server: FastifyInstance) {
         data: {
           plan: tenant.plan, effectivePlan: preview ? "PRO" : effectivePlan(tenant), trialUntil: tenant.trialUntil,
           features: preview ? FEATURE_KEYS : features(tenant), centersCount, maxCenters: tenant.maxCenters, preview, selfTrialAvailable,
-          pendingRequest: pending, lastRejected: lastDecision,
+          pendingRequest: pending, pendingCenterRequest: pendingCenter, lastRejected: lastDecision,
           // Catálogo para que el front pinte "incluye / no incluye" sin duplicarlo.
           catalog: FEATURE_KEYS.map((k) => ({ key: k, label: FEATURES[k].label, min: FEATURES[k].min })),
         },
@@ -156,14 +159,15 @@ export async function tenantRoutes(server: FastifyInstance) {
   );
 
   // POST /tenants/me/plan-request — "Quiero pasar a Pro" desde la clínica (ADMIN).
-  // Crea la petición (una abierta por empresa) y avisa al proveedor por email.
+  // Crea la petición (una de PLAN abierta por empresa; la de centro es aparte) y
+  // avisa al proveedor por email.
   server.post(
     "/tenants/me/plan-request",
     { preHandler: [requireRole("ADMIN")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const body = z.object({ feature: z.string().max(60).optional(), note: z.string().max(500).optional() }).safeParse(request.body ?? {});
       const note = body.success ? [body.data.feature, body.data.note].filter(Boolean).join(" · ") || null : null;
-      const open = await prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, status: "OPEN" }, select: { id: true } });
+      const open = await prisma.planRequest.findFirst({ where: { tenantId: request.ctx.tenantId, status: "OPEN", kind: { in: ["UPGRADE", "TRIAL"] } }, select: { id: true } });
       if (open) return reply.send({ data: { id: open.id, alreadyOpen: true }, errors: null });
       const created = await prisma.planRequest.create({
         data: { tenantId: request.ctx.tenantId, kind: "UPGRADE", requestedPlan: "PRO", byUserId: request.ctx.userId ?? null, note },
@@ -198,7 +202,8 @@ export async function tenantRoutes(server: FastifyInstance) {
       const body = z.object({ note: z.string().max(300).optional() }).safeParse(request.body ?? {});
       const tenant = await prisma.tenant.findUnique({ where: { id: tid }, select: { name: true, slug: true, maxCenters: true } });
       if (!tenant) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
-      const pending = await prisma.planRequest.findFirst({ where: { tenantId: tid, status: "OPEN" }, select: { id: true, kind: true } });
+      // Un centro adicional a la vez: para pedir otro, que se resuelva el anterior.
+      const pending = await prisma.planRequest.findFirst({ where: { tenantId: tid, status: "OPEN", kind: "CENTER" }, select: { id: true, kind: true } });
       if (pending) return reply.send({ data: { id: pending.id, kind: pending.kind, alreadyOpen: true }, errors: null });
       const centers = await prisma.center.count({ where: { tenantId: tid, active: true } });
       const created = await prisma.planRequest.create({
@@ -251,7 +256,8 @@ export async function tenantRoutes(server: FastifyInstance) {
       if (tenant.trialUntil && tenant.trialUntil > now) return reply.status(409).send({ errors: [{ code: "TRIAL_ACTIVE", message: "Ya tienes una prueba Pro en curso." }] });
       const [approvedBefore, pending] = await Promise.all([
         prisma.planRequest.findFirst({ where: { tenantId: tid, kind: "TRIAL", status: "APPROVED" }, select: { id: true } }),
-        prisma.planRequest.findFirst({ where: { tenantId: tid, status: "OPEN" }, select: { id: true, kind: true } }),
+        // Solo bloquea otra petición de PLAN (prueba o contratación); la de centro es aparte.
+        prisma.planRequest.findFirst({ where: { tenantId: tid, status: "OPEN", kind: { in: ["UPGRADE", "TRIAL"] } }, select: { id: true, kind: true } }),
       ]);
       if (approvedBefore) return reply.status(409).send({ errors: [{ code: "TRIAL_USED", message: "La prueba gratuita ya se usó. Pide pasar a Pro y te contactaremos." }] });
       if (pending) return reply.send({ data: { id: pending.id, kind: pending.kind, alreadyOpen: true }, errors: null });

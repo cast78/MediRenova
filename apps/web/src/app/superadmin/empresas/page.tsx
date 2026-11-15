@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, Clock, Inbox, Flame, Moon, Plus, Search, LogIn, Check, X, Loader2, Sparkles, Globe } from "lucide-react";
+import { Building2, Clock, Inbox, Flame, Moon, Plus, Search, LogIn, Check, X, Loader2, Sparkles, Globe, Activity, Leaf, Ban } from "lucide-react";
 import { apiFetch, ApiError, setActAsTenant } from "@/lib/api";
 import { PLAN_LABEL, trialTone, type PlanTier } from "@/lib/use-features";
 import { PlanChip } from "@/components/plan-chip";
@@ -65,15 +65,27 @@ function attentions(r: Row): Att[] {
   if (r.candidate) out.push({ key: "candidates", label: "Candidata a Pro", cls: "bg-emerald-100 text-emerald-800 border-emerald-300", rank: 2 });
   if (r.inactive) out.push({ key: "inactive", label: "Sin actividad 30 días", cls: "bg-gray-100 text-gray-600 border-gray-300 border-dashed", rank: 3 });
   if (r.trialDaysLeft != null && r.trialDaysLeft > 7) out.push({ key: "trial", label: `En prueba · ${r.trialDaysLeft} días`, cls: trialTone(r.trialDaysLeft).chip, rank: 4 });
-  if (out.length === 0) out.push({ key: "ok", label: "Al día", cls: "bg-white text-gray-400 border-gray-200", rank: 5 });
+  if (out.length === 0) out.push({ key: "ok", label: "Al día", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", rank: 5 });
   return out.sort((a, b) => a.rank - b.rank);
 }
 function attention(r: Row): Att { return attentions(r)[0]!; }
 const Chip = ({ a, small }: { a: Att; small?: boolean }) => <span className={`inline-flex font-semibold rounded-full border whitespace-nowrap ${small ? "text-[10px] px-1.5 py-0" : "text-[11px] px-2 py-0.5"} ${a.cls}`}>{a.label}</span>;
 
-function attentionDetail(r: Row, m: Meta | undefined): string {
+const REQUEST_TEXT = { UPGRADE: "pasar a Pro", TRIAL: "la prueba Pro de 14 días", CENTER: "un centro adicional" } as const;
+function attentionDetail(r: Row, m: Meta | undefined, open: PlanRequest[] = []): React.ReactNode {
   const a = attention(r);
-  if (a.key === "requests") return `Ha pedido pasar a Pro${r.admin ? ` · ${r.admin.name} (admin)` : ""}. ${r.appointments30d} citas y ${r.noShows30d} no-shows en 30 días.`;
+  if (a.key === "requests") {
+    // Qué ha pedido, según las peticiones abiertas de esta empresa (puede haber una de
+    // plan y una de centro). Dos líneas con icono: la petición y la actividad de la empresa.
+    const kinds = [...new Set(open.filter((q) => q.tenantId === r.id).map((q) => REQUEST_TEXT[q.kind]))];
+    const what = kinds.length ? kinds.join(" y " ) : "algo";
+    return (
+      <>
+        <span className="flex items-start gap-1.5"><Inbox className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" /><span>Ha pedido <b>{what}</b>.</span></span>
+        <span className="flex items-start gap-1.5 mt-1"><Activity className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" /><span>{r.appointments30d} citas y {r.noShows30d} no-shows en 30 días.</span></span>
+      </>
+    );
+  }
   if (a.key === "trial") return `Prueba Pro hasta el ${fmt(r.trialUntil)}. Al vencer vuelve a ${PLAN_LABEL[r.plan]}.`;
   if (a.key === "candidates") return `${r.noShows30d} no-shows y ${r.appointments30d} citas en 30 días (umbral: ≥${m?.thresholds.noShows30d ?? 5} no-shows o ≥${m?.thresholds.appointments30d ?? 80} citas). Argumento: recuperación automática.`;
   if (a.key === "inactive") return r.lastActivityAt ? `Sin citas desde el ${fmt(r.lastActivityAt)}. Riesgo de baja: conviene llamar.` : "Nunca ha creado una cita. ¿Necesita ayuda para arrancar?";
@@ -84,6 +96,14 @@ export default function EmpresasPage() {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery<{ data: Row[]; meta: Meta }>({ queryKey: ["superadmin-tenants"], queryFn: () => apiFetch("/superadmin/tenants", { raw: true }) });
   const { data: requests } = useQuery<PlanRequest[]>({ queryKey: ["superadmin-plan-requests"], queryFn: () => apiFetch<PlanRequest[]>("/superadmin/plan-requests?status=OPEN") });
+  // Subtítulo de la tarjeta "Peticiones": cuántas de cada tipo (antes decía "quieren pasar a Pro" siempre).
+  const requestsSummary = (() => {
+    const open = (requests ?? []).filter((q) => q.status === "OPEN");
+    if (open.length === 0) return "ninguna abierta";
+    const n = (k: PlanRequest["kind"]) => open.filter((q) => q.kind === k).length;
+    return [[n("UPGRADE"), "pasar a Pro"], [n("TRIAL"), "prueba Pro"], [n("CENTER"), n("CENTER") === 1 ? "centro adicional" : "centros adicionales"]]
+      .filter(([c]) => (c as number) > 0).map(([c, t]) => `${c} ${t}`).join(" · ");
+  })();
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
   const [selId, setSelId] = useState<string | null>(null);
@@ -109,7 +129,7 @@ export default function EmpresasPage() {
     return all
       .filter((r) => {
         if (s && !`${r.name} ${r.slug} ${r.admin?.email ?? ""}`.toLowerCase().includes(s)) return false;
-        if (filter === "ESSENTIAL" || filter === "PRO") return r.effectivePlan === filter;
+        if (filter === "ESSENTIAL" || filter === "PRO") return r.plan === filter; // plan contratado
         if (filter === "trial") return r.trialDaysLeft != null;
         if (filter === "requests") return r.openRequests > 0;
         if (filter === "candidates") return r.candidate;
@@ -195,11 +215,13 @@ export default function EmpresasPage() {
   }
   function enterAs(id: string) { setActAsTenant(id); window.location.href = "/dashboard"; }
 
-  const kpi = (k: Filter, label: string, value: number | undefined, sub: string, icon: React.ReactNode, on: string) => (
+  // Tarjeta KPI: la cifra va siempre en el color de la tarjeta (`num`); al activarla
+  // el fondo toma ese color y la cifra se oscurece un punto para mantener contraste.
+  const kpi = (k: Filter, label: string, value: number | undefined, sub: string, icon: React.ReactNode, on: string, num = "text-gray-900") => (
     <button key={k} type="button" onClick={() => setFilter(filter === k ? "all" : k)}
       className={`text-left border rounded-xl px-3.5 py-3 flex flex-col gap-0.5 transition-colors ${filter === k ? on : "bg-white border-gray-200 hover:border-blue-200"}`}>
       <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 inline-flex items-center gap-1">{icon}{label}</span>
-      <span className="text-2xl font-bold tabular-nums text-gray-900">{value ?? 0}</span>
+      <span className={`text-2xl font-bold tabular-nums ${num}`}>{value ?? 0}</span>
       <span className="text-[11px] text-gray-500">{sub}</span>
     </button>
   );
@@ -218,13 +240,14 @@ export default function EmpresasPage() {
       {/* KPIs = filtros */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-2.5">
         {kpi("all", "Empresas", m?.total, m ? `${m.byPlan.ESSENTIAL} Esencial · ${m.byPlan.PRO} Pro` : "", null, "bg-blue-600 border-blue-600 text-white [&_span]:text-white")}
-        {kpi("requests", "Peticiones", m?.openRequests, "quieren pasar a Pro", <Inbox className="w-3.5 h-3.5 text-blue-600" />, "bg-blue-100 border-blue-300")}
-        {kpi("trial", "En prueba", m?.trials, m && m.trialsEndingSoon > 0 ? `${m.trialsEndingSoon} vencen en ≤7 días` : "ninguna vence pronto", <Clock className="w-3.5 h-3.5 text-amber-600" />, "bg-amber-100 border-amber-300")}
-        {kpi("candidates", "Candidatas a Pro", m?.candidates, m ? `≥${m.thresholds.noShows30d} no-shows o ≥${m.thresholds.appointments30d} citas/mes` : "", <Flame className="w-3.5 h-3.5 text-emerald-600" />, "bg-emerald-100 border-emerald-300")}
-        {kpi("inactive", "Sin actividad", m?.inactive, "30 días sin citas", <Moon className="w-3.5 h-3.5 text-gray-500" />, "bg-gray-200 border-gray-400")}
+        {kpi("requests", "Peticiones", m?.openRequests, requestsSummary, <Inbox className="w-3.5 h-3.5 text-blue-600" />, "bg-blue-100 border-blue-300 [&_.text-blue-600]:text-blue-800", "text-blue-600")}
+        {kpi("trial", "En prueba", m?.trials, m && m.trialsEndingSoon > 0 ? `${m.trialsEndingSoon} vencen en ≤7 días` : "ninguna vence pronto", <Clock className="w-3.5 h-3.5 text-amber-600" />, "[&_.text-amber-600]:text-amber-800 bg-amber-100 border-amber-300", "text-amber-600")}
+        {kpi("candidates", "Candidatas a Pro", m?.candidates, m ? `≥${m.thresholds.noShows30d} no-shows o ≥${m.thresholds.appointments30d} citas/mes` : "", <Flame className="w-3.5 h-3.5 text-emerald-600" />, "[&_.text-emerald-600]:text-emerald-800 bg-emerald-100 border-emerald-300", "text-emerald-600")}
+        {kpi("inactive", "Sin actividad", m?.inactive, "30 días sin citas", <Moon className="w-3.5 h-3.5 text-gray-500" />, "bg-gray-200 border-gray-400 [&_.text-gray-600]:text-gray-800", "text-gray-600")}
+        {/* Solo lectura: es una suma de centros contratados, no un grupo de empresas que filtrar. */}
         <div className="border rounded-xl px-3.5 py-3 flex flex-col gap-0.5 bg-white border-gray-200">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Centros</span>
-          <span className="text-2xl font-bold tabular-nums text-gray-900">{m?.centers ?? 0}</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 inline-flex items-center gap-1"><Building2 className="w-3.5 h-3.5 text-violet-600" />Centros</span>
+          <span className="text-2xl font-bold tabular-nums text-violet-700">{m?.centers ?? 0}</span>
           <span className="text-[11px] text-gray-500">contratados en total</span>
         </div>
       </div>
@@ -241,12 +264,11 @@ export default function EmpresasPage() {
       {/* Peticiones abiertas (cuando el filtro es Peticiones o hay alguna y no se filtra otra cosa) */}
       {requests && requests.length > 0 && (filter === "requests" || filter === "all") && (
         <section className={`${CARD} border-blue-200`}>
-          <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-1"><Inbox className="w-4 h-4 text-blue-600" /> Peticiones abiertas</h2>
-          <p className="text-xs text-gray-500 mb-3">Nada se activa sin tu autorización: aprueba la prueba (14 días), pasa a Pro o rechaza con un motivo que verá la clínica.</p>
+          <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3"><Inbox className="w-4 h-4 text-blue-600" /> Peticiones abiertas</h2>
           <div className="divide-y divide-gray-100">
             {requests.map((r) => (
               <div key={r.id} className="py-2.5 flex items-center gap-3 flex-wrap">
-                <span className={`inline-flex text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${r.kind === "TRIAL" ? "bg-amber-100 text-amber-800 border-amber-300" : r.kind === "CENTER" ? "bg-violet-100 text-violet-800 border-violet-300" : "bg-blue-100 text-blue-800 border-blue-300"}`}>{r.kind === "TRIAL" ? "Prueba 14 días" : r.kind === "CENTER" ? "Centro adicional" : "Pasar a Pro"}</span>
+                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${r.kind === "TRIAL" ? "bg-amber-100 text-amber-800 border-amber-300" : r.kind === "CENTER" ? "bg-violet-100 text-violet-800 border-violet-300" : "bg-blue-100 text-blue-800 border-blue-300"}`}>{r.kind === "TRIAL" ? <Clock className="w-3 h-3" /> : r.kind === "CENTER" ? <Building2 className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}{r.kind === "TRIAL" ? "Prueba 14 días" : r.kind === "CENTER" ? "Centro adicional" : "Pasar a Pro"}</span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-gray-900">{r.tenant.name} <span className="text-xs text-gray-400">· {PLAN_LABEL[r.tenant.plan]}{r.kind === "UPGRADE" ? " → Pro" : ""}</span></p>
                   <p className="text-xs text-gray-500">{fmt(r.createdAt)}{r.byUser ? ` · ${r.byUser.firstName} ${r.byUser.lastName} (${r.byUser.email})` : ""}{r.note ? ` · ${r.note}` : ""}</p>
@@ -259,7 +281,7 @@ export default function EmpresasPage() {
                   <button type="button" onClick={() => { const row = data?.data.find((x) => x.id === r.tenantId); if (row) setDialog({ row, to: "PRO" }); }} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><Sparkles className="w-3.5 h-3.5" /> Pasar a Pro</button>
                 )}
                 <button type="button" onClick={() => reject(r)} disabled={decide.isPending} className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-60"><X className="w-3.5 h-3.5" /> Rechazar</button>
-                {r.kind === "UPGRADE" && <button type="button" onClick={() => closeReq(r)} disabled={decide.isPending} className="text-xs font-medium px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cerrar</button>}
+                {r.kind === "UPGRADE" && <button type="button" onClick={() => closeReq(r)} disabled={decide.isPending} className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60"><Ban className="w-3.5 h-3.5" /> Cerrar</button>}
               </div>
             ))}
           </div>
@@ -277,13 +299,13 @@ export default function EmpresasPage() {
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-[11px] uppercase tracking-wide text-gray-500">
-                  {["Empresa", "Atención", "Plan", "Centros", "Citas/mes", "No-shows", "Última cita", ""].map((h) => <th key={h} className="text-left font-semibold px-3 py-2 border-b border-gray-200 whitespace-nowrap">{h}</th>)}
+                  {["Empresa", "Plan", "Atención", "Centros", "Citas/mes", "No-shows", "Última cita"].map((h) => <th key={h} className="text-left font-semibold px-3 py-2 border-b border-gray-200 whitespace-nowrap">{h}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {isLoading ? <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Cargando…</td></tr>
+                {isLoading ? <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400">Cargando…</td></tr>
                 : rows.length === 0 ? (
-                  <tr><td colSpan={8} className="px-3 py-10 text-center text-gray-400">
+                  <tr><td colSpan={7} className="px-3 py-10 text-center text-gray-400">
                     {(data?.data.length ?? 0) === 0 ? <>Aún no hay empresas. <button type="button" onClick={() => setCreating(true)} className="text-blue-600 font-semibold hover:underline">Crea la primera</button>.</>
                       : filter === "requests" ? "No hay peticiones abiertas ahora mismo. Cuando una clínica pulse «Quiero pasar a Pro», aparecerá aquí y en el badge del menú."
                       : "Ninguna empresa con este filtro."}
@@ -296,21 +318,20 @@ export default function EmpresasPage() {
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2.5 min-w-0">
                           <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 inline-flex items-center justify-center text-[11px] font-bold shrink-0">{r.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}</span>
-                          <div className="min-w-0"><div className="font-semibold text-gray-900 truncate">{r.name}</div><div className="text-[11px] text-gray-400">{r.slug}{!r.active ? " · suspendida" : ""}</div></div>
+                          <div className="min-w-0"><Link href={`/superadmin/empresas/${r.id}`} onClick={(e) => e.stopPropagation()} title="Abrir la ficha" className="block font-semibold text-gray-900 truncate hover:text-blue-600 hover:underline">{r.name}</Link><div className="text-[11px] text-gray-400">{r.slug}{!r.active ? " · suspendida" : ""}</div></div>
                         </div>
                       </td>
+                      <td className="px-3 py-2.5"><PlanChip plan={r.plan} /></td>
                       <td className="px-3 py-2.5">
                         <div className="flex flex-col gap-1 items-start">
                           <Chip a={a} />
                           {attentions(r).slice(1).map((s) => <Chip key={s.key + s.label} a={s} small />)}
                         </div>
                       </td>
-                      <td className="px-3 py-2.5"><PlanChip plan={r.effectivePlan} /></td>
                       <td className="px-3 py-2.5 tabular-nums">{r.centersCount}{r.maxCenters != null ? <span className="text-gray-400"> / {r.maxCenters}</span> : ""}</td>
                       <td className="px-3 py-2.5 tabular-nums">{r.appointments30d}</td>
                       <td className={`px-3 py-2.5 tabular-nums ${r.noShows30d >= (m?.thresholds.noShows30d ?? 5) ? "text-red-600 font-semibold" : ""}`}>{r.noShows30d}</td>
                       <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.lastActivityAt ? fmt(r.lastActivityAt) : <span className="text-gray-300">nunca</span>}</td>
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap"><Link href={`/superadmin/empresas/${r.id}`} onClick={(e) => e.stopPropagation()} className="text-xs font-semibold text-blue-600 hover:underline">Ficha →</Link></td>
                     </tr>
                   );
                 })}
@@ -321,21 +342,21 @@ export default function EmpresasPage() {
 
         {/* Panel lateral */}
         {sel && (
-          <aside className="flex-[1_1_320px] max-w-[360px] min-w-0 bg-white border border-gray-200 rounded-xl p-4 space-y-4 shadow-sm">
+          <aside className="flex-[1_1_320px] max-w-[360px] min-w-0 bg-white border border-gray-200 rounded-xl p-4 shadow-sm divide-y divide-gray-100 [&>*]:pb-4 [&>*+*]:pt-4 [&>*:last-child]:pb-0">
             <div className="flex items-start gap-2.5">
               <span className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 inline-flex items-center justify-center text-xs font-bold shrink-0">{sel.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}</span>
               <div className="min-w-0 flex-1">
                 <div className="text-[15px] font-semibold text-gray-900 truncate">{sel.name}</div>
-                <div className="text-xs text-gray-500">{sel.slug} · {sel.centersCount} centro{sel.centersCount === 1 ? "" : "s"} · {sel.usersCount} usuario{sel.usersCount === 1 ? "" : "s"}</div>
+                <div className="text-xs text-gray-500">{sel.centersCount} centro{sel.centersCount === 1 ? "" : "s"} · {sel.usersCount} usuario{sel.usersCount === 1 ? "" : "s"}</div>
               </div>
               <div className={`flex flex-col items-end gap-1 rounded-lg transition-shadow ${pulse === "plan" ? "ring-2 ring-emerald-400 ring-offset-2" : ""}`}>
-                <PlanChip plan={sel.effectivePlan} />
+                <PlanChip plan={sel.plan} />
                 {sel.trialDaysLeft != null && <span className={`text-[10px] font-semibold border rounded-full px-1.5 py-0 whitespace-nowrap transition-shadow ${trialTone(sel.trialDaysLeft).chip} ${pulse === "trial" ? "ring-2 ring-emerald-400 ring-offset-1" : ""}`}>Prueba · {sel.trialDaysLeft} d</span>}
               </div>
             </div>
             <div className="space-y-1.5 text-[12.5px] text-gray-700">
               <div className="flex flex-wrap gap-1">{attentions(sel).map((s) => <Chip key={s.key + s.label} a={s} />)}</div>
-              <p>{attentionDetail(sel, m)}</p>
+              <div>{attentionDetail(sel, m, requests ?? [])}</div>
             </div>
 
             <div>
@@ -351,22 +372,23 @@ export default function EmpresasPage() {
 
             <div className="space-y-2">
               <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Acciones rápidas</span>
-              {sel.trialDaysLeft != null ? (
+              {/* La prueba Pro solo tiene sentido con plan contratado Esencial. */}
+              {sel.plan === "ESSENTIAL" && (sel.trialDaysLeft != null ? (
                 <div className={`rounded-lg border px-2.5 py-2 text-xs flex items-center gap-1.5 flex-wrap transition-shadow ${trialTone(sel.trialDaysLeft).chip} ${pulse === "trial" ? "ring-2 ring-emerald-400" : ""}`}>
                   <Clock className="w-3.5 h-3.5" />
                   <span className="font-semibold">Prueba Pro hasta el {fmt(sel.trialUntil)} · {sel.trialDaysLeft} días</span>
                   <span className="ml-auto inline-flex gap-1">
                     {[14, 30].map((d) => <button key={d} type="button" onClick={() => trial(sel, d)} disabled={patch.isPending} className="px-1.5 py-0.5 rounded border border-current/30 bg-white/70 font-semibold hover:bg-white disabled:opacity-50">+{d}</button>)}
-                    <button type="button" onClick={() => removeTrial(sel)} disabled={patch.isPending} className="px-1.5 py-0.5 rounded border border-gray-200 bg-white text-gray-600 font-semibold hover:bg-gray-50 disabled:opacity-50">Quitar</button>
+                    <button type="button" onClick={() => removeTrial(sel)} disabled={patch.isPending} className="px-1.5 py-0.5 rounded border border-red-200 bg-white text-red-600 font-semibold hover:bg-red-50 disabled:opacity-50">Quitar</button>
                   </span>
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-1.5">
-                  {[14, 30, 60].map((d) => <button key={d} type="button" onClick={() => trial(sel, d)} disabled={patch.isPending} className="text-xs font-semibold px-2 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">Prueba {d} d</button>)}
+                  {[14, 30, 60].map((d) => <button key={d} type="button" onClick={() => trial(sel, d)} disabled={patch.isPending} className="text-xs font-semibold px-2 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-50">Prueba {d} d</button>)}
                 </div>
-              )}
+              ))}
               {sel.plan === "PRO"
-                ? <button type="button" onClick={() => setDialog({ row: sel, to: "ESSENTIAL" })} className="w-full text-sm font-semibold px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100">Cambiar a Esencial…</button>
+                ? <button type="button" onClick={() => setDialog({ row: sel, to: "ESSENTIAL" })} className="w-full inline-flex items-center justify-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"><Leaf className="w-4 h-4" /> Cambiar a Esencial…</button>
                 : <button type="button" onClick={() => setDialog({ row: sel, to: "PRO" })} className="w-full text-sm font-semibold px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 inline-flex items-center justify-center gap-1.5"><Sparkles className="w-4 h-4" /> Pasar a Pro…</button>}
               <button type="button" onClick={() => enterAs(sel.id)} className="w-full inline-flex items-center justify-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><LogIn className="w-4 h-4" /> Entrar como esta empresa</button>
               <Link href={`/superadmin/empresas/${sel.id}`} className="block text-center text-[12.5px] font-semibold text-blue-600 hover:underline py-1">Ver ficha completa →</Link>

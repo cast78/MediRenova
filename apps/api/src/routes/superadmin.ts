@@ -35,24 +35,38 @@ const TENANT_SELECT = {
 
 const CATALOG = FEATURE_KEYS.map((k) => ({ key: k, label: FEATURES[k].label, min: FEATURES[k].min, requires: FEATURES[k].requires ?? [] }));
 
-// Citas por mes (fecha de la cita) de los últimos 6 meses, por empresa:
-// Map<tenantId, number[6]> en orden cronológico. SQL crudo porque Prisma no
+// Citas por mes (fecha de la cita) de los últimos `months` meses, por empresa:
+// Map<tenantId, number[months]> en orden cronológico. SQL crudo porque Prisma no
 // agrupa por mes; `tenantId` explícito en el WHERE, como el resto del panel.
-async function monthlyAppointments(ids: string[], now = new Date()): Promise<Map<string, number[]>> {
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
-  const out = new Map<string, number[]>(ids.map((id) => [id, [0, 0, 0, 0, 0, 0]]));
+// Con `onlyNoShows` cuenta solo las citas NO_SHOW (segmento ámbar del gráfico).
+async function monthlyAppointments(ids: string[], now = new Date(), months = 6, onlyNoShows = false): Promise<Map<string, number[]>> {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1));
+  const out = new Map<string, number[]>(ids.map((id) => [id, Array.from({ length: months }, () => 0)]));
   if (ids.length === 0) return out;
   const rows = await prisma.$queryRaw<{ tenant_id: string; m: Date; n: bigint }[]>(Prisma.sql`
     SELECT tenant_id, date_trunc('month', scheduled_at) AS m, count(*)::bigint AS n
     FROM appointments
     WHERE tenant_id IN (${Prisma.join(ids)}) AND scheduled_at >= ${start}
+      ${onlyNoShows ? Prisma.sql`AND status = 'NO_SHOW'` : Prisma.empty}
     GROUP BY 1, 2`);
   for (const r of rows) {
     const idx = (r.m.getUTCFullYear() - start.getUTCFullYear()) * 12 + (r.m.getUTCMonth() - start.getUTCMonth());
     const arr = out.get(r.tenant_id);
-    if (arr && idx >= 0 && idx < 6) arr[idx] = Number(r.n);
+    if (arr && idx >= 0 && idx < months) arr[idx] = Number(r.n);
   }
   return out;
+}
+
+// Citas registradas en los últimos 30 días por centro (a través de la sala), para
+// la pestaña Centros. Misma base (created_at) que el indicador "Citas · 30 días",
+// para que la suma por centro cuadre con la cifra de la empresa.
+async function appointmentsByCenter(tenantId: string, since: Date): Promise<Map<string, number>> {
+  const rows = await prisma.$queryRaw<{ center_id: string; n: bigint }[]>(Prisma.sql`
+    SELECT r.center_id, count(*)::bigint AS n
+    FROM appointments a JOIN rooms r ON r.id = a.room_id
+    WHERE a.tenant_id = ${tenantId} AND a.created_at >= ${since}
+    GROUP BY 1`);
+  return new Map(rows.map((r) => [r.center_id, Number(r.n)]));
 }
 
 export async function superadminRoutes(server: FastifyInstance) {
@@ -89,7 +103,8 @@ export async function superadminRoutes(server: FastifyInstance) {
         timezone: config?.timezone ?? null,
         admin: admin ? { email: admin.email, name: `${admin.firstName} ${admin.lastName}`.trim() } : null,
         effectivePlan: eff,
-        trialDaysLeft: trialDaysLeft(t.trialUntil, now),
+        // Solo cuenta con plan contratado Esencial: con Pro, una fecha de prueba suelta no es "en prueba".
+        trialDaysLeft: t.plan === "ESSENTIAL" ? trialDaysLeft(t.trialUntil, now) : null,
         centersCount: cMap.get(t.id) ?? 0,
         usersCount: _count.users,
         customersCount: _count.customers,
@@ -101,7 +116,8 @@ export async function superadminRoutes(server: FastifyInstance) {
     });
     const meta = {
       total: rows.length,
-      byPlan: { ESSENTIAL: rows.filter((r) => r.effectivePlan === "ESSENTIAL").length, PRO: rows.filter((r) => r.effectivePlan === "PRO").length },
+      // Por plan contratado (lo que se factura); la prueba es un estado aparte (`trials`).
+      byPlan: { ESSENTIAL: rows.filter((r) => r.plan === "ESSENTIAL").length, PRO: rows.filter((r) => r.plan === "PRO").length },
       trials: rows.filter((r) => r.trialDaysLeft != null).length,
       trialsEndingSoon: rows.filter((r) => r.trialDaysLeft != null && r.trialDaysLeft <= 7).length,
       openRequests: rows.reduce((s, r) => s + r.openRequests, 0),
@@ -152,29 +168,40 @@ export async function superadminRoutes(server: FastifyInstance) {
     if (!t) return reply.status(404).send({ errors: [{ code: "NOT_FOUND" }] });
     const now = new Date();
     const since = new Date(now.getTime() - 30 * DAY_MS);
-    const [centers, history, requests, usersList, monthly, appts30, noShows30, lastAppt] = await Promise.all([
-      prisma.center.findMany({ where: { tenantId: t.id }, select: { id: true, name: true, city: true, active: true }, orderBy: { name: "asc" } }),
+    const prevSince = new Date(since.getTime() - 30 * DAY_MS);
+    const MONTHS = 12;
+    const [centersRaw, history, requests, usersRaw, monthly, monthlyNoShows, appts30, prevAppts30, noShows30, lastAppt, byCenter] = await Promise.all([
+      // Centros con nº de salas y fecha de alta; las citas por centro van aparte (SQL).
+      prisma.center.findMany({ where: { tenantId: t.id }, select: { id: true, name: true, city: true, active: true, createdAt: true, _count: { select: { rooms: true } } }, orderBy: { name: "asc" } }),
       prisma.auditLog.findMany({ where: { tenantId: t.id, resourceType: "tenant_plan" }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, action: true, meta: true, createdAt: true, user: { select: { email: true, firstName: true, lastName: true } } } }),
       prisma.planRequest.findMany({ where: { tenantId: t.id }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, kind: true, status: true, note: true, createdAt: true, closedAt: true } }),
-      prisma.user.findMany({ where: { tenantId: t.id }, select: { id: true, email: true, firstName: true, lastName: true, role: true, active: true }, orderBy: [{ role: "asc" }, { createdAt: "asc" }] }),
-      monthlyAppointments([t.id], now),
+      // Último acceso = creación de la sesión más reciente (el refresco rota el token
+      // sin crear sesión nueva, así que createdAt es la fecha de login).
+      prisma.user.findMany({ where: { tenantId: t.id }, select: { id: true, email: true, firstName: true, lastName: true, role: true, active: true, createdAt: true, sessions: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } } }, orderBy: [{ role: "asc" }, { createdAt: "asc" }] }),
+      monthlyAppointments([t.id], now, MONTHS),
+      monthlyAppointments([t.id], now, MONTHS, true),
       prisma.appointment.count({ where: { tenantId: t.id, createdAt: { gte: since } } }),
+      prisma.appointment.count({ where: { tenantId: t.id, createdAt: { gte: prevSince, lt: since } } }),
       prisma.appointment.count({ where: { tenantId: t.id, status: "NO_SHOW", scheduledAt: { gte: since } } }),
       prisma.appointment.findFirst({ where: { tenantId: t.id }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
+      appointmentsByCenter(t.id, since),
     ]);
+    const centers = centersRaw.map(({ _count: c, ...rest }) => ({ ...rest, roomsCount: c.rooms, appointments30d: byCenter.get(rest.id) ?? 0 }));
+    const usersList = usersRaw.map(({ sessions, ...rest }) => ({ ...rest, lastLoginAt: sessions[0]?.createdAt ?? null }));
     const { _count, config, users, ...rest } = t;
     const eff = effectivePlan(t, now);
     return reply.send({
       data: {
         ...rest, timezone: config?.timezone ?? null, primaryColor: config?.primaryColor ?? null,
         admin: users[0] ? { email: users[0].email, name: `${users[0].firstName} ${users[0].lastName}`.trim() } : null,
-        effectivePlan: eff, trialDaysLeft: trialDaysLeft(t.trialUntil, now), features: features(t, now),
+        effectivePlan: eff, trialDaysLeft: t.plan === "ESSENTIAL" ? trialDaysLeft(t.trialUntil, now) : null, features: features(t, now),
         catalog: CATALOG,
         usersCount: _count.users, customersCount: _count.customers, centers, history, requests, users: usersList,
         activity: {
-          monthly: monthly.get(t.id) ?? [0, 0, 0, 0, 0, 0],
-          months: Array.from({ length: 6 }, (_, i) => { const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5 + i, 1)); return d.toISOString().slice(0, 7); }),
-          appointments30d: appts30, noShows30d: noShows30, lastActivityAt: lastAppt?.createdAt ?? null,
+          monthly: monthly.get(t.id) ?? Array.from({ length: MONTHS }, () => 0),
+          monthlyNoShows: monthlyNoShows.get(t.id) ?? Array.from({ length: MONTHS }, () => 0),
+          months: Array.from({ length: MONTHS }, (_, i) => { const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (MONTHS - 1) + i, 1)); return d.toISOString().slice(0, 7); }),
+          appointments30d: appts30, prevAppointments30d: prevAppts30, noShows30d: noShows30, lastActivityAt: lastAppt?.createdAt ?? null,
           candidate: t.plan === "ESSENTIAL" && eff === "ESSENTIAL" && (noShows30 >= PRO_CANDIDATE.noShows30d || appts30 >= PRO_CANDIDATE.appointments30d),
           thresholds: PRO_CANDIDATE,
         },
@@ -213,9 +240,20 @@ export async function superadminRoutes(server: FastifyInstance) {
     const after = await prisma.tenant.update({ where: { id: request.params.id }, data, select: { plan: true, trialUntil: true, featureOverrides: true, maxCenters: true, active: true } });
     invalidatePlanCache(request.params.id);
     if (d.closeOpenRequests) {
+      // Solo las peticiones de PLAN: la de centro adicional es independiente y
+      // sigue abierta. Al pasar a Pro, la de "pasar a Pro" queda APROBADA (es lo
+      // que ha ocurrido); la de prueba, si la hubiera, se cierra porque ya no
+      // tiene sentido. Al bajar a Esencial se cierran las dos.
+      const now = new Date();
+      if (after.plan === "PRO") {
+        await prisma.planRequest.updateMany({
+          where: { tenantId: request.params.id, status: "OPEN", kind: "UPGRADE" },
+          data: { status: "APPROVED", closedAt: now, ...(d.reason ? { note: `Aprobada: ${d.reason}` } : {}) },
+        });
+      }
       await prisma.planRequest.updateMany({
-        where: { tenantId: request.params.id, status: "OPEN" },
-        data: { status: "CLOSED", closedAt: new Date(), ...(d.reason ? { note: `Cierre: ${d.reason}` } : {}) },
+        where: { tenantId: request.params.id, status: "OPEN", kind: { in: after.plan === "PRO" ? ["TRIAL"] : ["UPGRADE", "TRIAL"] } },
+        data: { status: "CLOSED", closedAt: now, ...(d.reason ? { note: `Cierre: ${d.reason}` } : {}) },
       });
     }
     await auditLog({ tenantId: request.params.id, userId: request.ctx.userId, ip: request.ip }, "UPDATE", "tenant_plan", request.params.id, { before, after, reason: d.reason ?? null });

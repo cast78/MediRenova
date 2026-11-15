@@ -54,7 +54,7 @@ export function PlanChangeDialog({ tenant, to, catalog, onClose, onDone }: {
 
         <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-gray-600 space-y-0.5">
           <div>Facturación: <b className="text-gray-900">plan {PLAN_LABEL[to]} × {tenant.centersCount} centro{tenant.centersCount === 1 ? "" : "s"}</b>.</div>
-          {toPro && tenant.openRequests > 0 && <div>La petición abierta{tenant.adminName ? ` de ${tenant.adminName}` : ""} se cerrará automáticamente.</div>}
+          {toPro && tenant.openRequests > 0 && <div>La petición de paso a Pro quedará aprobada; una petición de centro adicional, si la hay, sigue abierta.</div>}
           <div>Plan actual: {PLAN_LABEL[tenant.plan]}.</div>
         </div>
 
@@ -68,7 +68,7 @@ export function PlanChangeDialog({ tenant, to, catalog, onClose, onDone }: {
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className="text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button type="button" onClick={onClose} className="text-sm px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Cancelar</button>
           <button type="button" onClick={() => { setError(null); save.mutate(); }} disabled={save.isPending || reason.trim().length < 3} title={reason.trim().length < 3 ? "Escribe el motivo para poder confirmar" : undefined}
             className={`inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg text-white disabled:opacity-50 ${toPro ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"}`}>
             {save.isPending && <Loader2 className="w-4 h-4 animate-spin" />} {toPro ? "Confirmar: pasar a Pro" : "Confirmar: cambiar a Esencial"}
