@@ -51,7 +51,7 @@ export function ConfirmDialog({ spec, onClose }: { spec: ConfirmSpec; onClose: (
           </label>
         )}
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className="text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button type="button" onClick={onClose} className="text-sm px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Cancelar</button>
           <button type="button" onClick={confirm} disabled={!canConfirm} className={`inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg text-white disabled:opacity-50 ${TONE[tone]}`}>
             {busy && <Loader2 className="w-4 h-4 animate-spin" />} {spec.confirmLabel}
           </button>
