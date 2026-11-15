@@ -51,27 +51,52 @@ function setPreviewPlan(plan: "PRO" | null): void {
   else localStorage.removeItem(PREVIEW_KEY);
 }
 
+// Renovación del token de acceso con el refresh token. El backend ROTA el refresh
+// token (el usado deja de valer), así que si varias peticiones reciben 401 a la
+// vez solo una puede renovar: todas comparten la misma promesa en vuelo. Antes,
+// la segunda renovación en paralelo fallaba con el token ya gastado, borraba la
+// sesión y mandaba al login a los 15 minutos.
+let refreshInFlight: Promise<string | null> | null = null;
+
 async function refreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
   const refreshToken = localStorage.getItem("refresh_token");
   if (!refreshToken) return null;
 
-  try {
-    const res = await fetch(`${API_BASE}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-    });
-
-    if (!res.ok) {
-      clearTokens();
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) {
+        // Solo un rechazo explícito (token inválido/caducado) invalida la sesión;
+        // un fallo de red o del servidor no debe cerrarla.
+        if (res.status === 401 || res.status === 400) clearTokens();
+        return null;
+      }
+      const data = (await res.json()) as { data: { accessToken: string; refreshToken: string } };
+      setTokens(data.data.accessToken, data.data.refreshToken);
+      // Avisa al AuthProvider para que reprograme la renovación anticipada.
+      window.dispatchEvent(new CustomEvent("mr:token-refreshed", { detail: data.data.accessToken }));
+      return data.data.accessToken;
+    } catch {
       return null;
+    } finally {
+      refreshInFlight = null;
     }
+  })();
+  return refreshInFlight;
+}
 
-    const data = (await res.json()) as { data: { accessToken: string; refreshToken: string } };
-    setTokens(data.data.accessToken, data.data.refreshToken);
-    return data.data.accessToken;
+// Caducidad (ms desde época) de un JWT, o null si no se puede leer.
+function tokenExpiry(token: string | null): number | null {
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]!)) as { exp?: number };
+    return typeof payload.exp === "number" ? payload.exp * 1000 : null;
   } catch {
-    clearTokens();
     return null;
   }
 }
@@ -102,8 +127,13 @@ export async function apiFetch<T>(
     if (newToken) {
       return apiFetch<T>(path, options, false);
     }
-    clearTokens();
-    if (typeof window !== "undefined") window.location.href = "/login";
+    // Sin renovación posible: si la sesión ya no existe (refresh rechazado o
+    // inexistente) se va al login; si fue un fallo transitorio, se conserva la
+    // sesión y la petición simplemente falla.
+    if (typeof window !== "undefined" && !localStorage.getItem("refresh_token")) {
+      clearTokens();
+      if (!window.location.pathname.startsWith("/login")) window.location.href = "/login";
+    }
     throw new ApiError(401, [{ code: "UNAUTHORIZED" }]);
   }
 
@@ -136,4 +166,4 @@ function authHeaders(base?: Record<string, string>): Record<string, string> {
   };
 }
 
-export { setTokens, clearTokens, getAccessToken, getActAsTenant, setActAsTenant, getPreviewPlan, setPreviewPlan, authHeaders };
+export { setTokens, clearTokens, getAccessToken, getActAsTenant, setActAsTenant, getPreviewPlan, setPreviewPlan, authHeaders, refreshAccessToken, tokenExpiry };
