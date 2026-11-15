@@ -34,7 +34,7 @@ export function PlanChangeDialog({ tenant, to, catalog, onClose, onDone }: {
       void qc.invalidateQueries({ queryKey: ["tenant-plan"] });
       onDone?.(); onClose();
     },
-    onError: (e: unknown) => setError(e instanceof ApiError ? `Error ${e.status}` : "No se pudo guardar"),
+    onError: (e: unknown) => setError(e instanceof ApiError ? e.message : "No se pudo guardar"),
   });
 
   return (

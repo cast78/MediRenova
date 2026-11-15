@@ -49,7 +49,7 @@ function errorMessage(err: unknown): string {
     const e = err.errors;
     if (Array.isArray(e) && e[0]?.message) return e[0].message;
     if (e && typeof e === "object") { const m = Object.values(e as Record<string, string[]>).flat().filter(Boolean); if (m.length) return m.join(" · "); }
-    return `Error ${err.status}`;
+    return err.message;
   }
   return err instanceof Error ? err.message : "Error";
 }

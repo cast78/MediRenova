@@ -88,7 +88,7 @@ function highlight(text: string, colorCls: string): (string | JSX.Element)[] {
 function errMsg(e: unknown): string {
   if (e instanceof ApiError) {
     const first = Array.isArray(e.errors) ? (e.errors[0] as { message?: string; code?: string }) : undefined;
-    return first?.message ?? first?.code ?? `Error ${e.status}`;
+    return first?.message ?? first?.code ?? e.message;
   }
   return "Error inesperado";
 }
