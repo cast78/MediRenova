@@ -45,7 +45,10 @@ const ROLE: Record<string, string> = { ADMIN: "Admin", RECEPTIONIST: "Recepción
 
 // Línea legible de un cambio de licencia a partir del meta de la auditoría.
 function historyLine(h: Detail["history"][number]): React.ReactNode {
-  const mm = (h.meta ?? {}) as { before?: { plan?: string; trialUntil?: string | null }; after?: { plan?: string; trialUntil?: string | null }; plan?: string; reason?: string | null };
+  const mm = (h.meta ?? {}) as { event?: string; daysLeft?: number; before?: { plan?: string; trialUntil?: string | null }; after?: { plan?: string; trialUntil?: string | null }; plan?: string; reason?: string | null };
+  // Entradas automáticas del cron de vencimiento de pruebas (crm-planes P5.1).
+  if (mm.event === "TRIAL_NOTICE") return <>Aviso enviado: la prueba Pro termina {mm.daysLeft === 1 ? "mañana" : `en ${mm.daysLeft} días`}<span className="text-gray-500"> · automático</span></>;
+  if (mm.event === "TRIAL_EXPIRED") return <>Fin de la prueba Pro → {PLAN_LABEL.ESSENTIAL}<span className="text-gray-500"> · automático</span></>;
   const line = h.action === "CREATE"
     ? `Alta en ${PLAN_LABEL[(mm.plan as PlanTier) ?? "PRO"]}`
     : mm.before && mm.after

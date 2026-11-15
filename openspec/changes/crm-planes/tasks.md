@@ -58,7 +58,7 @@ Rama: `feat/crm-planes` desde `main`, PRs pequeños y frecuentes. Cada fase es d
 
 ## P5. Pruebas con vencimiento
 
-- [ ] P5.1 Cron diario 07:30: avisos a 7 y 1 días (Admin + proveedor) y auditoría del vencimiento
+- [x] P5.1 Cron diario 07:30 (`lib/trial-expiry.ts`, registrado en `workflow-cron.ts`): avisos por email a 7 y 1 días a los ADMIN de la clínica y a los superadmin del proveedor; al vencer, auditoría `tenant_plan` (`event: TRIAL_EXPIRED`), `invalidatePlanCache` y email a ambos. Idempotente por día usando la propia auditoría como marca (`event: TRIAL_NOTICE` + `daysLeft` + `trialUntil`), sin migración. Solo empresas con plan contratado Esencial. `runTrialExpiry(now, { dryRun })` para ensayos; la ficha de empresa muestra estas entradas como "Aviso enviado…" / "Fin de la prueba Pro → Esencial · automático". Test unitario de `daysLeft` (vitest). Ensayo en seco (15/11) con Clínica Esencial en prueba hasta el 29/11: aviso a D-7 y D-1 (admin de la clínica + superadmin), nada a D-6, vencimiento a partir de D; en real, la marca de auditoría evita repetir el vencimiento y los avisos
 - [x] P5.2 Tarjeta "Tu plan" y panel muestran cuenta atrás de la prueba (chip "Prueba Pro · N d", barra del superadmin por días restantes, KPI "pruebas que vencen ≤7 días")
 
 ## P6. Verificación y documentación

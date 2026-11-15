@@ -6,6 +6,7 @@ import { hasFeature } from "./plan.js";
 import { runDueCampaigns } from "./campaign-runner.js";
 import { sweepExpiredAppointments } from "./appointment-sweep.js";
 import { runEpisodeAlerts } from "./episode-alerts.js";
+import { runTrialExpiry } from "./trial-expiry.js";
 
 /**
  * Daily cron job: detects expiring revisions and sends workflow notifications.
@@ -57,6 +58,23 @@ export function startWorkflowCron(): void {
     { timezone: "Europe/Madrid" },
   );
   console.log("[episode-alerts] Scheduled daily at 20:00 Europe/Madrid");
+
+  // Vencimiento de pruebas Pro (crm-planes P5.1): avisos a 7 y 1 días al admin de
+  // la clínica y al proveedor; al vencer, auditoría y caché del plan. Idempotente
+  // por día (la auditoría hace de marca), así que repetir el cron no duplica avisos.
+  cron.schedule(
+    "30 7 * * *",
+    async () => {
+      try {
+        const r = await runTrialExpiry();
+        if (r.notices + r.expired > 0) console.log(`[trial-expiry] ${r.notices} aviso(s), ${r.expired} vencimiento(s), ${r.emails} email(s)`);
+      } catch (err) {
+        console.error("[trial-expiry] Error:", err);
+      }
+    },
+    { timezone: "Europe/Madrid" },
+  );
+  console.log("[trial-expiry] Scheduled daily at 07:30 Europe/Madrid");
 }
 
 export async function runWorkflowJob(): Promise<void> {
