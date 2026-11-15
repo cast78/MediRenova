@@ -23,7 +23,10 @@ export interface PlanInfo {
   // Puede pedir la prueba Pro (Esencial, sin prueba en curso, sin petición abierta, nunca aprobada).
   selfTrialAvailable?: boolean;
   // Petición abierta (prueba o contratación) pendiente del proveedor.
-  pendingRequest?: { id: string; kind: "UPGRADE" | "TRIAL" | "CENTER"; createdAt: string } | null;
+  /** Petición de PLAN abierta (prueba o contratación), excluyentes entre sí. */
+  pendingRequest?: { id: string; kind: "UPGRADE" | "TRIAL"; createdAt: string } | null;
+  /** Petición de centro adicional abierta; independiente de la de plan. */
+  pendingCenterRequest?: { id: string; kind: "CENTER"; createdAt: string } | null;
   lastRejected?: { kind: "UPGRADE" | "TRIAL" | "CENTER"; closedAt: string | null; note: string | null } | null;
 }
 

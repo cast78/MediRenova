@@ -89,7 +89,8 @@ export async function superadminRoutes(server: FastifyInstance) {
         timezone: config?.timezone ?? null,
         admin: admin ? { email: admin.email, name: `${admin.firstName} ${admin.lastName}`.trim() } : null,
         effectivePlan: eff,
-        trialDaysLeft: trialDaysLeft(t.trialUntil, now),
+        // Solo cuenta con plan contratado Esencial: con Pro, una fecha de prueba suelta no es "en prueba".
+        trialDaysLeft: t.plan === "ESSENTIAL" ? trialDaysLeft(t.trialUntil, now) : null,
         centersCount: cMap.get(t.id) ?? 0,
         usersCount: _count.users,
         customersCount: _count.customers,
@@ -101,7 +102,8 @@ export async function superadminRoutes(server: FastifyInstance) {
     });
     const meta = {
       total: rows.length,
-      byPlan: { ESSENTIAL: rows.filter((r) => r.effectivePlan === "ESSENTIAL").length, PRO: rows.filter((r) => r.effectivePlan === "PRO").length },
+      // Por plan contratado (lo que se factura); la prueba es un estado aparte (`trials`).
+      byPlan: { ESSENTIAL: rows.filter((r) => r.plan === "ESSENTIAL").length, PRO: rows.filter((r) => r.plan === "PRO").length },
       trials: rows.filter((r) => r.trialDaysLeft != null).length,
       trialsEndingSoon: rows.filter((r) => r.trialDaysLeft != null && r.trialDaysLeft <= 7).length,
       openRequests: rows.reduce((s, r) => s + r.openRequests, 0),
@@ -168,7 +170,7 @@ export async function superadminRoutes(server: FastifyInstance) {
       data: {
         ...rest, timezone: config?.timezone ?? null, primaryColor: config?.primaryColor ?? null,
         admin: users[0] ? { email: users[0].email, name: `${users[0].firstName} ${users[0].lastName}`.trim() } : null,
-        effectivePlan: eff, trialDaysLeft: trialDaysLeft(t.trialUntil, now), features: features(t, now),
+        effectivePlan: eff, trialDaysLeft: t.plan === "ESSENTIAL" ? trialDaysLeft(t.trialUntil, now) : null, features: features(t, now),
         catalog: CATALOG,
         usersCount: _count.users, customersCount: _count.customers, centers, history, requests, users: usersList,
         activity: {

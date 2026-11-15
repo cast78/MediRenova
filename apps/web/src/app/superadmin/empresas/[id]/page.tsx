@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, LogIn, Save, Loader2, Check, Lock, Sparkles, Inbox, Flame, History, Hash, Globe, Building2, Users, ContactRound, CalendarDays, UserCog, ArrowDownCircle } from "lucide-react";
+import { ArrowLeft, LogIn, Save, Loader2, Check, Lock, Sparkles, Inbox, Flame, History, Hash, Globe, Building2, Users, ContactRound, CalendarDays, UserCog, Clock, AlertTriangle, Leaf, Ban } from "lucide-react";
 import { apiFetch, ApiError, setActAsTenant } from "@/lib/api";
 import { PLAN_LABEL, type PlanTier, type FeatureKey } from "@/lib/use-features";
 import { PlanChip } from "@/components/plan-chip";
@@ -129,7 +129,12 @@ export default function EmpresaPage() {
 
   const trialActive = !!form.trialUntil && new Date(`${form.trialUntil}T23:59:59`) > new Date();
   const effectiveNow: PlanTier = trialActive ? "PRO" : t.plan;
-  const openReq = t.requests.find((r) => r.status === "OPEN") ?? null;
+  // La empresa tiene hoy una prueba en curso y el formulario la retira o la deja
+  // en el pasado: avisar antes de guardar (la acción rápida del panel ya confirma).
+  const removingTrial = !!t.trialUntil && new Date(t.trialUntil) > new Date() && !trialActive && t.plan === "ESSENTIAL";
+  // Puede haber varias abiertas a la vez (una de plan y una de centro).
+  const openReqs = t.requests.filter((r) => r.status === "OPEN");
+  const openReq = openReqs[0] ?? null;
   const setTrialDays = (days: number | null) => setForm({ ...form, trialUntil: days ? new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10) : "" });
   const toggle = (list: "add" | "remove", k: FeatureKey) => setForm((f) => f && ({ ...f, [list]: f[list].includes(k) ? f[list].filter((x) => x !== k) : [...f[list], k], ...(list === "add" ? { remove: f.remove.filter((x) => x !== k) } : { add: f.add.filter((x) => x !== k) }) }));
   const tabs: { k: Tab; label: string; n?: number }[] = [
@@ -144,7 +149,7 @@ export default function EmpresaPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <Link href="/superadmin/empresas" className="text-gray-400 hover:text-gray-600 text-sm inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Empresas</Link>
         <h1 className="text-xl font-semibold text-gray-900">{t.name}</h1>
-        <PlanChip plan={t.effectivePlan} />
+        <PlanChip plan={t.plan} />
         {t.trialDaysLeft != null && <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">Prueba · {t.trialDaysLeft} días</span>}
         {openReq && <span className="text-xs font-semibold text-blue-800 bg-blue-100 border border-blue-300 rounded-full px-2 py-0.5">Petición abierta · {fmtDay(openReq.createdAt)}</span>}
         {!t.active && <span className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">Suspendida</span>}
@@ -185,7 +190,7 @@ export default function EmpresaPage() {
                 <div className="flex items-center gap-2.5 h-[38px]">
                   <PlanChip plan={t.plan} />
                   {t.plan === "PRO"
-                    ? <button type="button" onClick={() => setDialogTo("ESSENTIAL")} className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"><ArrowDownCircle className="w-3.5 h-3.5" /> Cambiar a Esencial…</button>
+                    ? <button type="button" onClick={() => setDialogTo("ESSENTIAL")} className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"><Leaf className="w-3.5 h-3.5" /> Cambiar a Esencial…</button>
                     : <button type="button" onClick={() => setDialogTo("PRO")} className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"><Sparkles className="w-3.5 h-3.5" /> Pasar a Pro…</button>}
                 </div>
               </div>
@@ -193,18 +198,29 @@ export default function EmpresaPage() {
                 <input type="number" min={1} max={99} value={form.maxCenters} onChange={(e) => setForm({ ...form, maxCenters: e.target.value })} placeholder="∞" title="Vacío = sin límite" className="w-14 border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-700 text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 <span className="text-gray-400">vacío = sin límite</span></label>
             </div>
-            {/* Prueba Pro: la fecha y los atajos en la misma fila, a la misma altura. */}
+            {/* Prueba Pro: la fecha y los atajos en la misma fila, a la misma altura.
+                Solo con plan contratado Esencial: con Pro no hay nada que probar. */}
+            {t.plan === "ESSENTIAL" ? (
             <div className="flex items-center gap-1.5 flex-wrap text-xs">
               <span className="font-medium text-gray-600 mr-1">Prueba Pro</span>
               {[14, 30, 60].map((d) => <button key={d} type="button" onClick={() => setTrialDays(d)} className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 font-semibold hover:bg-gray-50">{d} días</button>)}
               <label className="inline-flex items-center gap-1.5 ml-1"><span className="text-gray-500">hasta</span>
                 <input type="date" value={form.trialUntil} onChange={(e) => setForm({ ...form, trialUntil: e.target.value })} className="h-[30px] border border-gray-300 rounded-lg px-2 py-0 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></label>
-              {form.trialUntil && <button type="button" onClick={() => setTrialDays(null)} className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 font-semibold hover:bg-gray-50">Quitar prueba</button>}
+              {form.trialUntil && <button type="button" onClick={() => setTrialDays(null)} className="px-2.5 py-1.5 rounded-lg border border-red-200 bg-white text-red-600 font-semibold hover:bg-red-50">Quitar prueba</button>}
             </div>
+            ) : (
+              <p className="text-xs text-gray-400">La prueba Pro solo aplica a empresas con plan contratado Esencial.</p>
+            )}
             <div className="flex items-center gap-2 flex-wrap bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-gray-600">
               <span>Con estos valores la clínica tendrá</span><PlanChip plan={effectiveNow} />
               {trialActive && t.plan === "ESSENTIAL" ? <><span>hasta el {new Date(form.trialUntil).toLocaleDateString("es-ES")} y después</span><PlanChip plan="ESSENTIAL" /></> : null}
             </div>
+            {removingTrial && (
+              <p className="flex items-start gap-2 text-[13px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>Al guardar <b>retirarás la prueba Pro</b>: la clínica volverá a <b>Esencial</b> desde ahora y los módulos Pro quedarán bloqueados (sus datos se conservan). Indica el motivo: queda en la auditoría.</span>
+              </p>
+            )}
 
             <details className="border border-gray-200 rounded-lg px-3 py-2.5" open={form.add.length > 0 || form.remove.length > 0}>
               <summary className="cursor-pointer text-[13px] font-semibold text-gray-700">Ajustes avanzados · funciones por excepción{form.add.length + form.remove.length > 0 ? ` (${form.add.length + form.remove.length})` : ""}</summary>
@@ -240,10 +256,10 @@ export default function EmpresaPage() {
           <div className="space-y-4">
             <ActivityCard a={a} maxM={maxM} plan={t.plan} />
             <section className={CARD}>
-              <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-2"><Inbox className="w-4 h-4 text-blue-500" /> {openReq ? "Petición abierta" : "Peticiones"}</h2>
-              {openReq ? (
-                <>
-                  <span className={`inline-flex text-[11px] font-semibold px-2 py-0.5 rounded-full border mb-2 ${openReq.kind === "TRIAL" ? "bg-amber-100 text-amber-800 border-amber-300" : openReq.kind === "CENTER" ? "bg-violet-100 text-violet-800 border-violet-300" : "bg-blue-100 text-blue-800 border-blue-300"}`}>{openReq.kind === "TRIAL" ? "Prueba 14 días" : openReq.kind === "CENTER" ? "Centro adicional" : "Pasar a Pro"}</span>
+              <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-2"><Inbox className="w-4 h-4 text-blue-500" /> {openReqs.length > 1 ? "Peticiones abiertas" : openReqs.length === 1 ? "Petición abierta" : "Peticiones"}</h2>
+              {openReqs.length > 0 ? openReqs.map((openReq) => (
+                <div key={openReq.id} className="[&+&]:mt-3 [&+&]:pt-3 [&+&]:border-t [&+&]:border-gray-100">
+                  <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border mb-2 ${openReq.kind === "TRIAL" ? "bg-amber-100 text-amber-800 border-amber-300" : openReq.kind === "CENTER" ? "bg-violet-100 text-violet-800 border-violet-300" : "bg-blue-100 text-blue-800 border-blue-300"}`}>{openReq.kind === "TRIAL" ? <Clock className="w-3 h-3" /> : openReq.kind === "CENTER" ? <Building2 className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}{openReq.kind === "TRIAL" ? "Prueba 14 días" : openReq.kind === "CENTER" ? "Centro adicional" : "Pasar a Pro"}</span>
                   <p className="text-sm text-gray-700">{t.admin ? <b>{t.admin.name}</b> : "La clínica"} {openReq.kind === "TRIAL" ? "pidió la prueba Pro" : openReq.kind === "CENTER" ? "pidió un centro adicional" : "pidió pasar a Pro"} el {fmtDay(openReq.createdAt)}{openReq.note && openReq.kind !== "TRIAL" ? <>: <i>“{openReq.note}”</i></> : "."}</p>
                   <div className="flex gap-2 mt-3 flex-wrap">
                     {openReq.kind === "TRIAL"
@@ -252,10 +268,10 @@ export default function EmpresaPage() {
                       ? <button type="button" onClick={() => approveReq(openReq)} disabled={decide.isPending} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60"><Check className="w-3.5 h-3.5" /> Ampliar límite (+1 centro)</button>
                       : t.plan === "ESSENTIAL" && <button type="button" onClick={() => setDialogTo("PRO")} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"><Sparkles className="w-3.5 h-3.5" /> Pasar a Pro</button>}
                     <button type="button" onClick={() => rejectReq(openReq)} disabled={decide.isPending} className="text-xs font-medium px-3 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-60">Rechazar</button>
-                    {openReq.kind === "UPGRADE" && <button type="button" onClick={() => closeReqConfirm(openReq)} disabled={decide.isPending} className="text-xs font-medium px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-60">Cerrar</button>}
+                    {openReq.kind === "UPGRADE" && <button type="button" onClick={() => closeReqConfirm(openReq)} disabled={decide.isPending} className="inline-flex items-center gap-1 text-xs font-medium px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60"><Ban className="w-3.5 h-3.5" /> Cerrar</button>}
                   </div>
-                </>
-              ) : <p className="text-sm text-gray-400">Ninguna abierta.{t.requests.length > 0 ? ` ${t.requests.length} anterior(es): ${t.requests.map((r) => r.status === "APPROVED" ? "aprobada" : r.status === "REJECTED" ? "rechazada" : "cerrada").join(", ")}.` : ""}</p>}
+                </div>
+              )) : <p className="text-sm text-gray-400">Ninguna abierta.{t.requests.length > 0 ? ` ${t.requests.length} anterior(es): ${t.requests.map((r) => r.status === "APPROVED" ? "aprobada" : r.status === "REJECTED" ? "rechazada" : "cerrada").join(", ")}.` : ""}</p>}
             </section>
 
             {/* Últimos cambios de licencia (resumen; el historial completo está en Auditoría) */}

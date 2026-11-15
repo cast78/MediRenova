@@ -23,12 +23,12 @@ export function SelfTrialButton({ compact = false }: { compact?: boolean }) {
     },
   });
 
+  // Solo las peticiones de PLAN (prueba o Pro); la de centro la muestra CenterRequestButton.
   const pending = info?.pendingRequest ?? null;
-  if (pending?.kind === "CENTER") return null; // la muestra CenterRequestButton
   if (pending || sent) {
     const isTrial = pending ? pending.kind === "TRIAL" : true;
     return (
-      <span className={`inline-flex items-center gap-1.5 font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg ${compact ? "text-xs px-2.5 py-1.5" : "text-sm px-3 py-2"}`}>
+      <span className={`inline-flex items-center gap-1.5 font-medium rounded-lg ${isTrial ? "text-amber-800 bg-amber-50 border border-amber-200" : "text-blue-800 bg-blue-50 border border-blue-200"} ${compact ? "text-xs px-2.5 py-1.5" : "text-sm px-3 py-2"}`}>
         {sent ? <Check className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
         {isTrial ? "Prueba Pro solicitada · pendiente de aprobación" : "Petición de plan Pro enviada · te contactaremos"}
       </span>
